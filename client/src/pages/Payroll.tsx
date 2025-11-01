@@ -9,7 +9,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Calculator, Download, Send, Filter } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calculator, Download, Send, Filter, Users, Plus, Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -20,11 +21,32 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+
+interface NominaGroup {
+  id: string;
+  name: string;
+  employeeIds: string[];
+  createdAt: Date;
+}
 
 export default function Payroll() {
+  const { toast } = useToast();
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState("");
+  const [selectedGroup, setSelectedGroup] = useState<string>("");
   
   // Mock payroll data for multiple employees
   const allEmployees = [
@@ -90,6 +112,22 @@ export default function Payroll() {
     },
   ];
 
+  // TODO: remove mock functionality - this should be stored in backend
+  const [nominaGroups, setNominaGroups] = useState<NominaGroup[]>([
+    {
+      id: "1",
+      name: "Equipo de Ventas",
+      employeeIds: ["1", "6"],
+      createdAt: new Date("2025-01-15"),
+    },
+    {
+      id: "2",
+      name: "Administrativos",
+      employeeIds: ["3", "4"],
+      createdAt: new Date("2025-01-20"),
+    },
+  ]);
+
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(
     new Set(allEmployees.map(emp => emp.id))
   );
@@ -121,18 +159,80 @@ export default function Payroll() {
       newSelected.add(id);
     }
     setSelectedEmployees(newSelected);
+    setSelectedGroup(""); // Clear group selection when manually changing
   };
 
   const selectAll = () => {
     setSelectedEmployees(new Set(filteredEmployees.map(emp => emp.id)));
+    setSelectedGroup("");
   };
 
   const deselectAll = () => {
     setSelectedEmployees(new Set());
+    setSelectedGroup("");
+  };
+
+  const loadGroup = (groupId: string) => {
+    const group = nominaGroups.find(g => g.id === groupId);
+    if (group) {
+      setSelectedEmployees(new Set(group.employeeIds));
+      setSelectedGroup(groupId);
+      toast({
+        title: "Grupo cargado",
+        description: `${group.name} - ${group.employeeIds.length} empleados seleccionados`,
+      });
+    }
+  };
+
+  const createGroup = () => {
+    if (!newGroupName.trim()) {
+      toast({
+        title: "Error",
+        description: "El nombre del grupo es requerido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedEmployees.size === 0) {
+      toast({
+        title: "Error",
+        description: "Selecciona al menos un empleado para el grupo",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newGroup: NominaGroup = {
+      id: Date.now().toString(),
+      name: newGroupName,
+      employeeIds: Array.from(selectedEmployees),
+      createdAt: new Date(),
+    };
+
+    setNominaGroups([...nominaGroups, newGroup]);
+    setNewGroupName("");
+    setIsCreateGroupOpen(false);
+    
+    toast({
+      title: "Grupo creado",
+      description: `"${newGroup.name}" con ${newGroup.employeeIds.length} empleados`,
+    });
+  };
+
+  const deleteGroup = (groupId: string) => {
+    const group = nominaGroups.find(g => g.id === groupId);
+    setNominaGroups(nominaGroups.filter(g => g.id !== groupId));
+    if (selectedGroup === groupId) {
+      setSelectedGroup("");
+    }
+    toast({
+      title: "Grupo eliminado",
+      description: `"${group?.name}" ha sido eliminado`,
+    });
   };
 
   const allSelected = filteredEmployees.every(emp => selectedEmployees.has(emp.id));
-  const someSelected = filteredEmployees.some(emp => selectedEmployees.has(emp.id)) && !allSelected;
 
   return (
     <div className="space-y-6">
@@ -194,6 +294,95 @@ export default function Payroll() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="group">Grupos de Nómina</Label>
+              <div className="flex gap-2 mt-2">
+                <Select value={selectedGroup} onValueChange={loadGroup}>
+                  <SelectTrigger id="group" data-testid="select-nomina-group">
+                    <SelectValue placeholder="Cargar un grupo..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nominaGroups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3 w-3" />
+                          {group.name} ({group.employeeIds.length})
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Dialog open={isCreateGroupOpen} onOpenChange={setIsCreateGroupOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="icon" data-testid="button-create-group">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Crear Grupo de Nómina</DialogTitle>
+                      <DialogDescription>
+                        Guarda la selección actual como un grupo reutilizable
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="group-name">Nombre del Grupo</Label>
+                        <Input
+                          id="group-name"
+                          placeholder="ej. Equipo de Ventas"
+                          value={newGroupName}
+                          onChange={(e) => setNewGroupName(e.target.value)}
+                          data-testid="input-group-name"
+                        />
+                      </div>
+                      <div className="rounded-md border p-4">
+                        <p className="text-sm font-medium mb-2">Empleados seleccionados:</p>
+                        <p className="text-sm text-muted-foreground">
+                          {selectedEmployees.size} empleados en este grupo
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsCreateGroupOpen(false)}>
+                        Cancelar
+                      </Button>
+                      <Button onClick={createGroup} data-testid="button-save-group">
+                        Guardar Grupo
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+              {nominaGroups.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Grupos guardados:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {nominaGroups.map((group) => (
+                      <Badge
+                        key={group.id}
+                        variant={selectedGroup === group.id ? "default" : "secondary"}
+                        className="gap-2"
+                      >
+                        <Users className="h-3 w-3" />
+                        {group.name} ({group.employeeIds.length})
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteGroup(group.id);
+                          }}
+                          className="ml-1 hover:text-destructive"
+                          data-testid={`button-delete-group-${group.id}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-2">
