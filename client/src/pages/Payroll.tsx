@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Calculator, Download, Send, Filter, Users, Plus, Trash2, Upload, FileSpreadsheet, Edit } from "lucide-react";
+import { Calculator, Download, Send, Filter, Users, Plus, Trash2, Upload, FileSpreadsheet } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -31,7 +31,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface NominaGroup {
   id: string;
@@ -56,18 +55,17 @@ export default function Payroll() {
   const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
-  const [isIncidenciasOpen, setIsIncidenciasOpen] = useState(false);
   const [isCsvUploadOpen, setIsCsvUploadOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   
-  // Incidencia form state
-  const [incidenciaEmployeeId, setIncidenciaEmployeeId] = useState("");
-  const [incidenciaType, setIncidenciaType] = useState<"percepcion" | "deduccion">("percepcion");
-  const [incidenciaConcept, setIncidenciaConcept] = useState("");
-  const [incidenciaAmount, setIncidenciaAmount] = useState("");
-  const [incidenciaDescription, setIncidenciaDescription] = useState("");
+  // New incidencia being added inline
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string>("");
+  const [newIncidenciaType, setNewIncidenciaType] = useState<"percepcion" | "deduccion">("percepcion");
+  const [newIncidenciaConcept, setNewIncidenciaConcept] = useState("");
+  const [newIncidenciaAmount, setNewIncidenciaAmount] = useState("");
+  const [newIncidenciaDescription, setNewIncidenciaDescription] = useState("");
   
   // Mock payroll data for multiple employees
   const allEmployees = [
@@ -291,11 +289,11 @@ export default function Payroll() {
     });
   };
 
-  const addIncidencia = () => {
-    if (!incidenciaEmployeeId || !incidenciaConcept || !incidenciaAmount) {
+  const addIncidenciaForEmployee = (employeeId: string) => {
+    if (!newIncidenciaConcept || !newIncidenciaAmount) {
       toast({
         title: "Error",
-        description: "Todos los campos son requeridos",
+        description: "Concepto y monto son requeridos",
         variant: "destructive",
       });
       return;
@@ -303,25 +301,25 @@ export default function Payroll() {
 
     const newIncidencia: Incidencia = {
       id: Date.now().toString(),
-      employeeId: incidenciaEmployeeId,
-      type: incidenciaType,
-      concept: incidenciaConcept,
-      amount: parseFloat(incidenciaAmount),
-      description: incidenciaDescription,
+      employeeId,
+      type: newIncidenciaType,
+      concept: newIncidenciaConcept,
+      amount: parseFloat(newIncidenciaAmount),
+      description: newIncidenciaDescription,
       date: new Date(),
     };
 
     setIncidencias([...incidencias, newIncidencia]);
     
     // Reset form
-    setIncidenciaEmployeeId("");
-    setIncidenciaConcept("");
-    setIncidenciaAmount("");
-    setIncidenciaDescription("");
+    setEditingEmployeeId("");
+    setNewIncidenciaConcept("");
+    setNewIncidenciaAmount("");
+    setNewIncidenciaDescription("");
     
     toast({
       title: "Incidencia agregada",
-      description: `${incidenciaType === "percepcion" ? "Bono" : "Deducción"} de ${formatCurrency(newIncidencia.amount)}`,
+      description: `${newIncidenciaType === "percepcion" ? "Percepción" : "Deducción"} de ${formatCurrency(newIncidencia.amount)}`,
     });
   };
 
@@ -403,7 +401,7 @@ export default function Payroll() {
         <div>
           <h1 className="text-3xl font-semibold">Nómina</h1>
           <p className="text-muted-foreground mt-2">
-            Selecciona empleados y procesa la nómina
+            Selecciona empleados y agrega incidencias
           </p>
         </div>
         <div className="flex gap-2">
@@ -441,7 +439,7 @@ export default function Payroll() {
                     type: "percepcion" o "deduccion"
                   </p>
                   <Button 
-                    variant="link" 
+                    variant="ghost" 
                     size="sm" 
                     onClick={downloadCsvTemplate}
                     className="h-auto p-0"
@@ -460,135 +458,6 @@ export default function Payroll() {
                   Importar
                 </Button>
               </DialogFooter>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={isIncidenciasOpen} onOpenChange={setIsIncidenciasOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-incidencia">
-                <Plus className="h-4 w-4 mr-2" />
-                Agregar Incidencia
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Gestión de Incidencias</DialogTitle>
-                <DialogDescription>
-                  Agrega bonos, comisiones, tiempo extra, faltas y otras incidencias
-                </DialogDescription>
-              </DialogHeader>
-              <Tabs defaultValue="add" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="add">Agregar Nueva</TabsTrigger>
-                  <TabsTrigger value="list">Ver Incidencias ({incidencias.length})</TabsTrigger>
-                </TabsList>
-                <TabsContent value="add" className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="employee">Empleado</Label>
-                      <Select value={incidenciaEmployeeId} onValueChange={setIncidenciaEmployeeId}>
-                        <SelectTrigger id="employee" data-testid="select-incidencia-employee">
-                          <SelectValue placeholder="Selecciona empleado" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allEmployees.map((emp) => (
-                            <SelectItem key={emp.id} value={emp.id}>
-                              {emp.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="type">Tipo</Label>
-                      <Select value={incidenciaType} onValueChange={(v) => setIncidenciaType(v as "percepcion" | "deduccion")}>
-                        <SelectTrigger id="type" data-testid="select-incidencia-type">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="percepcion">Percepción (Bono/Extra)</SelectItem>
-                          <SelectItem value="deduccion">Deducción (Falta/Descuento)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="concept">Concepto</Label>
-                      <Input
-                        id="concept"
-                        placeholder="ej. Bono de Productividad"
-                        value={incidenciaConcept}
-                        onChange={(e) => setIncidenciaConcept(e.target.value)}
-                        data-testid="input-incidencia-concept"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="amount">Monto</Label>
-                      <Input
-                        id="amount"
-                        type="number"
-                        placeholder="0.00"
-                        value={incidenciaAmount}
-                        onChange={(e) => setIncidenciaAmount(e.target.value)}
-                        data-testid="input-incidencia-amount"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Descripción (opcional)</Label>
-                    <Input
-                      id="description"
-                      placeholder="ej. Cumplimiento de meta mensual"
-                      value={incidenciaDescription}
-                      onChange={(e) => setIncidenciaDescription(e.target.value)}
-                      data-testid="input-incidencia-description"
-                    />
-                  </div>
-                  <Button onClick={addIncidencia} className="w-full" data-testid="button-save-incidencia">
-                    Agregar Incidencia
-                  </Button>
-                </TabsContent>
-                <TabsContent value="list" className="space-y-2">
-                  <div className="max-h-96 overflow-y-auto space-y-2">
-                    {incidencias.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-8">
-                        No hay incidencias registradas
-                      </p>
-                    ) : (
-                      incidencias.map((inc) => {
-                        const employee = allEmployees.find(e => e.id === inc.employeeId);
-                        return (
-                          <div key={inc.id} className="flex items-start justify-between p-3 border rounded-md">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-sm">{employee?.name}</p>
-                                <Badge variant={inc.type === "percepcion" ? "default" : "destructive"}>
-                                  {inc.type === "percepcion" ? "Percepción" : "Deducción"}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-muted-foreground mt-1">{inc.concept}</p>
-                              {inc.description && (
-                                <p className="text-xs text-muted-foreground mt-1">{inc.description}</p>
-                              )}
-                              <p className="font-mono font-semibold text-sm mt-2">
-                                {formatCurrency(inc.amount)}
-                              </p>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteIncidencia(inc.id)}
-                              data-testid={`button-delete-incidencia-${inc.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </TabsContent>
-              </Tabs>
             </DialogContent>
           </Dialog>
         </div>
@@ -757,12 +626,6 @@ export default function Payroll() {
               <Badge variant="secondary" data-testid="badge-selected-count">
                 {selectedEmployees.size} de {allEmployees.length} seleccionados
               </Badge>
-              {incidencias.length > 0 && (
-                <Badge variant="outline" data-testid="badge-incidencias-count">
-                  <Edit className="h-3 w-3 mr-1" />
-                  {incidencias.length} incidencias
-                </Badge>
-              )}
             </div>
 
             <div className="pt-4 border-t">
@@ -962,6 +825,153 @@ export default function Payroll() {
           </Table>
         </CardContent>
       </Card>
+
+      {selectedEmployees.size > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Incidencias - Empleados Seleccionados</CardTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              Agrega bonos, comisiones, tiempo extra, faltas y otras incidencias para los empleados seleccionados
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Empleado</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Concepto</TableHead>
+                  <TableHead className="text-right">Monto</TableHead>
+                  <TableHead>Descripción</TableHead>
+                  <TableHead className="w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {selectedEmployeesData.map((employee) => {
+                  const employeeIncidencias = incidencias.filter(inc => inc.employeeId === employee.id);
+                  const isEditing = editingEmployeeId === employee.id;
+                  
+                  return (
+                    <>
+                      {employeeIncidencias.map((inc) => (
+                        <TableRow key={inc.id} data-testid={`row-incidencia-${inc.id}`}>
+                          <TableCell className="font-medium">{employee.name}</TableCell>
+                          <TableCell>
+                            <Badge variant={inc.type === "percepcion" ? "default" : "destructive"}>
+                              {inc.type === "percepcion" ? "Percepción" : "Deducción"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{inc.concept}</TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatCurrency(inc.amount)}
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {inc.description || "-"}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => deleteIncidencia(inc.id)}
+                              data-testid={`button-delete-incidencia-${inc.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      
+                      {isEditing ? (
+                        <TableRow data-testid={`row-add-incidencia-${employee.id}`}>
+                          <TableCell className="font-medium">{employee.name}</TableCell>
+                          <TableCell>
+                            <Select 
+                              value={newIncidenciaType} 
+                              onValueChange={(v) => setNewIncidenciaType(v as "percepcion" | "deduccion")}
+                            >
+                              <SelectTrigger className="w-40" data-testid={`select-type-${employee.id}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="percepcion">Percepción</SelectItem>
+                                <SelectItem value="deduccion">Deducción</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="Concepto"
+                              value={newIncidenciaConcept}
+                              onChange={(e) => setNewIncidenciaConcept(e.target.value)}
+                              data-testid={`input-concept-${employee.id}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              placeholder="0.00"
+                              className="text-right"
+                              value={newIncidenciaAmount}
+                              onChange={(e) => setNewIncidenciaAmount(e.target.value)}
+                              data-testid={`input-amount-${employee.id}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="Descripción (opcional)"
+                              value={newIncidenciaDescription}
+                              onChange={(e) => setNewIncidenciaDescription(e.target.value)}
+                              data-testid={`input-description-${employee.id}`}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                onClick={() => addIncidenciaForEmployee(employee.id)}
+                                data-testid={`button-save-incidencia-${employee.id}`}
+                              >
+                                Guardar
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingEmployeeId("");
+                                  setNewIncidenciaConcept("");
+                                  setNewIncidenciaAmount("");
+                                  setNewIncidenciaDescription("");
+                                }}
+                                data-testid={`button-cancel-incidencia-${employee.id}`}
+                              >
+                                Cancelar
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        <TableRow className="bg-muted/20">
+                          <TableCell colSpan={6}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingEmployeeId(employee.id)}
+                              data-testid={`button-add-incidencia-${employee.id}`}
+                            >
+                              <Plus className="h-4 w-4 mr-2" />
+                              Agregar incidencia para {employee.name}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
