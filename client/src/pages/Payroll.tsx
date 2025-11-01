@@ -39,14 +39,16 @@ interface NominaGroup {
   createdAt: Date;
 }
 
-interface Incidencia {
-  id: string;
+interface ConceptValue {
   employeeId: string;
-  type: "percepcion" | "deduccion";
-  concept: string;
+  conceptId: string;
   amount: number;
-  description: string;
-  date: Date;
+}
+
+interface Concept {
+  id: string;
+  name: string;
+  type: "percepcion" | "deduccion";
 }
 
 export default function Payroll() {
@@ -56,16 +58,14 @@ export default function Payroll() {
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCsvUploadOpen, setIsCsvUploadOpen] = useState(false);
+  const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
   
-  // New incidencia being added inline
-  const [editingEmployeeId, setEditingEmployeeId] = useState<string>("");
-  const [newIncidenciaType, setNewIncidenciaType] = useState<"percepcion" | "deduccion">("percepcion");
-  const [newIncidenciaConcept, setNewIncidenciaConcept] = useState("");
-  const [newIncidenciaAmount, setNewIncidenciaAmount] = useState("");
-  const [newIncidenciaDescription, setNewIncidenciaDescription] = useState("");
+  // New concept form
+  const [newConceptName, setNewConceptName] = useState("");
+  const [newConceptType, setNewConceptType] = useState<"percepcion" | "deduccion">("percepcion");
   
   // Mock payroll data for multiple employees
   const allEmployees = [
@@ -113,6 +113,24 @@ export default function Payroll() {
     },
   ];
 
+  // Predefined concepts (like columns in Excel)
+  const [concepts, setConcepts] = useState<Concept[]>([
+    { id: "bono-productividad", name: "Bono Productividad", type: "percepcion" },
+    { id: "comisiones", name: "Comisiones", type: "percepcion" },
+    { id: "tiempo-extra", name: "Tiempo Extra", type: "percepcion" },
+    { id: "premio-asistencia", name: "Premio Asistencia", type: "percepcion" },
+    { id: "faltas", name: "Faltas", type: "deduccion" },
+    { id: "retardos", name: "Retardos", type: "deduccion" },
+    { id: "prestamo", name: "Préstamo", type: "deduccion" },
+  ]);
+
+  // Values for each employee-concept combination
+  const [conceptValues, setConceptValues] = useState<ConceptValue[]>([
+    { employeeId: "1", conceptId: "bono-productividad", amount: 2500 },
+    { employeeId: "2", conceptId: "tiempo-extra", amount: 1200 },
+    { employeeId: "5", conceptId: "faltas", amount: 380 },
+  ]);
+
   // TODO: remove mock functionality - this should be stored in backend
   const [nominaGroups, setNominaGroups] = useState<NominaGroup[]>([
     {
@@ -129,36 +147,6 @@ export default function Payroll() {
     },
   ]);
 
-  const [incidencias, setIncidencias] = useState<Incidencia[]>([
-    {
-      id: "1",
-      employeeId: "1",
-      type: "percepcion",
-      concept: "Bono de Productividad",
-      amount: 2500,
-      description: "Cumplimiento de meta mensual",
-      date: new Date("2025-11-01"),
-    },
-    {
-      id: "2",
-      employeeId: "2",
-      type: "percepcion",
-      concept: "Tiempo Extra",
-      amount: 1200,
-      description: "4 horas extras",
-      date: new Date("2025-11-01"),
-    },
-    {
-      id: "3",
-      employeeId: "5",
-      type: "deduccion",
-      concept: "Falta",
-      amount: 380,
-      description: "1 día de ausencia injustificada",
-      date: new Date("2025-11-01"),
-    },
-  ]);
-
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(
     new Set(allEmployees.map(emp => emp.id))
   );
@@ -170,19 +158,57 @@ export default function Payroll() {
     }).format(amount);
   };
 
+  const getConceptValue = (employeeId: string, conceptId: string): number => {
+    const value = conceptValues.find(
+      cv => cv.employeeId === employeeId && cv.conceptId === conceptId
+    );
+    return value?.amount || 0;
+  };
+
+  const updateConceptValue = (employeeId: string, conceptId: string, amount: number) => {
+    const existing = conceptValues.find(
+      cv => cv.employeeId === employeeId && cv.conceptId === conceptId
+    );
+
+    if (existing) {
+      if (amount === 0) {
+        // Remove if amount is 0
+        setConceptValues(conceptValues.filter(
+          cv => !(cv.employeeId === employeeId && cv.conceptId === conceptId)
+        ));
+      } else {
+        // Update existing
+        setConceptValues(conceptValues.map(cv =>
+          cv.employeeId === employeeId && cv.conceptId === conceptId
+            ? { ...cv, amount }
+            : cv
+        ));
+      }
+    } else if (amount > 0) {
+      // Add new
+      setConceptValues([...conceptValues, { employeeId, conceptId, amount }]);
+    }
+  };
+
   const calculateEmployeePayroll = (employeeId: string) => {
     const employee = allEmployees.find(e => e.id === employeeId);
     if (!employee) return { earnings: 0, deductions: 0, netPay: 0 };
 
-    const employeeIncidencias = incidencias.filter(inc => inc.employeeId === employeeId);
+    const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
     
-    const bonuses = employeeIncidencias
-      .filter(inc => inc.type === "percepcion")
-      .reduce((sum, inc) => sum + inc.amount, 0);
+    const bonuses = employeeValues
+      .filter(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return concept?.type === "percepcion";
+      })
+      .reduce((sum, cv) => sum + cv.amount, 0);
     
-    const incidents = employeeIncidencias
-      .filter(inc => inc.type === "deduccion")
-      .reduce((sum, inc) => sum + inc.amount, 0);
+    const incidents = employeeValues
+      .filter(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return concept?.type === "deduccion";
+      })
+      .reduce((sum, cv) => sum + cv.amount, 0);
 
     const earnings = employee.salary + bonuses;
     const baseDeductions = employee.salary * 0.1888; // ISR + IMSS + Infonavit
@@ -289,44 +315,40 @@ export default function Payroll() {
     });
   };
 
-  const addIncidenciaForEmployee = (employeeId: string) => {
-    if (!newIncidenciaConcept || !newIncidenciaAmount) {
+  const addConcept = () => {
+    if (!newConceptName.trim()) {
       toast({
         title: "Error",
-        description: "Concepto y monto son requeridos",
+        description: "El nombre del concepto es requerido",
         variant: "destructive",
       });
       return;
     }
 
-    const newIncidencia: Incidencia = {
-      id: Date.now().toString(),
-      employeeId,
-      type: newIncidenciaType,
-      concept: newIncidenciaConcept,
-      amount: parseFloat(newIncidenciaAmount),
-      description: newIncidenciaDescription,
-      date: new Date(),
+    const newConcept: Concept = {
+      id: `custom-${Date.now()}`,
+      name: newConceptName,
+      type: newConceptType,
     };
 
-    setIncidencias([...incidencias, newIncidencia]);
-    
-    // Reset form
-    setEditingEmployeeId("");
-    setNewIncidenciaConcept("");
-    setNewIncidenciaAmount("");
-    setNewIncidenciaDescription("");
+    setConcepts([...concepts, newConcept]);
+    setNewConceptName("");
+    setIsAddConceptOpen(false);
     
     toast({
-      title: "Incidencia agregada",
-      description: `${newIncidenciaType === "percepcion" ? "Percepción" : "Deducción"} de ${formatCurrency(newIncidencia.amount)}`,
+      title: "Concepto agregado",
+      description: `"${newConcept.name}" agregado como ${newConcept.type}`,
     });
   };
 
-  const deleteIncidencia = (id: string) => {
-    setIncidencias(incidencias.filter(inc => inc.id !== id));
+  const deleteConcept = (conceptId: string) => {
+    const concept = concepts.find(c => c.id === conceptId);
+    setConcepts(concepts.filter(c => c.id !== conceptId));
+    // Also remove all values for this concept
+    setConceptValues(conceptValues.filter(cv => cv.conceptId !== conceptId));
     toast({
-      title: "Incidencia eliminada",
+      title: "Concepto eliminado",
+      description: `"${concept?.name}" ha sido eliminado`,
     });
   };
 
@@ -344,35 +366,31 @@ export default function Payroll() {
     reader.onload = (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n');
-      const newIncidencias: Incidencia[] = [];
+      const newValues: ConceptValue[] = [];
 
       // Skip header row
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
 
-        const [employeeId, type, concept, amount, description] = line.split(',');
+        const [employeeId, conceptId, amount] = line.split(',');
         
-        if (employeeId && type && concept && amount) {
-          newIncidencias.push({
-            id: `csv-${Date.now()}-${i}`,
+        if (employeeId && conceptId && amount) {
+          newValues.push({
             employeeId: employeeId.trim(),
-            type: type.trim().toLowerCase() as "percepcion" | "deduccion",
-            concept: concept.trim(),
+            conceptId: conceptId.trim(),
             amount: parseFloat(amount.trim()),
-            description: description?.trim() || "",
-            date: new Date(),
           });
         }
       }
 
-      setIncidencias([...incidencias, ...newIncidencias]);
+      setConceptValues([...conceptValues, ...newValues]);
       setIsCsvUploadOpen(false);
       setCsvFile(null);
       
       toast({
         title: "CSV importado",
-        description: `${newIncidencias.length} incidencias agregadas`,
+        description: `${newValues.length} valores agregados`,
       });
     };
 
@@ -380,10 +398,10 @@ export default function Payroll() {
   };
 
   const downloadCsvTemplate = () => {
-    const template = `employeeId,type,concept,amount,description
-1,percepcion,Bono de Productividad,2500,Cumplimiento de meta
-2,percepcion,Tiempo Extra,1200,4 horas extras
-3,deduccion,Falta,380,Ausencia injustificada`;
+    const template = `employeeId,conceptId,amount
+1,bono-productividad,2500
+2,tiempo-extra,1200
+3,faltas,380`;
 
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -395,13 +413,16 @@ export default function Payroll() {
 
   const allSelected = filteredEmployees.every(emp => selectedEmployees.has(emp.id));
 
+  const percepciones = concepts.filter(c => c.type === "percepcion");
+  const deducciones = concepts.filter(c => c.type === "deduccion");
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-semibold">Nómina</h1>
           <p className="text-muted-foreground mt-2">
-            Selecciona empleados y agrega incidencias
+            Selecciona empleados y edita incidencias
           </p>
         </div>
         <div className="flex gap-2">
@@ -416,7 +437,7 @@ export default function Payroll() {
               <DialogHeader>
                 <DialogTitle>Importar Incidencias desde CSV</DialogTitle>
                 <DialogDescription>
-                  Sube un archivo CSV con bonos y deducciones
+                  Sube un archivo CSV con valores de incidencias
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -433,11 +454,8 @@ export default function Payroll() {
                 <div className="rounded-md border p-4 space-y-2">
                   <p className="text-sm font-medium">Formato esperado:</p>
                   <code className="text-xs block bg-muted p-2 rounded">
-                    employeeId,type,concept,amount,description
+                    employeeId,conceptId,amount
                   </code>
-                  <p className="text-xs text-muted-foreground">
-                    type: "percepcion" o "deduccion"
-                  </p>
                   <Button 
                     variant="ghost" 
                     size="sm" 
@@ -754,55 +772,43 @@ export default function Payroll() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employeesToShow.map((employee) => {
-                const employeeIncidencias = incidencias.filter(inc => inc.employeeId === employee.id);
-                return (
-                  <TableRow 
-                    key={employee.id} 
-                    data-testid={`row-payroll-${employee.id}`}
-                    className={selectedEmployees.has(employee.id) ? "bg-muted/30" : ""}
-                  >
-                    <TableCell>
-                      <Checkbox
-                        checked={selectedEmployees.has(employee.id)}
-                        onCheckedChange={() => toggleEmployee(employee.id)}
-                        aria-label={`Seleccionar ${employee.name}`}
-                        data-testid={`checkbox-employee-${employee.id}`}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-medium">{employee.name}</p>
-                        {employeeIncidencias.length > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            {employeeIncidencias.length} incidencia{employeeIncidencias.length > 1 ? 's' : ''}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-mono text-sm uppercase tracking-wide">
-                        {employee.rfc}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{employee.department}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(employee.salary)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-primary">
-                      {formatCurrency(employee.earnings)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-destructive">
-                      {formatCurrency(employee.deductions)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono font-semibold">
-                      {formatCurrency(employee.netPay)}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+              {employeesToShow.map((employee) => (
+                <TableRow 
+                  key={employee.id} 
+                  data-testid={`row-payroll-${employee.id}`}
+                  className={selectedEmployees.has(employee.id) ? "bg-muted/30" : ""}
+                >
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedEmployees.has(employee.id)}
+                      onCheckedChange={() => toggleEmployee(employee.id)}
+                      aria-label={`Seleccionar ${employee.name}`}
+                      data-testid={`checkbox-employee-${employee.id}`}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium">{employee.name}</TableCell>
+                  <TableCell>
+                    <span className="font-mono text-sm uppercase tracking-wide">
+                      {employee.rfc}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{employee.department}</Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono">
+                    {formatCurrency(employee.salary)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-primary">
+                    {formatCurrency(employee.earnings)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono text-destructive">
+                    {formatCurrency(employee.deductions)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-semibold">
+                    {formatCurrency(employee.netPay)}
+                  </TableCell>
+                </TableRow>
+              ))}
               {selectedEmployeesData.length > 0 && (
                 <TableRow className="font-semibold bg-muted/50">
                   <TableCell></TableCell>
@@ -828,147 +834,147 @@ export default function Payroll() {
 
       {selectedEmployees.size > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Incidencias - Empleados Seleccionados</CardTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              Agrega bonos, comisiones, tiempo extra, faltas y otras incidencias para los empleados seleccionados
-            </p>
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+            <div>
+              <CardTitle>Incidencias - Edición Rápida</CardTitle>
+              <p className="text-sm text-muted-foreground mt-2">
+                Edita percepciones y deducciones en formato Excel
+              </p>
+            </div>
+            <Dialog open={isAddConceptOpen} onOpenChange={setIsAddConceptOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm" data-testid="button-add-concept">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Concepto
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Agregar Nuevo Concepto</DialogTitle>
+                  <DialogDescription>
+                    Crea una nueva columna para registrar percepciones o deducciones
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="concept-name">Nombre del Concepto</Label>
+                    <Input
+                      id="concept-name"
+                      placeholder="ej. Vales de Despensa"
+                      value={newConceptName}
+                      onChange={(e) => setNewConceptName(e.target.value)}
+                      data-testid="input-concept-name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="concept-type">Tipo</Label>
+                    <Select value={newConceptType} onValueChange={(v) => setNewConceptType(v as "percepcion" | "deduccion")}>
+                      <SelectTrigger id="concept-type" data-testid="select-concept-type">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="percepcion">Percepción (suma al salario)</SelectItem>
+                        <SelectItem value="deduccion">Deducción (resta del salario)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAddConceptOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={addConcept} data-testid="button-save-concept">
+                    Agregar
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Empleado</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Concepto</TableHead>
-                  <TableHead className="text-right">Monto</TableHead>
-                  <TableHead>Descripción</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {selectedEmployeesData.map((employee) => {
-                  const employeeIncidencias = incidencias.filter(inc => inc.employeeId === employee.id);
-                  const isEditing = editingEmployeeId === employee.id;
-                  
-                  return (
-                    <>
-                      {employeeIncidencias.map((inc) => (
-                        <TableRow key={inc.id} data-testid={`row-incidencia-${inc.id}`}>
-                          <TableCell className="font-medium">{employee.name}</TableCell>
-                          <TableCell>
-                            <Badge variant={inc.type === "percepcion" ? "default" : "destructive"}>
-                              {inc.type === "percepcion" ? "Percepción" : "Deducción"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{inc.concept}</TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatCurrency(inc.amount)}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {inc.description || "-"}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteIncidencia(inc.id)}
-                              data-testid={`button-delete-incidencia-${inc.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="sticky left-0 bg-background z-10 min-w-48">Empleado</TableHead>
+                    {percepciones.map((concept) => (
+                      <TableHead key={concept.id} className="text-right min-w-36">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-primary">{concept.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => deleteConcept(concept.id)}
+                            data-testid={`button-delete-concept-${concept.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableHead>
+                    ))}
+                    {deducciones.map((concept) => (
+                      <TableHead key={concept.id} className="text-right min-w-36">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs text-destructive">{concept.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => deleteConcept(concept.id)}
+                            data-testid={`button-delete-concept-${concept.id}`}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedEmployeesData.map((employee) => (
+                    <TableRow key={employee.id} data-testid={`row-incidencia-grid-${employee.id}`}>
+                      <TableCell className="sticky left-0 bg-background z-10 font-medium">
+                        {employee.name}
+                      </TableCell>
+                      {percepciones.map((concept) => (
+                        <TableCell key={concept.id} className="text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="text-right font-mono"
+                            value={getConceptValue(employee.id, concept.id) || ""}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || 0;
+                              updateConceptValue(employee.id, concept.id, value);
+                            }}
+                            data-testid={`input-${employee.id}-${concept.id}`}
+                          />
+                        </TableCell>
                       ))}
-                      
-                      {isEditing ? (
-                        <TableRow data-testid={`row-add-incidencia-${employee.id}`}>
-                          <TableCell className="font-medium">{employee.name}</TableCell>
-                          <TableCell>
-                            <Select 
-                              value={newIncidenciaType} 
-                              onValueChange={(v) => setNewIncidenciaType(v as "percepcion" | "deduccion")}
-                            >
-                              <SelectTrigger className="w-40" data-testid={`select-type-${employee.id}`}>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="percepcion">Percepción</SelectItem>
-                                <SelectItem value="deduccion">Deducción</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Concepto"
-                              value={newIncidenciaConcept}
-                              onChange={(e) => setNewIncidenciaConcept(e.target.value)}
-                              data-testid={`input-concept-${employee.id}`}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              placeholder="0.00"
-                              className="text-right"
-                              value={newIncidenciaAmount}
-                              onChange={(e) => setNewIncidenciaAmount(e.target.value)}
-                              data-testid={`input-amount-${employee.id}`}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Descripción (opcional)"
-                              value={newIncidenciaDescription}
-                              onChange={(e) => setNewIncidenciaDescription(e.target.value)}
-                              data-testid={`input-description-${employee.id}`}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button
-                                size="sm"
-                                onClick={() => addIncidenciaForEmployee(employee.id)}
-                                data-testid={`button-save-incidencia-${employee.id}`}
-                              >
-                                Guardar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => {
-                                  setEditingEmployeeId("");
-                                  setNewIncidenciaConcept("");
-                                  setNewIncidenciaAmount("");
-                                  setNewIncidenciaDescription("");
-                                }}
-                                data-testid={`button-cancel-incidencia-${employee.id}`}
-                              >
-                                Cancelar
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        <TableRow className="bg-muted/20">
-                          <TableCell colSpan={6}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditingEmployeeId(employee.id)}
-                              data-testid={`button-add-incidencia-${employee.id}`}
-                            >
-                              <Plus className="h-4 w-4 mr-2" />
-                              Agregar incidencia para {employee.name}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      {deducciones.map((concept) => (
+                        <TableCell key={concept.id} className="text-right">
+                          <Input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                            className="text-right font-mono"
+                            value={getConceptValue(employee.id, concept.id) || ""}
+                            onChange={(e) => {
+                              const value = parseFloat(e.target.value) || 0;
+                              updateConceptValue(employee.id, concept.id, value);
+                            }}
+                            data-testid={`input-${employee.id}-${concept.id}`}
+                          />
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
