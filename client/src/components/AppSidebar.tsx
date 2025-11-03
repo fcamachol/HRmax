@@ -6,6 +6,7 @@ import {
   FileText,
   Settings,
   Building2,
+  Calculator,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -48,6 +49,11 @@ const menuItems = [
   },
   {
     title: "Configuración",
+    url: "/configuration",
+    icon: Calculator,
+  },
+  {
+    title: "Ajustes",
     url: "/settings",
     icon: Settings,
   },

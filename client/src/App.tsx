@@ -12,6 +12,7 @@ import Employees from "@/pages/Employees";
 import Payroll from "@/pages/Payroll";
 import Attendance from "@/pages/Attendance";
 import Reports from "@/pages/Reports";
+import Configuration from "@/pages/Configuration";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/not-found";
 
@@ -23,6 +24,7 @@ function Router() {
       <Route path="/payroll" component={Payroll} />
       <Route path="/attendance" component={Attendance} />
       <Route path="/reports" component={Reports} />
+      <Route path="/configuration" component={Configuration} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
