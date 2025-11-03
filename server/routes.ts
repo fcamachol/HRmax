@@ -6,6 +6,7 @@ import {
   insertLegalCaseSchema,
   insertSettlementSchema,
   insertLawsuitSchema,
+  updateLawsuitSchema,
   insertEmployeeSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
@@ -79,10 +80,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/employees/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const updated = await storage.updateEmployee(id, req.body);
+      // Validate partial update with insertEmployeeSchema (will reject unknown fields)
+      const validatedData = insertEmployeeSchema.partial().parse(req.body);
+      const updated = await storage.updateEmployee(id, validatedData);
       res.json(updated);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(400).json({ message: error.message });
     }
   });
 
@@ -237,10 +240,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/legal/lawsuits/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const updated = await storage.updateLawsuit(id, req.body);
+      // Validate partial update with updateLawsuitSchema (no defaults, validates stage enum if provided)
+      const validatedData = updateLawsuitSchema.parse(req.body);
+      const updated = await storage.updateLawsuit(id, validatedData);
       res.json(updated);
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      res.status(400).json({ message: error.message });
     }
   });
 

@@ -92,13 +92,16 @@ export const settlements = pgTable("settlements", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
-// Demandas laborales
+// Demandas laborales - Etapas del proceso legal
+export const lawsuitStages = ["conciliacion", "contestacion", "desahogo", "alegatos", "sentencia", "cerrado"] as const;
+export type LawsuitStage = typeof lawsuitStages[number];
+
 export const lawsuits = pgTable("lawsuits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(), // Título de la demanda
   employeeName: text("employee_name").notNull(), // Nombre del empleado demandante
   legalCaseId: varchar("legal_case_id"), // Vincula con un caso legal de bajas si existe
-  stage: text("stage").notNull().default("conciliacion"), // 'conciliacion', 'contestacion', 'desahogo', 'alegatos', 'sentencia', 'cerrado'
+  stage: text("stage").notNull().default("conciliacion"), // Etapa actual del proceso
   description: text("description"), // Descripción detallada de la demanda
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
@@ -144,7 +147,14 @@ export const insertLawsuitSchema = createInsertSchema(lawsuits).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  stage: z.enum(lawsuitStages).default("conciliacion"),
 });
+
+// Separate update schema without defaults to prevent overwriting existing values
+export const updateLawsuitSchema = insertLawsuitSchema.extend({
+  stage: z.enum(lawsuitStages).optional(),
+}).partial();
 
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;

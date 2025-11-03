@@ -95,17 +95,16 @@ export function SimuladorLiquidaciones() {
       if (!resultado) return;
       
       const salario = parseFloat(salarioMensual);
-      const salarioDiario = salario / 30;
       
       const settlementData = {
         settlementType: resultado.tipo,
         employeeName: empleadoNombre || "Simulación",
-        salary: salario.toString(),
+        salary: salario, // Keep as number for decimal type
         startDate: fechaIngreso,
         endDate: fechaSalida,
-        yearsWorked: resultado.yearsWorked.toString(),
+        yearsWorked: resultado.yearsWorked, // Keep as number
         concepts: resultado.conceptos,
-        totalAmount: resultado.total.toString(),
+        totalAmount: resultado.total, // Keep as number for decimal type
         mode: 'simulacion',
         legalCaseId: null,
       };
