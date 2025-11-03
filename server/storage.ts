@@ -1,6 +1,8 @@
 import { 
   type User, 
   type InsertUser,
+  type Employee,
+  type InsertEmployee,
   type ConfigurationChangeLog,
   type InsertConfigurationChangeLog,
   type LegalCase,
@@ -13,7 +15,8 @@ import {
   legalCases,
   settlements,
   lawsuits,
-  users
+  users,
+  employees
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -22,6 +25,13 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  
+  // Employees
+  createEmployee(employee: InsertEmployee): Promise<Employee>;
+  getEmployee(id: string): Promise<Employee | undefined>;
+  getEmployees(): Promise<Employee[]>;
+  updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee>;
+  deleteEmployee(id: string): Promise<void>;
   
   // Configuration Change Logs
   createChangeLog(log: InsertConfigurationChangeLog): Promise<ConfigurationChangeLog>;
@@ -67,6 +77,45 @@ export class DatabaseStorage implements IStorage {
       .values(insertUser)
       .returning();
     return user;
+  }
+
+  // Employees
+  async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    const [newEmployee] = await db
+      .insert(employees)
+      .values(employee)
+      .returning();
+    return newEmployee;
+  }
+
+  async getEmployee(id: string): Promise<Employee | undefined> {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(eq(employees.id, id));
+    return employee || undefined;
+  }
+
+  async getEmployees(): Promise<Employee[]> {
+    return await db
+      .select()
+      .from(employees)
+      .where(eq(employees.status, 'active'));
+  }
+
+  async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
+    const [updated] = await db
+      .update(employees)
+      .set(updates)
+      .where(eq(employees.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmployee(id: string): Promise<void> {
+    await db
+      .delete(employees)
+      .where(eq(employees.id, id));
   }
 
   async createChangeLog(log: InsertConfigurationChangeLog): Promise<ConfigurationChangeLog> {

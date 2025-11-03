@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Calculator, Save } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import type { Employee } from "@shared/schema";
 
 interface ConceptoLiquidacion {
   concepto: string;
@@ -22,18 +23,43 @@ interface ConceptoLiquidacion {
 interface ResultadoCalculo {
   conceptos: ConceptoLiquidacion[];
   total: number;
-  tipo: 'finiquito' | 'liquidacion';
+  tipo: 'finiquito' | 'liquidacion_injustificada' | 'liquidacion_justificada';
   yearsWorked: number;
 }
 
+type TipoCalculo = 'finiquito' | 'liquidacion_injustificada' | 'liquidacion_justificada';
+
 export function SimuladorLiquidaciones() {
+  const [fuenteDatos, setFuenteDatos] = useState<'manual' | 'empleado'>('manual');
+  const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<string>('');
   const [empleadoNombre, setEmpleadoNombre] = useState("");
   const [salarioMensual, setSalarioMensual] = useState("");
   const [fechaIngreso, setFechaIngreso] = useState("");
   const [fechaSalida, setFechasSalida] = useState("");
-  const [tipoCalculo, setTipoCalculo] = useState<'finiquito' | 'liquidacion'>('finiquito');
+  const [tipoCalculo, setTipoCalculo] = useState<TipoCalculo>('finiquito');
   const [resultado, setResultado] = useState<ResultadoCalculo | null>(null);
   const { toast } = useToast();
+
+  const { data: empleados = [] } = useQuery<Employee[]>({
+    queryKey: ['/api/employees'],
+    enabled: fuenteDatos === 'empleado',
+  });
+
+  useEffect(() => {
+    if (fuenteDatos === 'empleado' && empleadoSeleccionado) {
+      const empleado = empleados.find(e => e.id === empleadoSeleccionado);
+      if (empleado) {
+        setEmpleadoNombre(`${empleado.firstName} ${empleado.lastName}`);
+        setSalarioMensual(empleado.salary);
+        setFechaIngreso(empleado.startDate);
+      }
+    } else if (fuenteDatos === 'manual') {
+      setEmpleadoSeleccionado('');
+      setEmpleadoNombre('');
+      setSalarioMensual('');
+      setFechaIngreso('');
+    }
+  }, [fuenteDatos, empleadoSeleccionado, empleados]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
@@ -52,7 +78,7 @@ export function SimuladorLiquidaciones() {
       setResultado(data as ResultadoCalculo);
       toast({
         title: "Cálculo completado",
-        description: `${tipoCalculo === 'liquidacion' ? 'Liquidación' : 'Finiquito'} calculado exitosamente`,
+        description: getTipoLabel(tipoCalculo),
       });
     },
     onError: (error: any) => {
@@ -101,6 +127,19 @@ export function SimuladorLiquidaciones() {
     },
   });
 
+  const getTipoLabel = (tipo: TipoCalculo) => {
+    switch (tipo) {
+      case 'finiquito':
+        return 'Finiquito (Renuncia Voluntaria)';
+      case 'liquidacion_injustificada':
+        return 'Liquidación (Despido Injustificado)';
+      case 'liquidacion_justificada':
+        return 'Liquidación (Despido Justificado)';
+      default:
+        return tipo;
+    }
+  };
+
   const handleCalcular = () => {
     if (!salarioMensual || !fechaIngreso || !fechaSalida) {
       toast({
@@ -140,15 +179,48 @@ export function SimuladorLiquidaciones() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="empleado-nombre">Nombre del Empleado (Opcional)</Label>
-              <Input
-                id="empleado-nombre"
-                placeholder="Ej: Juan Pérez"
-                value={empleadoNombre}
-                onChange={(e) => setEmpleadoNombre(e.target.value)}
-                data-testid="input-empleado-nombre"
-              />
+              <Label htmlFor="fuente-datos">Fuente de Datos *</Label>
+              <Select value={fuenteDatos} onValueChange={(value: any) => setFuenteDatos(value)}>
+                <SelectTrigger id="fuente-datos" data-testid="select-fuente-datos">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="manual">Datos Manuales</SelectItem>
+                  <SelectItem value="empleado">Seleccionar Empleado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {fuenteDatos === 'empleado' && (
+              <div className="space-y-2">
+                <Label htmlFor="empleado-select">Empleado *</Label>
+                <Select value={empleadoSeleccionado} onValueChange={setEmpleadoSeleccionado}>
+                  <SelectTrigger id="empleado-select" data-testid="select-empleado">
+                    <SelectValue placeholder="Seleccionar empleado..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empleados.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.firstName} {emp.lastName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {fuenteDatos === 'manual' && (
+              <div className="space-y-2">
+                <Label htmlFor="empleado-nombre">Nombre del Empleado (Opcional)</Label>
+                <Input
+                  id="empleado-nombre"
+                  placeholder="Ej: Juan Pérez"
+                  value={empleadoNombre}
+                  onChange={(e) => setEmpleadoNombre(e.target.value)}
+                  data-testid="input-empleado-nombre"
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="salario-mensual">Salario Mensual *</Label>
@@ -158,6 +230,7 @@ export function SimuladorLiquidaciones() {
                 placeholder="Ej: 15000"
                 value={salarioMensual}
                 onChange={(e) => setSalarioMensual(e.target.value)}
+                disabled={fuenteDatos === 'empleado' && !empleadoSeleccionado}
                 data-testid="input-salario-mensual"
               />
             </div>
@@ -169,6 +242,7 @@ export function SimuladorLiquidaciones() {
                 type="date"
                 value={fechaIngreso}
                 onChange={(e) => setFechaIngreso(e.target.value)}
+                disabled={fuenteDatos === 'empleado' && !empleadoSeleccionado}
                 data-testid="input-fecha-ingreso"
               />
             </div>
@@ -192,7 +266,8 @@ export function SimuladorLiquidaciones() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="finiquito">Finiquito (Renuncia Voluntaria)</SelectItem>
-                  <SelectItem value="liquidacion">Liquidación (Despido Injustificado)</SelectItem>
+                  <SelectItem value="liquidacion_injustificada">Liquidación (Despido Injustificado)</SelectItem>
+                  <SelectItem value="liquidacion_justificada">Liquidación (Despido Justificado)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -229,7 +304,7 @@ export function SimuladorLiquidaciones() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>
-                  Resultado del Cálculo - {resultado.tipo === 'liquidacion' ? 'Liquidación' : 'Finiquito'}
+                  Resultado del Cálculo - {getTipoLabel(resultado.tipo)}
                 </CardTitle>
                 <CardDescription>
                   Antigüedad: {resultado.yearsWorked.toFixed(2)} años
@@ -273,12 +348,19 @@ export function SimuladorLiquidaciones() {
             <div className="mt-4 p-4 bg-muted rounded-md text-sm space-y-2">
               <p className="font-semibold">Información Legal:</p>
               <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                {resultado.tipo === 'liquidacion' ? (
+                {resultado.tipo === 'liquidacion_injustificada' ? (
                   <>
                     <li>Liquidación por despido injustificado según LFT Art. 48-50</li>
                     <li>Incluye indemnización constitucional de 3 meses de salario</li>
                     <li>Prima de antigüedad de 12 días por año trabajado</li>
                     <li>20 días de salario por año trabajado</li>
+                  </>
+                ) : resultado.tipo === 'liquidacion_justificada' ? (
+                  <>
+                    <li>Liquidación por despido justificado según LFT Art. 47</li>
+                    <li>NO incluye indemnización constitucional</li>
+                    <li>Incluye prima de antigüedad de 12 días por año trabajado</li>
+                    <li>Incluye partes proporcionales de prestaciones (aguinaldo, vacaciones)</li>
                   </>
                 ) : (
                   <>
