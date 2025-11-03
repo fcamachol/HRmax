@@ -95,20 +95,11 @@ export const settlements = pgTable("settlements", {
 // Demandas laborales
 export const lawsuits = pgTable("lawsuits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  employeeId: varchar("employee_id"), // null si no hay empleado vinculado
-  employeeName: text("employee_name").notNull(), // Nombre del empleado o demandante
-  caseNumber: text("case_number"), // Número de expediente
-  demandType: text("demand_type").notNull(), // 'despido_injustificado', 'reinstalacion', 'pago_prestaciones', 'otro'
-  amount: decimal("amount", { precision: 12, scale: 2 }), // Monto demandado
-  status: text("status").notNull().default("conciliacion"), // 'conciliacion', 'demanda_presentada', 'audiencias', 'resolucion', 'cierre'
-  board: text("board"), // Junta de Conciliación y Arbitraje
-  lawyer: text("lawyer"), // Abogado responsable
-  filingDate: date("filing_date"), // Fecha de presentación
-  lastHearingDate: date("last_hearing_date"), // Última audiencia
-  nextHearingDate: date("next_hearing_date"), // Próxima audiencia
-  resolutionDate: date("resolution_date"), // Fecha de resolución
-  outcome: text("outcome"), // 'favorable', 'desfavorable', 'conciliacion', 'desistimiento'
-  notes: text("notes"), // Notas del caso
+  title: text("title").notNull(), // Título de la demanda
+  employeeName: text("employee_name").notNull(), // Nombre del empleado demandante
+  legalCaseId: varchar("legal_case_id"), // Vincula con un caso legal de bajas si existe
+  stage: text("stage").notNull().default("conciliacion"), // 'conciliacion', 'contestacion', 'desahogo', 'alegatos', 'sentencia', 'cerrado'
+  description: text("description"), // Descripción detallada de la demanda
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });

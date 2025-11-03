@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Calculator, Scale } from "lucide-react";
+import { Calculator, Scale, Gavel } from "lucide-react";
 import { SimuladorLiquidaciones } from "@/components/SimuladorLiquidaciones";
 import { CasosLegalesKanban } from "@/components/CasosLegalesKanban";
+import { KanbanDemandas } from "@/components/KanbanDemandas";
 
 export default function Legal() {
   return (
@@ -15,7 +16,7 @@ export default function Legal() {
       </div>
 
       <Tabs defaultValue="simulador" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="simulador" data-testid="tab-simulador">
             <Calculator className="h-4 w-4 mr-2" />
             Simulador
@@ -23,6 +24,10 @@ export default function Legal() {
           <TabsTrigger value="bajas" data-testid="tab-bajas">
             <Scale className="h-4 w-4 mr-2" />
             Bajas
+          </TabsTrigger>
+          <TabsTrigger value="demandas" data-testid="tab-demandas">
+            <Gavel className="h-4 w-4 mr-2" />
+            Demandas
           </TabsTrigger>
         </TabsList>
 
@@ -32,6 +37,10 @@ export default function Legal() {
 
         <TabsContent value="bajas">
           <CasosLegalesKanban />
+        </TabsContent>
+
+        <TabsContent value="demandas">
+          <KanbanDemandas />
         </TabsContent>
       </Tabs>
     </div>
