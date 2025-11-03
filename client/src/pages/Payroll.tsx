@@ -70,8 +70,10 @@ interface Concept {
 
 interface Nomina {
   id: string;
+  type: "ordinaria" | "extraordinaria";
   period: string;
   frequency: string;
+  extraordinaryType?: string;
   employeeIds: string[];
   status: "draft" | "calculated" | "approved" | "paid";
   createdAt: Date;
@@ -85,6 +87,8 @@ export default function Payroll() {
   const [currentStep, setCurrentStep] = useState(0);
   
   // Form state
+  const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
+  const [extraordinaryType, setExtraordinaryType] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -149,6 +153,7 @@ export default function Payroll() {
   const [nominas, setNominas] = useState<Nomina[]>([
     {
       id: "1",
+      type: "ordinaria",
       period: "1-15 Nov 2025",
       frequency: "quincenal",
       employeeIds: ["1", "2", "3", "4", "5", "6"],
@@ -159,6 +164,19 @@ export default function Payroll() {
     },
     {
       id: "2",
+      type: "extraordinaria",
+      period: "Aguinaldo 2025",
+      frequency: "extraordinaria",
+      extraordinaryType: "aguinaldo",
+      employeeIds: ["1", "2", "3", "4", "5", "6"],
+      status: "paid",
+      createdAt: new Date("2025-12-15"),
+      totalNet: 124500,
+      employeeCount: 6,
+    },
+    {
+      id: "3",
+      type: "ordinaria",
       period: "16-31 Oct 2025",
       frequency: "quincenal",
       employeeIds: ["1", "2", "3", "4", "5", "6"],
@@ -168,7 +186,20 @@ export default function Payroll() {
       employeeCount: 6,
     },
     {
-      id: "3",
+      id: "4",
+      type: "extraordinaria",
+      period: "Bono Productividad Q3",
+      frequency: "extraordinaria",
+      extraordinaryType: "bono",
+      employeeIds: ["1", "6"],
+      status: "approved",
+      createdAt: new Date("2025-09-30"),
+      totalNet: 35000,
+      employeeCount: 2,
+    },
+    {
+      id: "5",
+      type: "ordinaria",
       period: "1-15 Oct 2025",
       frequency: "quincenal",
       employeeIds: ["1", "2", "3", "4"],
@@ -423,6 +454,8 @@ export default function Payroll() {
     setViewMode("create");
     setCurrentStep(0);
     setSelectedEmployees(new Set());
+    setNominaType("ordinaria");
+    setExtraordinaryType("");
     setSelectedPeriod("");
     setConceptValues([]);
   };
@@ -431,14 +464,18 @@ export default function Payroll() {
     setViewMode("list");
     setCurrentStep(0);
     setSelectedEmployees(new Set());
+    setNominaType("ordinaria");
+    setExtraordinaryType("");
     setSelectedPeriod("");
   };
 
   const createNomina = () => {
     const newNomina: Nomina = {
       id: Date.now().toString(),
-      period: selectedPeriod,
-      frequency: selectedFrequency,
+      type: nominaType,
+      period: nominaType === "ordinaria" ? selectedPeriod : extraordinaryType,
+      frequency: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
+      extraordinaryType: nominaType === "extraordinaria" ? extraordinaryType : undefined,
       employeeIds: Array.from(selectedEmployees),
       status: "draft",
       createdAt: new Date(),
@@ -452,7 +489,7 @@ export default function Payroll() {
     
     toast({
       title: "Nómina creada",
-      description: `Nómina para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}`,
+      description: `Nómina ${nominaType} para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}`,
     });
   };
 
@@ -533,6 +570,7 @@ export default function Payroll() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Tipo</TableHead>
                   <TableHead>Periodo</TableHead>
                   <TableHead>Frecuencia</TableHead>
                   <TableHead>Empleados</TableHead>
@@ -545,6 +583,11 @@ export default function Payroll() {
               <TableBody>
                 {nominas.map((nomina) => (
                   <TableRow key={nomina.id} data-testid={`row-nomina-${nomina.id}`}>
+                    <TableCell>
+                      <Badge variant={nomina.type === "extraordinaria" ? "default" : "outline"}>
+                        {nomina.type === "extraordinaria" ? "Extraordinaria" : "Ordinaria"}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-medium">{nomina.period}</TableCell>
                     <TableCell className="capitalize">{nomina.frequency}</TableCell>
                     <TableCell>
@@ -625,34 +668,80 @@ export default function Payroll() {
         <CardContent className="min-h-96">
           {currentStep === 0 && (
             <div className="space-y-6">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="frequency">Frecuencia de Pago</Label>
-                  <Select value={selectedFrequency} onValueChange={setSelectedFrequency}>
-                    <SelectTrigger id="frequency" data-testid="select-frequency">
+                  <Label htmlFor="nomina-type">Tipo de Nómina</Label>
+                  <Select value={nominaType} onValueChange={(v) => setNominaType(v as "ordinaria" | "extraordinaria")}>
+                    <SelectTrigger id="nomina-type" data-testid="select-nomina-type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="semanal">Semanal</SelectItem>
-                      <SelectItem value="quincenal">Quincenal</SelectItem>
-                      <SelectItem value="mensual">Mensual</SelectItem>
+                      <SelectItem value="ordinaria">Ordinaria</SelectItem>
+                      <SelectItem value="extraordinaria">Extraordinaria</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="period">Periodo de Nómina</Label>
-                  <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                    <SelectTrigger id="period" data-testid="select-period">
-                      <SelectValue placeholder="Selecciona periodo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="16-30 Nov 2025">16-30 Nov 2025</SelectItem>
-                      <SelectItem value="1-15 Nov 2025">1-15 Nov 2025</SelectItem>
-                      <SelectItem value="16-31 Oct 2025">16-31 Oct 2025</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {nominaType === "ordinaria" ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="frequency">Frecuencia de Pago</Label>
+                      <Select value={selectedFrequency} onValueChange={setSelectedFrequency}>
+                        <SelectTrigger id="frequency" data-testid="select-frequency">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="semanal">Semanal</SelectItem>
+                          <SelectItem value="quincenal">Quincenal</SelectItem>
+                          <SelectItem value="mensual">Mensual</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="period">Periodo de Nómina</Label>
+                      <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                        <SelectTrigger id="period" data-testid="select-period">
+                          <SelectValue placeholder="Selecciona periodo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="16-30 Nov 2025">16-30 Nov 2025</SelectItem>
+                          <SelectItem value="1-15 Nov 2025">1-15 Nov 2025</SelectItem>
+                          <SelectItem value="16-31 Oct 2025">16-31 Oct 2025</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="extraordinary-type">Tipo de Pago Extraordinario</Label>
+                      <Select value={extraordinaryType} onValueChange={setExtraordinaryType}>
+                        <SelectTrigger id="extraordinary-type" data-testid="select-extraordinary-type">
+                          <SelectValue placeholder="Selecciona tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aguinaldo">Aguinaldo</SelectItem>
+                          <SelectItem value="ptu">Reparto de Utilidades (PTU)</SelectItem>
+                          <SelectItem value="bono">Bono Especial</SelectItem>
+                          <SelectItem value="prima-vacacional">Prima Vacacional</SelectItem>
+                          <SelectItem value="finiquito">Finiquito</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="extraordinary-description">Descripción</Label>
+                      <Input
+                        id="extraordinary-description"
+                        placeholder="ej. Aguinaldo 2025"
+                        value={selectedPeriod}
+                        onChange={(e) => setSelectedPeriod(e.target.value)}
+                        data-testid="input-extraordinary-description"
+                      />
+                    </div>
+                  </>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="department">Filtrar por Depto.</Label>
@@ -1018,13 +1107,34 @@ export default function Payroll() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Periodo</span>
-                      <span className="font-medium">{selectedPeriod}</span>
+                      <span className="text-muted-foreground">Tipo de Nómina</span>
+                      <Badge variant={nominaType === "extraordinaria" ? "default" : "outline"}>
+                        {nominaType === "extraordinaria" ? "Extraordinaria" : "Ordinaria"}
+                      </Badge>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Frecuencia</span>
-                      <span className="font-medium capitalize">{selectedFrequency}</span>
-                    </div>
+                    {nominaType === "ordinaria" ? (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Periodo</span>
+                          <span className="font-medium">{selectedPeriod}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Frecuencia</span>
+                          <span className="font-medium capitalize">{selectedFrequency}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Tipo</span>
+                          <span className="font-medium capitalize">{extraordinaryType}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Descripción</span>
+                          <span className="font-medium">{selectedPeriod}</span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Empleados</span>
                       <span className="font-medium">{selectedEmployees.size}</span>
