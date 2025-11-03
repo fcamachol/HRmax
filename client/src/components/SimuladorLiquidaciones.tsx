@@ -46,7 +46,7 @@ export function SimuladorLiquidaciones() {
   const calcularMutation = useMutation({
     mutationFn: async (data: any) => {
       const response = await apiRequest("POST", "/api/legal/calculate-settlement", data);
-      return response;
+      return await response.json();
     },
     onSuccess: (data) => {
       setResultado(data as ResultadoCalculo);
