@@ -15,10 +15,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Settings, Edit, Save, X, Plus } from "lucide-react";
 import { DemoCalculoNomina } from "@/components/DemoCalculoNomina";
+import { EditISRDialog } from "@/components/EditISRDialog";
+
+type Periodicidad = "diaria" | "semanal" | "decenal" | "quincenal" | "mensual";
 
 export default function Configuration() {
   const [isEditingUMA, setIsEditingUMA] = useState(false);
   const [isEditingSalarioMinimo, setIsEditingSalarioMinimo] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [currentPeriodicidad, setCurrentPeriodicidad] = useState<Periodicidad>("mensual");
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-MX', {
@@ -197,6 +202,67 @@ export default function Configuration() {
     zonaGeneral: 278.80,
     zonaFrontera: 419.88,
   });
+
+  // Subsidio al Empleo - Tablas Escalonadas 2025
+  const subsidioDiaria = [
+    { limiteInferior: 0.01, limiteSuperior: 51.95, subsidio: 15.62 },
+    { limiteInferior: 51.96, limiteSuperior: 440.58, subsidio: 15.61 },
+    { limiteInferior: 440.59, limiteSuperior: 774.38, subsidio: 15.05 },
+    { limiteInferior: 774.39, limiteSuperior: 902.15, subsidio: 14.27 },
+    { limiteInferior: 902.16, limiteSuperior: 2653.38, subsidio: 13.88 },
+    { limiteInferior: 2653.39, limiteSuperior: 3084.23, subsidio: 11.88 },
+    { limiteInferior: 3084.24, limiteSuperior: 3746.15, subsidio: 9.49 },
+    { limiteInferior: 3746.16, limiteSuperior: 4470.00, subsidio: 6.16 },
+    { limiteInferior: 4470.01, limiteSuperior: null, subsidio: 0 },
+  ];
+
+  const subsidioSemanal = [
+    { limiteInferior: 0.01, limiteSuperior: 363.65, subsidio: 109.34 },
+    { limiteInferior: 363.66, limiteSuperior: 3084.06, subsidio: 109.27 },
+    { limiteInferior: 3084.07, limiteSuperior: 5420.66, subsidio: 105.35 },
+    { limiteInferior: 5420.67, limiteSuperior: 6315.05, subsidio: 99.89 },
+    { limiteInferior: 6315.06, limiteSuperior: 18573.66, subsidio: 97.16 },
+    { limiteInferior: 18573.67, limiteSuperior: 21589.61, subsidio: 83.16 },
+    { limiteInferior: 21589.62, limiteSuperior: 26223.05, subsidio: 66.43 },
+    { limiteInferior: 26223.06, limiteSuperior: 31290.00, subsidio: 43.12 },
+    { limiteInferior: 31290.01, limiteSuperior: null, subsidio: 0 },
+  ];
+
+  const subsidioDecenal = [
+    { limiteInferior: 0.01, limiteSuperior: 519.50, subsidio: 156.20 },
+    { limiteInferior: 519.51, limiteSuperior: 4405.80, subsidio: 156.10 },
+    { limiteInferior: 4405.81, limiteSuperior: 7743.80, subsidio: 150.50 },
+    { limiteInferior: 7743.81, limiteSuperior: 9021.50, subsidio: 142.70 },
+    { limiteInferior: 9021.51, limiteSuperior: 26533.80, subsidio: 138.80 },
+    { limiteInferior: 26533.81, limiteSuperior: 30842.30, subsidio: 118.80 },
+    { limiteInferior: 30842.31, limiteSuperior: 37461.50, subsidio: 94.90 },
+    { limiteInferior: 37461.51, limiteSuperior: 44700.00, subsidio: 61.60 },
+    { limiteInferior: 44700.01, limiteSuperior: null, subsidio: 0 },
+  ];
+
+  const subsidioQuincenal = [
+    { limiteInferior: 0.01, limiteSuperior: 779.25, subsidio: 237.50 },
+    { limiteInferior: 779.26, limiteSuperior: 6608.70, subsidio: 237.40 },
+    { limiteInferior: 6608.71, limiteSuperior: 11615.70, subsidio: 228.95 },
+    { limiteInferior: 11615.71, limiteSuperior: 13532.25, subsidio: 217.05 },
+    { limiteInferior: 13532.26, limiteSuperior: 39800.70, subsidio: 211.20 },
+    { limiteInferior: 39800.71, limiteSuperior: 46263.45, subsidio: 180.90 },
+    { limiteInferior: 46263.46, limiteSuperior: 56192.25, subsidio: 144.45 },
+    { limiteInferior: 56192.26, limiteSuperior: 67050.00, subsidio: 93.80 },
+    { limiteInferior: 67050.01, limiteSuperior: null, subsidio: 0 },
+  ];
+
+  const subsidioMensual = [
+    { limiteInferior: 0.01, limiteSuperior: 1558.50, subsidio: 475.00 },
+    { limiteInferior: 1558.51, limiteSuperior: 13217.40, subsidio: 474.80 },
+    { limiteInferior: 13217.41, limiteSuperior: 23231.40, subsidio: 457.90 },
+    { limiteInferior: 23231.41, limiteSuperior: 27064.50, subsidio: 434.10 },
+    { limiteInferior: 27064.51, limiteSuperior: 79601.40, subsidio: 422.40 },
+    { limiteInferior: 79601.41, limiteSuperior: 92526.90, subsidio: 361.80 },
+    { limiteInferior: 92526.91, limiteSuperior: 112384.50, subsidio: 288.90 },
+    { limiteInferior: 112384.51, limiteSuperior: 134100.00, subsidio: 187.60 },
+    { limiteInferior: 134100.01, limiteSuperior: null, subsidio: 0 },
+  ];
 
   return (
     <div className="space-y-6">
@@ -846,8 +912,20 @@ export default function Configuration() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-muted-foreground">
-                        Subsidio al Empleo: <span className="font-semibold">{formatCurrency(subsidioEmpleo.mensual)}</span> mensual
+                        Subsidio al Empleo: <span className="font-semibold">Escalonado según ingreso</span>
                       </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setCurrentPeriodicidad("mensual");
+                          setEditDialogOpen(true);
+                        }}
+                        data-testid="button-edit-isr-mensual"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar Tablas
+                      </Button>
                     </div>
                     <Table>
                       <TableHeader>
@@ -1045,6 +1123,31 @@ export default function Configuration() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Diálogo de Edición ISR */}
+      <EditISRDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        periodicidad={currentPeriodicidad}
+        isrTramos={
+          currentPeriodicidad === "diaria" ? isrDiaria :
+          currentPeriodicidad === "semanal" ? isrSemanal :
+          currentPeriodicidad === "decenal" ? isrDecenal :
+          currentPeriodicidad === "quincenal" ? isrQuincenal :
+          isrMensual
+        }
+        subsidioTramos={
+          currentPeriodicidad === "diaria" ? subsidioDiaria :
+          currentPeriodicidad === "semanal" ? subsidioSemanal :
+          currentPeriodicidad === "decenal" ? subsidioDecenal :
+          currentPeriodicidad === "quincenal" ? subsidioQuincenal :
+          subsidioMensual
+        }
+        onSave={(newISRTramos, newSubsidioTramos) => {
+          console.log("Tablas actualizadas:", { newISRTramos, newSubsidioTramos });
+          // Aquí puedes agregar lógica adicional para actualizar el estado local si es necesario
+        }}
+      />
     </div>
   );
 }

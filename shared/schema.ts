@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -44,6 +44,23 @@ export const attendance = pgTable("attendance", {
   clockOut: text("clock_out"),
 });
 
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
+});
+
+export const configurationChangeLogs = pgTable("configuration_change_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  changeType: text("change_type").notNull(), // 'isr_table', 'subsidio_table', 'imss_rates', 'uma', etc.
+  periodicidad: text("periodicidad"), // 'diaria', 'semanal', etc. - null for non-ISR changes
+  changedBy: text("changed_by").notNull(), // Usuario que hizo el cambio
+  changeDate: timestamp("change_date").notNull().default(sql`now()`),
+  previousValue: jsonb("previous_value").notNull(), // Valor anterior (JSON)
+  newValue: jsonb("new_value").notNull(), // Valor nuevo (JSON)
+  description: text("description"), // Descripción del cambio
+});
+
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
 });
@@ -60,6 +77,15 @@ export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+});
+
+export const insertConfigurationChangeLogSchema = createInsertSchema(configurationChangeLogs).omit({
+  id: true,
+  changeDate: true,
+});
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Department = typeof departments.$inferSelect;
@@ -68,3 +94,7 @@ export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type ConfigurationChangeLog = typeof configurationChangeLogs.$inferSelect;
+export type InsertConfigurationChangeLog = z.infer<typeof insertConfigurationChangeLogSchema>;
