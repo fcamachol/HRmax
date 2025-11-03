@@ -61,6 +61,37 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
   description: text("description"), // Descripción del cambio
 });
 
+// Módulo Legal - Casos de despidos/renuncias
+export const legalCases = pgTable("legal_cases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id"), // null para simulaciones
+  caseType: text("case_type").notNull(), // 'despido', 'renuncia'
+  reason: text("reason").notNull(), // Motivo del despido/renuncia
+  status: text("status").notNull().default("pendiente"), // 'pendiente', 'en_proceso', 'documentacion', 'aprobado', 'completado', 'cancelado'
+  mode: text("mode").notNull(), // 'simulacion' o 'real'
+  startDate: date("start_date").notNull(), // Fecha de inicio del caso
+  endDate: date("end_date"), // Fecha de terminación de la relación laboral
+  notes: text("notes"), // Notas adicionales
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+// Liquidaciones y Finiquitos
+export const settlements = pgTable("settlements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  legalCaseId: varchar("legal_case_id"), // null para simulaciones independientes
+  settlementType: text("settlement_type").notNull(), // 'liquidacion', 'finiquito'
+  employeeName: text("employee_name"), // Para simulaciones
+  salary: decimal("salary", { precision: 10, scale: 2 }).notNull(),
+  startDate: date("start_date").notNull(), // Fecha de inicio laboral
+  endDate: date("end_date").notNull(), // Fecha de terminación
+  yearsWorked: decimal("years_worked", { precision: 5, scale: 2 }).notNull(),
+  concepts: jsonb("concepts").notNull(), // Desglose de conceptos calculados
+  totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
+  mode: text("mode").notNull(), // 'simulacion' o 'real'
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
 });
@@ -86,6 +117,17 @@ export const insertConfigurationChangeLogSchema = createInsertSchema(configurati
   changeDate: true,
 });
 
+export const insertLegalCaseSchema = createInsertSchema(legalCases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSettlementSchema = createInsertSchema(settlements).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Department = typeof departments.$inferSelect;
@@ -98,3 +140,7 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type ConfigurationChangeLog = typeof configurationChangeLogs.$inferSelect;
 export type InsertConfigurationChangeLog = z.infer<typeof insertConfigurationChangeLogSchema>;
+export type LegalCase = typeof legalCases.$inferSelect;
+export type InsertLegalCase = z.infer<typeof insertLegalCaseSchema>;
+export type Settlement = typeof settlements.$inferSelect;
+export type InsertSettlement = z.infer<typeof insertSettlementSchema>;

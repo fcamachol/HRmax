@@ -3,7 +3,13 @@ import {
   type InsertUser,
   type ConfigurationChangeLog,
   type InsertConfigurationChangeLog,
+  type LegalCase,
+  type InsertLegalCase,
+  type Settlement,
+  type InsertSettlement,
   configurationChangeLogs,
+  legalCases,
+  settlements,
   users
 } from "@shared/schema";
 import { db } from "./db";
@@ -18,6 +24,20 @@ export interface IStorage {
   createChangeLog(log: InsertConfigurationChangeLog): Promise<ConfigurationChangeLog>;
   getChangeLogs(limit?: number): Promise<ConfigurationChangeLog[]>;
   getChangeLogsByType(changeType: string, periodicidad?: string): Promise<ConfigurationChangeLog[]>;
+  
+  // Legal Cases
+  createLegalCase(legalCase: InsertLegalCase): Promise<LegalCase>;
+  getLegalCase(id: string): Promise<LegalCase | undefined>;
+  getLegalCases(mode?: string): Promise<LegalCase[]>;
+  updateLegalCase(id: string, updates: Partial<InsertLegalCase>): Promise<LegalCase>;
+  deleteLegalCase(id: string): Promise<void>;
+  
+  // Settlements
+  createSettlement(settlement: InsertSettlement): Promise<Settlement>;
+  getSettlement(id: string): Promise<Settlement | undefined>;
+  getSettlements(mode?: string): Promise<Settlement[]>;
+  getSettlementsByLegalCase(legalCaseId: string): Promise<Settlement[]>;
+  deleteSettlement(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -76,6 +96,97 @@ export class DatabaseStorage implements IStorage {
       .where(eq(configurationChangeLogs.changeType, changeType))
       .orderBy(desc(configurationChangeLogs.changeDate))
       .limit(50);
+  }
+
+  // Legal Cases
+  async createLegalCase(legalCase: InsertLegalCase): Promise<LegalCase> {
+    const [newCase] = await db
+      .insert(legalCases)
+      .values(legalCase)
+      .returning();
+    return newCase;
+  }
+
+  async getLegalCase(id: string): Promise<LegalCase | undefined> {
+    const [legalCase] = await db
+      .select()
+      .from(legalCases)
+      .where(eq(legalCases.id, id));
+    return legalCase || undefined;
+  }
+
+  async getLegalCases(mode?: string): Promise<LegalCase[]> {
+    if (mode) {
+      return await db
+        .select()
+        .from(legalCases)
+        .where(eq(legalCases.mode, mode))
+        .orderBy(desc(legalCases.createdAt));
+    }
+    return await db
+      .select()
+      .from(legalCases)
+      .orderBy(desc(legalCases.createdAt));
+  }
+
+  async updateLegalCase(id: string, updates: Partial<InsertLegalCase>): Promise<LegalCase> {
+    const [updated] = await db
+      .update(legalCases)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(legalCases.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLegalCase(id: string): Promise<void> {
+    await db
+      .delete(legalCases)
+      .where(eq(legalCases.id, id));
+  }
+
+  // Settlements
+  async createSettlement(settlement: InsertSettlement): Promise<Settlement> {
+    const [newSettlement] = await db
+      .insert(settlements)
+      .values(settlement)
+      .returning();
+    return newSettlement;
+  }
+
+  async getSettlement(id: string): Promise<Settlement | undefined> {
+    const [settlement] = await db
+      .select()
+      .from(settlements)
+      .where(eq(settlements.id, id));
+    return settlement || undefined;
+  }
+
+  async getSettlements(mode?: string): Promise<Settlement[]> {
+    if (mode) {
+      return await db
+        .select()
+        .from(settlements)
+        .where(eq(settlements.mode, mode))
+        .orderBy(desc(settlements.createdAt));
+    }
+    return await db
+      .select()
+      .from(settlements)
+      .orderBy(desc(settlements.createdAt));
+  }
+
+  async getSettlementsByLegalCase(legalCaseId: string): Promise<Settlement[]> {
+    return await db
+      .select()
+      .from(settlements)
+      .where(eq(settlements.legalCaseId, legalCaseId))
+      .orderBy(desc(settlements.createdAt));
+  }
+
+  async deleteSettlement(id: string): Promise<void> {
+    await db
+      .delete(settlements)
+      .where(eq(settlements.id, id));
   }
 }
 
