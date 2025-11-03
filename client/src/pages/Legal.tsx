@@ -20,9 +20,9 @@ export default function Legal() {
             <Calculator className="h-4 w-4 mr-2" />
             Simulador
           </TabsTrigger>
-          <TabsTrigger value="casos-reales" data-testid="tab-casos-reales">
+          <TabsTrigger value="bajas" data-testid="tab-bajas">
             <Scale className="h-4 w-4 mr-2" />
-            Casos Reales
+            Bajas
           </TabsTrigger>
         </TabsList>
 
@@ -30,7 +30,7 @@ export default function Legal() {
           <SimuladorLiquidaciones />
         </TabsContent>
 
-        <TabsContent value="casos-reales">
+        <TabsContent value="bajas">
           <CasosLegalesKanban />
         </TabsContent>
       </Tabs>
