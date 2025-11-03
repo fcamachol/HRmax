@@ -13,7 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, Edit, Save, X } from "lucide-react";
+import { Settings, Edit, Save, X, Plus } from "lucide-react";
+import { DemoCalculoNomina } from "@/components/DemoCalculoNomina";
 
 export default function Configuration() {
   const [isEditingUMA, setIsEditingUMA] = useState(false);
@@ -206,10 +207,16 @@ export default function Configuration() {
         </p>
       </div>
 
-      <Tabs defaultValue="valores-referencia" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+      <Tabs defaultValue="demo-calculo" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-7">
+          <TabsTrigger value="demo-calculo" data-testid="tab-demo-calculo">
+            Demo Cálculo
+          </TabsTrigger>
           <TabsTrigger value="valores-referencia" data-testid="tab-valores-referencia">
-            Valores de Referencia
+            Valores
+          </TabsTrigger>
+          <TabsTrigger value="conceptos" data-testid="tab-conceptos">
+            Conceptos
           </TabsTrigger>
           <TabsTrigger value="isr" data-testid="tab-isr">
             ISR
@@ -221,9 +228,19 @@ export default function Configuration() {
             CEAV
           </TabsTrigger>
           <TabsTrigger value="prevision-social" data-testid="tab-prevision-social">
-            Previsión Social
+            Límites
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="demo-calculo" className="space-y-6">
+          <div>
+            <h2 className="text-2xl font-semibold mb-2">Demostración de Cálculo Real</h2>
+            <p className="text-muted-foreground">
+              Prueba cómo funcionan las fórmulas de ISR e IMSS con datos reales de las tablas 2025
+            </p>
+          </div>
+          <DemoCalculoNomina />
+        </TabsContent>
 
         <TabsContent value="valores-referencia" className="space-y-6">
           <Card>
@@ -433,6 +450,218 @@ export default function Configuration() {
                 </div>
                 <div className="text-muted-foreground">
                   Sobre el Salario Base de Cotización (SBC)
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="conceptos" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex justify-between items-start">
+                <div>
+                  <CardTitle>Conceptos de Previsión Social</CardTitle>
+                  <CardDescription>
+                    Configura conceptos con fórmulas dinámicas para cálculos de nómina
+                  </CardDescription>
+                </div>
+                <Button data-testid="button-add-concepto-prevision">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Concepto
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nombre</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Fórmula</TableHead>
+                    <TableHead className="text-right">Límite Exento</TableHead>
+                    <TableHead>Gravable ISR</TableHead>
+                    <TableHead>Integra SBC</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow data-testid="row-concepto-vales-despensa">
+                    <TableCell className="font-medium">Vales de Despensa</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">Fijo</TableCell>
+                    <TableCell className="text-right font-mono">40% SM Diario</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">Parcial</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-fondo-ahorro">
+                    <TableCell className="font-medium">Fondo de Ahorro</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">% Salario Base</TableCell>
+                    <TableCell className="text-right font-mono">13% SBC</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">Parcial</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-aguinaldo">
+                    <TableCell className="font-medium">Aguinaldo</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">(Salario Diario × Días) ÷ 365 × Días Año</TableCell>
+                    <TableCell className="text-right font-mono">30 UMAs</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">Parcial</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-prima-vacacional">
+                    <TableCell className="font-medium">Prima Vacacional</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">(Salario Diario × Días Vac.) × 0.25</TableCell>
+                    <TableCell className="text-right font-mono">15 SM</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">Parcial</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-ptu">
+                    <TableCell className="font-medium">PTU (Reparto de Utilidades)</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">Fijo o Variable</TableCell>
+                    <TableCell className="text-right font-mono">15 UMAs</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">Parcial</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-tiempo-extra">
+                    <TableCell className="font-medium">Tiempo Extra</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Percepción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">(Salario Hora × Hrs) × Factor</TableCell>
+                    <TableCell className="text-right font-mono">-</TableCell>
+                    <TableCell>
+                      <Badge variant="default">Total</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="default">Sí</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-imss">
+                    <TableCell className="font-medium">IMSS (Trabajador)</TableCell>
+                    <TableCell>
+                      <Badge variant="destructive">Deducción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">SBC × % Tabla IMSS</TableCell>
+                    <TableCell className="text-right font-mono">-</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">No</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">N/A</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow data-testid="row-concepto-isr">
+                    <TableCell className="font-medium">ISR</TableCell>
+                    <TableCell>
+                      <Badge variant="destructive">Deducción</Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">Tabla ISR - Subsidio Empleo</TableCell>
+                    <TableCell className="text-right font-mono">-</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">N/A</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">N/A</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+              <div className="mt-6 p-4 bg-muted rounded-md text-sm space-y-3">
+                <div>
+                  <p className="font-semibold mb-2">Variables Disponibles para Fórmulas:</p>
+                  <div className="grid grid-cols-2 gap-2 text-muted-foreground">
+                    <div><code className="bg-background px-2 py-1 rounded">salario_base</code> - Salario base del empleado</div>
+                    <div><code className="bg-background px-2 py-1 rounded">salario_diario</code> - Salario diario integrado</div>
+                    <div><code className="bg-background px-2 py-1 rounded">sbc</code> - Salario Base de Cotización</div>
+                    <div><code className="bg-background px-2 py-1 rounded">dias_trabajados</code> - Días trabajados en el periodo</div>
+                    <div><code className="bg-background px-2 py-1 rounded">uma_diaria</code> - UMA diaria vigente</div>
+                    <div><code className="bg-background px-2 py-1 rounded">salario_minimo</code> - Salario mínimo vigente</div>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-semibold mb-2">Operadores Soportados:</p>
+                  <div className="flex gap-4 text-muted-foreground">
+                    <code className="bg-background px-2 py-1 rounded">+</code>
+                    <code className="bg-background px-2 py-1 rounded">-</code>
+                    <code className="bg-background px-2 py-1 rounded">×</code>
+                    <code className="bg-background px-2 py-1 rounded">÷</code>
+                    <code className="bg-background px-2 py-1 rounded">%</code>
+                    <code className="bg-background px-2 py-1 rounded">()</code>
+                  </div>
                 </div>
               </div>
             </CardContent>
