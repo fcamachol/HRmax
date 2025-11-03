@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +61,21 @@ export function EditISRDialog({
   const [description, setDescription] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const { toast } = useToast();
+
+  // Resincronizar estado local cuando cambien las props
+  useEffect(() => {
+    setIsrTramos(initialISRTramos);
+  }, [periodicidad, initialISRTramos]);
+
+  useEffect(() => {
+    setSubsidioTramos(initialSubsidioTramos);
+  }, [periodicidad, initialSubsidioTramos]);
+
+  // Resetear descripción y vista de historial al cambiar periodicidad
+  useEffect(() => {
+    setDescription("");
+    setShowHistory(false);
+  }, [periodicidad]);
 
   const formatCurrency = (amount: number | null) => {
     if (amount === null) return "En adelante";
