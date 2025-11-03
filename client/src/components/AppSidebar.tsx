@@ -7,6 +7,7 @@ import {
   Settings,
   Building2,
   Calculator,
+  Scale,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -46,6 +47,11 @@ const menuItems = [
     title: "Reportes",
     url: "/reports",
     icon: FileText,
+  },
+  {
+    title: "Legal",
+    url: "/legal",
+    icon: Scale,
   },
   {
     title: "Configuración",

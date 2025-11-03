@@ -14,6 +14,7 @@ import Attendance from "@/pages/Attendance";
 import Reports from "@/pages/Reports";
 import Configuration from "@/pages/Configuration";
 import Settings from "@/pages/Settings";
+import Legal from "@/pages/Legal";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -24,6 +25,7 @@ function Router() {
       <Route path="/payroll" component={Payroll} />
       <Route path="/attendance" component={Attendance} />
       <Route path="/reports" component={Reports} />
+      <Route path="/legal" component={Legal} />
       <Route path="/configuration" component={Configuration} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
