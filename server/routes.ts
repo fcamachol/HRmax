@@ -4,9 +4,10 @@ import { storage } from "./storage";
 import { 
   insertConfigurationChangeLogSchema, 
   insertLegalCaseSchema,
-  insertSettlementSchema 
+  insertSettlementSchema,
+  insertLawsuitSchema
 } from "@shared/schema";
-import { calcularFiniquito, calcularLiquidacion } from "@shared/liquidaciones";
+import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configuration Change Logs
@@ -146,6 +147,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Lawsuits (Demandas)
+  app.post("/api/legal/lawsuits", async (req, res) => {
+    try {
+      const validatedData = insertLawsuitSchema.parse(req.body);
+      const lawsuit = await storage.createLawsuit(validatedData);
+      res.json(lawsuit);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/legal/lawsuits", async (req, res) => {
+    try {
+      const lawsuits = await storage.getLawsuits();
+      res.json(lawsuits);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/legal/lawsuits/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const lawsuit = await storage.getLawsuit(id);
+      if (!lawsuit) {
+        return res.status(404).json({ message: "Lawsuit not found" });
+      }
+      res.json(lawsuit);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/legal/lawsuits/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updated = await storage.updateLawsuit(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/legal/lawsuits/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteLawsuit(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Cálculo de liquidaciones/finiquitos
   app.post("/api/legal/calculate-settlement", async (req, res) => {
     try {
@@ -158,9 +212,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fechaSalida: new Date(fechaSalida),
       };
       
-      const resultado = tipo === 'liquidacion' 
-        ? calcularLiquidacion(datos)
-        : calcularFiniquito(datos);
+      let resultado;
+      switch (tipo) {
+        case 'liquidacion_injustificada':
+          resultado = calcularLiquidacionInjustificada(datos);
+          break;
+        case 'liquidacion_justificada':
+          resultado = calcularLiquidacionJustificada(datos);
+          break;
+        case 'finiquito':
+          resultado = calcularFiniquito(datos);
+          break;
+        // Mantener compatibilidad con llamadas antiguas
+        case 'liquidacion':
+          resultado = calcularLiquidacionInjustificada(datos);
+          break;
+        default:
+          return res.status(400).json({ message: "Tipo de cálculo inválido" });
+      }
       
       res.json(resultado);
     } catch (error: any) {
