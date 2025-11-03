@@ -7,9 +7,12 @@ import {
   type InsertLegalCase,
   type Settlement,
   type InsertSettlement,
+  type Lawsuit,
+  type InsertLawsuit,
   configurationChangeLogs,
   legalCases,
   settlements,
+  lawsuits,
   users
 } from "@shared/schema";
 import { db } from "./db";
@@ -38,6 +41,13 @@ export interface IStorage {
   getSettlements(mode?: string): Promise<Settlement[]>;
   getSettlementsByLegalCase(legalCaseId: string): Promise<Settlement[]>;
   deleteSettlement(id: string): Promise<void>;
+  
+  // Lawsuits (Demandas)
+  createLawsuit(lawsuit: InsertLawsuit): Promise<Lawsuit>;
+  getLawsuit(id: string): Promise<Lawsuit | undefined>;
+  getLawsuits(): Promise<Lawsuit[]>;
+  updateLawsuit(id: string, updates: Partial<InsertLawsuit>): Promise<Lawsuit>;
+  deleteLawsuit(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -187,6 +197,45 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(settlements)
       .where(eq(settlements.id, id));
+  }
+
+  // Lawsuits (Demandas)
+  async createLawsuit(lawsuit: InsertLawsuit): Promise<Lawsuit> {
+    const [newLawsuit] = await db
+      .insert(lawsuits)
+      .values(lawsuit)
+      .returning();
+    return newLawsuit;
+  }
+
+  async getLawsuit(id: string): Promise<Lawsuit | undefined> {
+    const [lawsuit] = await db
+      .select()
+      .from(lawsuits)
+      .where(eq(lawsuits.id, id));
+    return lawsuit || undefined;
+  }
+
+  async getLawsuits(): Promise<Lawsuit[]> {
+    return await db
+      .select()
+      .from(lawsuits)
+      .orderBy(desc(lawsuits.createdAt));
+  }
+
+  async updateLawsuit(id: string, updates: Partial<InsertLawsuit>): Promise<Lawsuit> {
+    const [updated] = await db
+      .update(lawsuits)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(lawsuits.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLawsuit(id: string): Promise<void> {
+    await db
+      .delete(lawsuits)
+      .where(eq(lawsuits.id, id));
   }
 }
 

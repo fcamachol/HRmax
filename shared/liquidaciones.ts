@@ -20,7 +20,7 @@ interface ConceptoLiquidacion {
 interface ResultadoLiquidacion {
   conceptos: ConceptoLiquidacion[];
   total: number;
-  tipo: 'finiquito' | 'liquidacion';
+  tipo: 'finiquito' | 'liquidacion_injustificada' | 'liquidacion_justificada';
   yearsWorked: number;
 }
 
@@ -223,9 +223,10 @@ export function calcularFiniquito(datos: CalculoBase): ResultadoLiquidacion {
 }
 
 /**
- * Calcula LIQUIDACIÓN (despido injustificado)
+ * Calcula LIQUIDACIÓN POR DESPIDO INJUSTIFICADO
+ * Incluye indemnización constitucional, prima de antigüedad y 20 días por año
  */
-export function calcularLiquidacion(datos: CalculoBase): ResultadoLiquidacion {
+export function calcularLiquidacionInjustificada(datos: CalculoBase): ResultadoLiquidacion {
   const { salarioDiario, fechaIngreso, fechaSalida } = datos;
   
   const conceptos: ConceptoLiquidacion[] = [
@@ -244,7 +245,39 @@ export function calcularLiquidacion(datos: CalculoBase): ResultadoLiquidacion {
   return {
     conceptos,
     total,
-    tipo: 'liquidacion',
+    tipo: 'liquidacion_injustificada',
     yearsWorked,
   };
+}
+
+/**
+ * Calcula LIQUIDACIÓN POR DESPIDO JUSTIFICADO
+ * Solo incluye prestaciones proporcionales y prima de antigüedad (si aplica)
+ * NO incluye indemnización ni 20 días por año
+ */
+export function calcularLiquidacionJustificada(datos: CalculoBase): ResultadoLiquidacion {
+  const { salarioDiario, fechaIngreso, fechaSalida } = datos;
+  
+  const conceptos: ConceptoLiquidacion[] = [
+    calcularSaldoDiasTrabajados(salarioDiario, fechaSalida),
+    calcularAguinaldoProporcional(salarioDiario, fechaIngreso, fechaSalida),
+    calcularVacacionesProporcionales(salarioDiario, fechaIngreso, fechaSalida),
+    calcularPrimaVacacional(salarioDiario, fechaIngreso, fechaSalida),
+    calcularPrimaAntiguedad(salarioDiario, fechaIngreso, fechaSalida),
+  ];
+  
+  const total = conceptos.reduce((sum, concepto) => sum + concepto.monto, 0);
+  const yearsWorked = calcularAntiguedad(fechaIngreso, fechaSalida);
+  
+  return {
+    conceptos,
+    total,
+    tipo: 'liquidacion_justificada',
+    yearsWorked,
+  };
+}
+
+// Mantener compatibilidad con código existente
+export function calcularLiquidacion(datos: CalculoBase): ResultadoLiquidacion {
+  return calcularLiquidacionInjustificada(datos);
 }

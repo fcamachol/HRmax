@@ -61,11 +61,11 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
   description: text("description"), // Descripción del cambio
 });
 
-// Módulo Legal - Casos de despidos/renuncias
+// Módulo Legal - Casos de despidos/renuncias (Bajas)
 export const legalCases = pgTable("legal_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id"), // null para simulaciones
-  caseType: text("case_type").notNull(), // 'despido', 'renuncia'
+  caseType: text("case_type").notNull(), // 'despido_injustificado', 'despido_justificado', 'renuncia'
   reason: text("reason").notNull(), // Motivo del despido/renuncia
   status: text("status").notNull().default("pendiente"), // 'pendiente', 'en_proceso', 'documentacion', 'aprobado', 'completado', 'cancelado'
   mode: text("mode").notNull(), // 'simulacion' o 'real'
@@ -80,7 +80,7 @@ export const legalCases = pgTable("legal_cases", {
 export const settlements = pgTable("settlements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   legalCaseId: varchar("legal_case_id"), // null para simulaciones independientes
-  settlementType: text("settlement_type").notNull(), // 'liquidacion', 'finiquito'
+  settlementType: text("settlement_type").notNull(), // 'liquidacion_injustificada', 'liquidacion_justificada', 'finiquito'
   employeeName: text("employee_name"), // Para simulaciones
   salary: decimal("salary", { precision: 10, scale: 2 }).notNull(),
   startDate: date("start_date").notNull(), // Fecha de inicio laboral
@@ -90,6 +90,27 @@ export const settlements = pgTable("settlements", {
   totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
   mode: text("mode").notNull(), // 'simulacion' o 'real'
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+// Demandas laborales
+export const lawsuits = pgTable("lawsuits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id"), // null si no hay empleado vinculado
+  employeeName: text("employee_name").notNull(), // Nombre del empleado o demandante
+  caseNumber: text("case_number"), // Número de expediente
+  demandType: text("demand_type").notNull(), // 'despido_injustificado', 'reinstalacion', 'pago_prestaciones', 'otro'
+  amount: decimal("amount", { precision: 12, scale: 2 }), // Monto demandado
+  status: text("status").notNull().default("conciliacion"), // 'conciliacion', 'demanda_presentada', 'audiencias', 'resolucion', 'cierre'
+  board: text("board"), // Junta de Conciliación y Arbitraje
+  lawyer: text("lawyer"), // Abogado responsable
+  filingDate: date("filing_date"), // Fecha de presentación
+  lastHearingDate: date("last_hearing_date"), // Última audiencia
+  nextHearingDate: date("next_hearing_date"), // Próxima audiencia
+  resolutionDate: date("resolution_date"), // Fecha de resolución
+  outcome: text("outcome"), // 'favorable', 'desfavorable', 'conciliacion', 'desistimiento'
+  notes: text("notes"), // Notas del caso
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
@@ -128,6 +149,12 @@ export const insertSettlementSchema = createInsertSchema(settlements).omit({
   createdAt: true,
 });
 
+export const insertLawsuitSchema = createInsertSchema(lawsuits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Department = typeof departments.$inferSelect;
@@ -144,3 +171,5 @@ export type LegalCase = typeof legalCases.$inferSelect;
 export type InsertLegalCase = z.infer<typeof insertLegalCaseSchema>;
 export type Settlement = typeof settlements.$inferSelect;
 export type InsertSettlement = z.infer<typeof insertSettlementSchema>;
+export type Lawsuit = typeof lawsuits.$inferSelect;
+export type InsertLawsuit = z.infer<typeof insertLawsuitSchema>;
