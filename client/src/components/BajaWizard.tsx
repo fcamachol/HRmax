@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import {
   bajaCategoryLabels,
   type BajaCategory
 } from "@shared/schema";
+import { calcularFiniquito, type FiniquitoResult } from "@shared/finiquitoCalculations";
 
 type BajaType = typeof bajaTypes[BajaCategory][number];
 import { 
@@ -49,11 +50,14 @@ interface BajaFormData {
   startDate: string;
   endDate: string;
   notes: string;
-  // Cálculo
-  salarioDiario?: string;
-  diasAguinaldo?: string;
-  diasVacaciones?: string;
-  primaVacacional?: string;
+  // Datos para cálculo de finiquito
+  salarioDiario: string;
+  empleadoFechaInicio: string; // Fecha de inicio laboral del empleado
+  diasAguinaldoPagados?: string; // Días de aguinaldo ya pagados este año
+  diasVacacionesTomadas?: string; // Días de vacaciones ya tomados este año
+  // Cálculo automático
+  calculoAprobado?: boolean;
+  calculoData?: any; // Desglose completo del cálculo aprobado
   conceptosAdicionales: Array<{ description: string; amount: string }>;
   conceptosDescuentos: Array<{ description: string; amount: string }>;
   // Documentación
@@ -91,6 +95,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     startDate: new Date().toISOString().split('T')[0],
     endDate: "",
     notes: "",
+    salarioDiario: "",
+    empleadoFechaInicio: "",
     conceptosAdicionales: [],
     conceptosDescuentos: [],
     documentosEntregados: [],
@@ -126,6 +132,10 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
         startDate: existingCase.startDate || new Date().toISOString().split('T')[0],
         endDate: existingCase.endDate || "",
         notes: existingCase.notes || "",
+        salarioDiario: existingCase.salarioDiario?.toString() || "",
+        empleadoFechaInicio: existingCase.empleadoFechaInicio || "",
+        calculoAprobado: existingCase.calculoAprobado === "true",
+        calculoData: existingCase.calculoData || null,
         conceptosAdicionales: [],
         conceptosDescuentos: [],
         documentosEntregados: [],
@@ -150,6 +160,10 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
           startDate: data.startDate,
           endDate: data.endDate,
           notes: data.notes,
+          salarioDiario: data.salarioDiario ? parseFloat(data.salarioDiario) : null,
+          empleadoFechaInicio: data.empleadoFechaInicio || null,
+          calculoAprobado: data.calculoAprobado ? "true" : "false",
+          calculoData: data.calculoData || null,
         });
         return response;
       } else {
@@ -166,6 +180,10 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
           notes: data.notes,
           status: "calculo",
           mode: "real",
+          salarioDiario: data.salarioDiario ? parseFloat(data.salarioDiario) : null,
+          empleadoFechaInicio: data.empleadoFechaInicio || null,
+          calculoAprobado: data.calculoAprobado ? "true" : "false",
+          calculoData: data.calculoData || null,
         });
         return response;
       }
@@ -219,6 +237,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
       startDate: new Date().toISOString().split('T')[0],
       endDate: "",
       notes: "",
+      salarioDiario: "",
+      empleadoFechaInicio: "",
       conceptosAdicionales: [],
       conceptosDescuentos: [],
       documentosEntregados: [],
@@ -243,6 +263,44 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
 
   const updateFormData = (field: keyof BajaFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // Calcular finiquito automáticamente cuando cambien los datos necesarios
+  const finiquitoCalculado: FiniquitoResult | null = useMemo(() => {
+    // Validar que tengamos todos los datos necesarios
+    if (!formData.salarioDiario || !formData.empleadoFechaInicio || !formData.endDate) {
+      return null;
+    }
+
+    const salario = parseFloat(formData.salarioDiario);
+    if (isNaN(salario) || salario <= 0) {
+      return null;
+    }
+
+    try {
+      return calcularFiniquito({
+        salarioDiario: salario,
+        fechaInicio: formData.empleadoFechaInicio,
+        fechaTerminacion: formData.endDate,
+        bajaType: formData.bajaType,
+        diasAguinaldoPagados: formData.diasAguinaldoPagados ? parseFloat(formData.diasAguinaldoPagados) : 0,
+        diasVacacionesTomadas: formData.diasVacacionesTomadas ? parseFloat(formData.diasVacacionesTomadas) : 0,
+      });
+    } catch (error) {
+      console.error("Error al calcular finiquito:", error);
+      return null;
+    }
+  }, [formData.salarioDiario, formData.empleadoFechaInicio, formData.endDate, formData.bajaType, formData.diasAguinaldoPagados, formData.diasVacacionesTomadas]);
+
+  const handleAprobarCalculo = () => {
+    if (finiquitoCalculado) {
+      updateFormData("calculoAprobado", true);
+      updateFormData("calculoData", finiquitoCalculado);
+      toast({
+        title: "Cálculo aprobado",
+        description: "El cálculo del finiquito ha sido aprobado y guardado.",
+      });
+    }
   };
 
   const addConceptoAdicional = () => {
@@ -430,14 +488,15 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="startDate">Fecha de Inicio (Relación Laboral)</Label>
+                      <Label htmlFor="empleadoFechaInicio">Fecha de Inicio Laboral *</Label>
                       <Input
-                        id="startDate"
+                        id="empleadoFechaInicio"
                         type="date"
-                        value={formData.startDate}
-                        onChange={(e) => updateFormData("startDate", e.target.value)}
-                        data-testid="input-start-date"
+                        value={formData.empleadoFechaInicio}
+                        onChange={(e) => updateFormData("empleadoFechaInicio", e.target.value)}
+                        data-testid="input-empleado-fecha-inicio"
                       />
+                      <p className="text-xs text-muted-foreground">Primer día de trabajo del empleado</p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="endDate">Fecha de Terminación *</Label>
@@ -448,6 +507,33 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                         onChange={(e) => updateFormData("endDate", e.target.value)}
                         data-testid="input-end-date"
                       />
+                      <p className="text-xs text-muted-foreground">Último día de trabajo</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="salarioDiario">Salario Diario Integrado *</Label>
+                      <Input
+                        id="salarioDiario"
+                        type="number"
+                        step="0.01"
+                        value={formData.salarioDiario}
+                        onChange={(e) => updateFormData("salarioDiario", e.target.value)}
+                        placeholder="0.00"
+                        data-testid="input-salario-diario"
+                      />
+                      <p className="text-xs text-muted-foreground">Incluye prestaciones y aguinaldo</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="startDate">Fecha de Inicio del Caso</Label>
+                      <Input
+                        id="startDate"
+                        type="date"
+                        value={formData.startDate}
+                        onChange={(e) => updateFormData("startDate", e.target.value)}
+                        data-testid="input-start-date"
+                      />
+                      <p className="text-xs text-muted-foreground">Fecha de inicio del proceso de baja</p>
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -468,168 +554,152 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
 
           {currentStep === 2 && (
             <div className="space-y-6">
+              {/* Ajustes opcionales */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Datos para Cálculo</CardTitle>
-                  <CardDescription>Información necesaria para calcular finiquito o liquidación</CardDescription>
+                  <CardTitle>Ajustes (Opcional)</CardTitle>
+                  <CardDescription>Días ya pagados este año</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="salarioDiario">Salario Diario</Label>
+                      <Label htmlFor="diasAguinaldoPagados">Días de Aguinaldo Ya Pagados</Label>
                       <Input
-                        id="salarioDiario"
+                        id="diasAguinaldoPagados"
                         type="number"
                         step="0.01"
-                        value={formData.salarioDiario || ""}
-                        onChange={(e) => updateFormData("salarioDiario", e.target.value)}
-                        placeholder="0.00"
-                        data-testid="input-salario-diario"
+                        value={formData.diasAguinaldoPagados || ""}
+                        onChange={(e) => updateFormData("diasAguinaldoPagados", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-dias-aguinaldo-pagados"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="diasAguinaldo">Días de Aguinaldo</Label>
+                      <Label htmlFor="diasVacacionesTomadas">Días de Vacaciones Ya Tomados</Label>
                       <Input
-                        id="diasAguinaldo"
-                        type="number"
-                        value={formData.diasAguinaldo || ""}
-                        onChange={(e) => updateFormData("diasAguinaldo", e.target.value)}
-                        placeholder="15"
-                        data-testid="input-dias-aguinaldo"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="diasVacaciones">Días de Vacaciones</Label>
-                      <Input
-                        id="diasVacaciones"
-                        type="number"
-                        value={formData.diasVacaciones || ""}
-                        onChange={(e) => updateFormData("diasVacaciones", e.target.value)}
-                        placeholder="6"
-                        data-testid="input-dias-vacaciones"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="primaVacacional">Prima Vacacional (%)</Label>
-                      <Input
-                        id="primaVacacional"
+                        id="diasVacacionesTomadas"
                         type="number"
                         step="0.01"
-                        value={formData.primaVacacional || ""}
-                        onChange={(e) => updateFormData("primaVacacional", e.target.value)}
-                        placeholder="25"
-                        data-testid="input-prima-vacacional"
+                        value={formData.diasVacacionesTomadas || ""}
+                        onChange={(e) => updateFormData("diasVacacionesTomadas", e.target.value)}
+                        placeholder="0"
+                        data-testid="input-dias-vacaciones-tomadas"
                       />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Conceptos Adicionales</CardTitle>
-                  <CardDescription>Bonos, incentivos u otros conceptos a favor del empleado</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {formData.conceptosAdicionales.map((concepto, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Input
-                        placeholder="Descripción"
-                        value={concepto.description}
-                        onChange={(e) => {
-                          const newConceptos = [...formData.conceptosAdicionales];
-                          newConceptos[index].description = e.target.value;
-                          updateFormData("conceptosAdicionales", newConceptos);
-                        }}
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="Monto"
-                        value={concepto.amount}
-                        onChange={(e) => {
-                          const newConceptos = [...formData.conceptosAdicionales];
-                          newConceptos[index].amount = e.target.value;
-                          updateFormData("conceptosAdicionales", newConceptos);
-                        }}
-                        className="w-32"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeConceptoAdicional(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addConceptoAdicional}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar Concepto Adicional
-                  </Button>
-                </CardContent>
-              </Card>
+              {/* Cálculo automático */}
+              {finiquitoCalculado ? (
+                <>
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>Cálculo de {finiquitoCalculado.informacionLaboral.añosTrabajados >= 1 && (formData.bajaType === 'despido_injustificado' || formData.bajaType === 'renuncia_con_causa') ? 'Liquidación' : 'Finiquito'}</CardTitle>
+                          <CardDescription>Cálculo automático según Ley Federal del Trabajo</CardDescription>
+                        </div>
+                        {formData.calculoAprobado && (
+                          <Badge variant="default">Aprobado</Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Información laboral */}
+                      <div className="bg-muted p-4 rounded-md space-y-2">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-muted-foreground">Salario Diario</p>
+                            <p className="font-medium">${finiquitoCalculado.informacionLaboral.salarioDiario.toFixed(2)}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Años Trabajados</p>
+                            <p className="font-medium">{finiquitoCalculado.informacionLaboral.añosTrabajados.toFixed(2)} años</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Fecha Inicio</p>
+                            <p className="font-medium">{new Date(finiquitoCalculado.informacionLaboral.fechaInicio).toLocaleDateString('es-MX')}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Fecha Terminación</p>
+                            <p className="font-medium">{new Date(finiquitoCalculado.informacionLaboral.fechaTerminacion).toLocaleDateString('es-MX')}</p>
+                          </div>
+                        </div>
+                      </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Descuentos</CardTitle>
-                  <CardDescription>Adeudos, préstamos u otros descuentos</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {formData.conceptosDescuentos.map((concepto, index) => (
-                    <div key={index} className="flex gap-2">
-                      <Input
-                        placeholder="Descripción"
-                        value={concepto.description}
-                        onChange={(e) => {
-                          const newConceptos = [...formData.conceptosDescuentos];
-                          newConceptos[index].description = e.target.value;
-                          updateFormData("conceptosDescuentos", newConceptos);
-                        }}
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        placeholder="Monto"
-                        value={concepto.amount}
-                        onChange={(e) => {
-                          const newConceptos = [...formData.conceptosDescuentos];
-                          newConceptos[index].amount = e.target.value;
-                          updateFormData("conceptosDescuentos", newConceptos);
-                        }}
-                        className="w-32"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeConceptoDescuento(index)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={addConceptoDescuento}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Agregar Descuento
-                  </Button>
-                </CardContent>
-              </Card>
+                      <Separator />
+
+                      {/* Desglose de conceptos */}
+                      <div className="space-y-3">
+                        <h4 className="font-semibold">Conceptos</h4>
+                        {finiquitoCalculado.conceptos.map((concepto, index) => (
+                          <div key={index} className="bg-background border rounded-md p-3 space-y-1">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <p className="font-medium">{concepto.concepto}</p>
+                                <p className="text-sm text-muted-foreground">{concepto.descripcion}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{concepto.calculo}</p>
+                              </div>
+                              <p className="font-semibold text-right">${concepto.monto.toFixed(2)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <Separator />
+
+                      {/* Totales */}
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Subtotal Percepciones</span>
+                          <span className="font-medium">${finiquitoCalculado.desglose.subtotalPercepciones.toFixed(2)}</span>
+                        </div>
+                        {finiquitoCalculado.desglose.subtotalDeducciones > 0 && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Subtotal Deducciones</span>
+                            <span className="font-medium text-destructive">-${finiquitoCalculado.desglose.subtotalDeducciones.toFixed(2)}</span>
+                          </div>
+                        )}
+                        <Separator />
+                        <div className="flex justify-between items-center">
+                          <span className="text-lg font-semibold">Total a Pagar</span>
+                          <span className="text-2xl font-bold text-primary">${finiquitoCalculado.total.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      {/* Botones de acción */}
+                      {!formData.calculoAprobado && (
+                        <div className="flex gap-2 pt-4">
+                          <Button 
+                            onClick={handleAprobarCalculo}
+                            className="flex-1"
+                            data-testid="button-aprobar-calculo"
+                          >
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                            Aprobar Cálculo
+                          </Button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              ) : (
+                <Card>
+                  <CardContent className="p-8 text-center">
+                    <Calculator className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <p className="text-muted-foreground">
+                      Complete los datos en el Paso 1 para calcular automáticamente el finiquito
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Se requiere: Salario Diario, Fecha Inicio Laboral y Fecha de Terminación
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           )}
+
 
           {currentStep === 3 && (
             <div className="space-y-6">
