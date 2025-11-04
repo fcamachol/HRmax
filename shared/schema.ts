@@ -131,6 +131,11 @@ export const legalCases = pgTable("legal_cases", {
   startDate: date("start_date").notNull(), // Fecha de inicio del caso
   endDate: date("end_date"), // Fecha de terminación de la relación laboral
   notes: text("notes"), // Notas adicionales
+  // Datos para cálculo de finiquito
+  salarioDiario: decimal("salario_diario", { precision: 10, scale: 2 }), // Salario diario integrado
+  empleadoFechaInicio: date("empleado_fecha_inicio"), // Fecha de inicio laboral del empleado
+  calculoAprobado: text("calculo_aprobado").default("false"), // 'true' o 'false' - indica si el cálculo fue aprobado
+  calculoData: jsonb("calculo_data"), // Desglose completo del cálculo aprobado
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
