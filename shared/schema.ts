@@ -212,6 +212,8 @@ export const insertLegalCaseSchema = createInsertSchema(legalCases).omit({
   updatedAt: true,
 });
 
+export const updateLegalCaseSchema = insertLegalCaseSchema.partial();
+
 export const insertSettlementSchema = createInsertSchema(settlements).omit({
   id: true,
   createdAt: true,

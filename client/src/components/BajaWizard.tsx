@@ -20,6 +20,7 @@ import {
   type BajaCategory
 } from "@shared/schema";
 import { calcularFiniquito, type FiniquitoResult } from "@shared/finiquitoCalculations";
+import { CartaFiniquito } from "@/components/CartaFiniquito";
 
 type BajaType = typeof bajaTypes[BajaCategory][number];
 import { 
@@ -86,6 +87,7 @@ const DOCUMENTOS_CHECKLIST = [
 
 export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const [showCartaModal, setShowCartaModal] = useState(false);
   const [formData, setFormData] = useState<BajaFormData>({
     employeeId: "",
     employeeName: "",
@@ -143,6 +145,10 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
       setCurrentStep(getStepFromStatus(existingCase.status));
     } else if (open && !existingCase) {
       resetWizard();
+    }
+    // Resetear el estado del modal de carta cuando se cierra el wizard
+    if (!open) {
+      setShowCartaModal(false);
     }
   }, [open, existingCase]);
 
@@ -669,7 +675,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                       </div>
 
                       {/* Botones de acción */}
-                      {!formData.calculoAprobado && (
+                      {!formData.calculoAprobado ? (
                         <div className="flex gap-2 pt-4">
                           <Button 
                             onClick={handleAprobarCalculo}
@@ -678,6 +684,18 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                           >
                             <CheckCircle2 className="h-4 w-4 mr-2" />
                             Aprobar Cálculo
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 pt-4">
+                          <Button 
+                            onClick={() => setShowCartaModal(true)}
+                            variant="default"
+                            className="flex-1"
+                            data-testid="button-ver-carta"
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            Ver Carta de {finiquitoCalculado.informacionLaboral.añosTrabajados >= 1 && (formData.bajaType === 'despido_injustificado' || formData.bajaType === 'renuncia_con_causa') ? 'Liquidación' : 'Finiquito'}
                           </Button>
                         </div>
                       )}
@@ -867,6 +885,24 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
           )}
         </div>
       </DialogContent>
+
+      {/* Modal de Carta de Finiquito */}
+      <Dialog open={showCartaModal} onOpenChange={setShowCartaModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Carta de {finiquitoCalculado && finiquitoCalculado.informacionLaboral.añosTrabajados >= 1 && (formData.bajaType === 'despido_injustificado' || formData.bajaType === 'renuncia_con_causa') ? 'Liquidación' : 'Finiquito'}</DialogTitle>
+          </DialogHeader>
+          {finiquitoCalculado && (
+            <CartaFiniquito
+              employeeName={formData.employeeName}
+              employeeId={formData.employeeId}
+              fechaTerminacion={formData.endDate}
+              calculo={finiquitoCalculado}
+              esLiquidacion={finiquitoCalculado.informacionLaboral.añosTrabajados >= 1 && (formData.bajaType === 'despido_injustificado' || formData.bajaType === 'renuncia_con_causa')}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

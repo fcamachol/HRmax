@@ -137,7 +137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/legal/cases/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const updated = await storage.updateLegalCase(id, req.body);
+      const { updateLegalCaseSchema } = await import("@shared/schema");
+      const validatedData = updateLegalCaseSchema.parse(req.body);
+      const updated = await storage.updateLegalCase(id, validatedData);
       res.json(updated);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
