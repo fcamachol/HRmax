@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { LegalCase } from "@shared/schema";
 import { 
   bajaCategories, 
   bajaTypes, 
@@ -36,6 +37,7 @@ import {
 interface BajaWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  existingCase?: LegalCase | null;
 }
 
 interface BajaFormData {
@@ -78,7 +80,7 @@ const DOCUMENTOS_CHECKLIST = [
   "Formato de baja interna",
 ];
 
-export function BajaWizard({ open, onOpenChange }: BajaWizardProps) {
+export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<BajaFormData>({
     employeeId: "",
@@ -96,31 +98,90 @@ export function BajaWizard({ open, onOpenChange }: BajaWizardProps) {
 
   const { toast } = useToast();
 
-  const createCaseMutation = useMutation({
-    mutationFn: async (data: BajaFormData) => {
-      const response = await apiRequest("POST", "/api/legal/cases", {
-        employeeId: data.employeeId,
-        employeeName: data.employeeName,
-        bajaCategory: data.bajaCategory,
-        bajaType: data.bajaType,
-        caseType: getLegacyCaseType(data.bajaType),
-        reason: data.reason,
-        startDate: data.startDate,
-        endDate: data.endDate,
-        notes: data.notes,
-        status: "calculo",
-        mode: "real",
+  const isEditMode = !!existingCase;
+
+  // Mapear estado de la baja a paso del wizard
+  const getStepFromStatus = (status: string): number => {
+    const statusToStep: Record<string, number> = {
+      "calculo": 2,
+      "documentacion": 3,
+      "firma": 4,
+      "tramites": 4,
+      "entrega": 4,
+      "completado": 4,
+      "demanda": 4,
+    };
+    return statusToStep[status] || 1;
+  };
+
+  // Cargar datos del caso existente cuando se abre en modo edición
+  useEffect(() => {
+    if (open && existingCase) {
+      setFormData({
+        employeeId: existingCase.employeeId || "",
+        employeeName: existingCase.employeeName,
+        bajaCategory: existingCase.bajaCategory as BajaCategory,
+        bajaType: existingCase.bajaType as BajaType,
+        reason: existingCase.reason || "",
+        startDate: existingCase.startDate || new Date().toISOString().split('T')[0],
+        endDate: existingCase.endDate || "",
+        notes: existingCase.notes || "",
+        conceptosAdicionales: [],
+        conceptosDescuentos: [],
+        documentosEntregados: [],
       });
-      return response;
+      setCurrentStep(getStepFromStatus(existingCase.status));
+    } else if (open && !existingCase) {
+      resetWizard();
+    }
+  }, [open, existingCase]);
+
+  const saveCaseMutation = useMutation({
+    mutationFn: async (data: BajaFormData) => {
+      if (isEditMode && existingCase) {
+        // Modo edición: PATCH
+        const response = await apiRequest("PATCH", `/api/legal/cases/${existingCase.id}`, {
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          bajaCategory: data.bajaCategory,
+          bajaType: data.bajaType,
+          caseType: getLegacyCaseType(data.bajaType),
+          reason: data.reason,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          notes: data.notes,
+        });
+        return response;
+      } else {
+        // Modo creación: POST
+        const response = await apiRequest("POST", "/api/legal/cases", {
+          employeeId: data.employeeId,
+          employeeName: data.employeeName,
+          bajaCategory: data.bajaCategory,
+          bajaType: data.bajaType,
+          caseType: getLegacyCaseType(data.bajaType),
+          reason: data.reason,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          notes: data.notes,
+          status: "calculo",
+          mode: "real",
+        });
+        return response;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
       toast({
-        title: "Proceso de baja iniciado",
-        description: "El proceso se ha registrado exitosamente en etapa de Cálculo",
+        title: isEditMode ? "Baja actualizada" : "Proceso de baja iniciado",
+        description: isEditMode 
+          ? "Los datos del proceso se han actualizado exitosamente" 
+          : "El proceso se ha registrado exitosamente en etapa de Cálculo",
       });
       onOpenChange(false);
-      resetWizard();
+      if (!isEditMode) {
+        resetWizard();
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -177,7 +238,7 @@ export function BajaWizard({ open, onOpenChange }: BajaWizardProps) {
   };
 
   const handleFinish = () => {
-    createCaseMutation.mutate(formData);
+    saveCaseMutation.mutate(formData);
   };
 
   const updateFormData = (field: keyof BajaFormData, value: any) => {
@@ -725,10 +786,13 @@ export function BajaWizard({ open, onOpenChange }: BajaWizardProps) {
           ) : (
             <Button
               onClick={handleFinish}
-              disabled={!isStepValid() || createCaseMutation.isPending}
+              disabled={!isStepValid() || saveCaseMutation.isPending}
               data-testid="button-finish"
             >
-              {createCaseMutation.isPending ? "Iniciando..." : "Iniciar Proceso de Baja"}
+              {saveCaseMutation.isPending 
+                ? (isEditMode ? "Guardando..." : "Iniciando...") 
+                : (isEditMode ? "Guardar Cambios" : "Iniciar Proceso de Baja")
+              }
             </Button>
           )}
         </div>

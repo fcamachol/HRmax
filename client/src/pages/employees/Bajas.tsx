@@ -3,9 +3,21 @@ import { CasosLegalesKanban } from "@/components/CasosLegalesKanban";
 import { BajaWizard } from "@/components/BajaWizard";
 import { Button } from "@/components/ui/button";
 import { UserMinus } from "lucide-react";
+import type { LegalCase } from "@shared/schema";
 
 export default function Bajas() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [selectedCase, setSelectedCase] = useState<LegalCase | null>(null);
+
+  const handleOpenWizard = (legalCase?: LegalCase) => {
+    setSelectedCase(legalCase || null);
+    setIsWizardOpen(true);
+  };
+
+  const handleCloseWizard = () => {
+    setIsWizardOpen(false);
+    setSelectedCase(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -17,7 +29,7 @@ export default function Bajas() {
           </p>
         </div>
         <Button 
-          onClick={() => setIsWizardOpen(true)}
+          onClick={() => handleOpenWizard()}
           data-testid="button-new-baja-wizard"
         >
           <UserMinus className="h-4 w-4 mr-2" />
@@ -25,8 +37,15 @@ export default function Bajas() {
         </Button>
       </div>
 
-      <CasosLegalesKanban hideNewButton={true} />
-      <BajaWizard open={isWizardOpen} onOpenChange={setIsWizardOpen} />
+      <CasosLegalesKanban 
+        hideNewButton={true} 
+        onCardClick={handleOpenWizard}
+      />
+      <BajaWizard 
+        open={isWizardOpen} 
+        onOpenChange={handleCloseWizard}
+        existingCase={selectedCase}
+      />
     </div>
   );
 }

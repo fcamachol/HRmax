@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, FileText } from "lucide-react";
+import { Plus, Trash2, FileText, AlertTriangle, Calendar } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,6 +38,19 @@ import {
   type BajaCategory 
 } from "@shared/schema";
 import { ChevronDown, ChevronUp, Plus as PlusIcon, X } from "lucide-react";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCorners,
+  useDroppable,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const KANBAN_COLUMNS = [
   { id: "calculo", title: "1. Cálculo", color: "bg-blue-100 dark:bg-blue-900/30", description: "Cálculo de finiquito/liquidación" },
@@ -37,6 +61,134 @@ const KANBAN_COLUMNS = [
   { id: "completado", title: "6. Completado", color: "bg-green-100 dark:bg-green-900/30", description: "Seguimiento post-baja" },
   { id: "demanda", title: "7. Demanda", color: "bg-red-100 dark:bg-red-900/30", description: "Escalado a proceso legal" },
 ];
+
+interface DraggableCardProps {
+  legalCase: LegalCase;
+  onCardClick?: (legalCase: LegalCase) => void;
+  onDeleteCase: (legalCase: LegalCase) => void;
+  getDaysElapsed: (startDate: string | null) => number | null;
+  formatDate: (dateString: string | null) => string;
+}
+
+function DraggableCard({ legalCase, onCardClick, onDeleteCase, getDaysElapsed, formatDate }: DraggableCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: legalCase.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const daysElapsed = getDaysElapsed(legalCase.startDate);
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <Card 
+        className="hover-elevate cursor-pointer"
+        data-testid={`case-card-${legalCase.id}`}
+        onClick={() => onCardClick?.(legalCase)}
+      >
+        <CardHeader className="p-2 space-y-1">
+          <div className="flex justify-between items-start gap-1">
+            <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+              <Badge 
+                variant={
+                  legalCase.bajaCategory === 'involuntaria' ? 'destructive' : 
+                  legalCase.bajaCategory === 'especial' ? 'secondary' : 
+                  'default'
+                } 
+                className="text-xs w-fit"
+              >
+                {bajaCategoryLabels[legalCase.bajaCategory as BajaCategory]}
+              </Badge>
+              <span className="text-xs text-muted-foreground line-clamp-1">
+                {bajaTypeLabels[legalCase.bajaType]}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 flex-shrink-0"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteCase(legalCase);
+              }}
+              data-testid={`button-delete-${legalCase.id}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+          <CardTitle className="text-xs line-clamp-1">{legalCase.employeeName || legalCase.reason}</CardTitle>
+          <CardDescription className="text-xs line-clamp-1 flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {formatDate(legalCase.endDate)}
+          </CardDescription>
+          {daysElapsed !== null && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Badge variant="outline" className="text-xs">
+                {daysElapsed} {daysElapsed === 1 ? 'día' : 'días'} transcurridos
+              </Badge>
+            </div>
+          )}
+        </CardHeader>
+      </Card>
+    </div>
+  );
+}
+
+interface DroppableColumnProps {
+  column: typeof KANBAN_COLUMNS[number];
+  cases: LegalCase[];
+  onCardClick?: (legalCase: LegalCase) => void;
+  onDeleteCase: (legalCase: LegalCase) => void;
+  getDaysElapsed: (startDate: string | null) => number | null;
+  formatDate: (dateString: string | null) => string;
+}
+
+function DroppableColumn({ column, cases, onCardClick, onDeleteCase, getDaysElapsed, formatDate }: DroppableColumnProps) {
+  const { setNodeRef } = useDroppable({
+    id: column.id,
+  });
+
+  return (
+    <div key={column.id} className="flex flex-col gap-2">
+      <div className={`p-2 rounded-md ${column.color} min-h-[88px] flex flex-col justify-between`}>
+        <div>
+          <h3 className="font-semibold text-xs">{column.title}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{column.description}</p>
+        </div>
+        <Badge variant="outline" className="mt-1 text-xs w-fit">
+          {cases.length}
+        </Badge>
+      </div>
+
+      <div ref={setNodeRef} className="flex flex-col gap-2 min-h-[200px]">
+        <SortableContext items={cases.map(c => c.id)} strategy={verticalListSortingStrategy}>
+          {cases.map((legalCase) => (
+            <DraggableCard
+              key={legalCase.id}
+              legalCase={legalCase}
+              onCardClick={onCardClick}
+              onDeleteCase={onDeleteCase}
+              getDaysElapsed={getDaysElapsed}
+              formatDate={formatDate}
+            />
+          ))}
+        </SortableContext>
+
+        {cases.length === 0 && (
+          <Card className="border-dashed">
+            <CardContent className="p-2 text-center text-xs text-muted-foreground">
+              Vacío
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Mapeo de bajaType a caseType legacy para compatibilidad hacia atrás
 const bajaTypeToLegacyCaseType = (bajaType: string): string => {
@@ -57,9 +209,10 @@ const bajaTypeToLegacyCaseType = (bajaType: string): string => {
 
 interface CasosLegalesKanbanProps {
   hideNewButton?: boolean;
+  onCardClick?: (legalCase: LegalCase) => void;
 }
 
-export function CasosLegalesKanban({ hideNewButton = false }: CasosLegalesKanbanProps = {}) {
+export function CasosLegalesKanban({ hideNewButton = false, onCardClick }: CasosLegalesKanbanProps = {}) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [expandedCalculoCard, setExpandedCalculoCard] = useState<string | null>(null);
   const [newConcept, setNewConcept] = useState<{[key: string]: { conceptType: string; description: string; amount: string }}>({});
@@ -74,7 +227,17 @@ export function CasosLegalesKanban({ hideNewButton = false }: CasosLegalesKanban
     endDate: "",
     notes: "",
   });
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [caseToDelete, setCaseToDelete] = useState<LegalCase | null>(null);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   const { data: cases = [], isLoading } = useQuery<LegalCase[]>({
     queryKey: ["/api/legal/cases", "real"],
@@ -209,8 +372,54 @@ export function CasosLegalesKanban({ hideNewButton = false }: CasosLegalesKanban
         title: "Baja eliminada",
         description: "El registro de baja ha sido eliminado exitosamente",
       });
+      setCaseToDelete(null);
     },
   });
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const activeCase = cases.find(c => c.id === active.id);
+    const overId = over.id as string;
+
+    // Verificar si se soltó sobre una columna
+    const targetColumn = KANBAN_COLUMNS.find(col => col.id === overId);
+    
+    if (activeCase && targetColumn && activeCase.status !== targetColumn.id) {
+      updateCaseStatusMutation.mutate({
+        id: activeCase.id,
+        status: targetColumn.id,
+        legalCase: activeCase,
+        previousStatus: activeCase.status,
+      });
+    }
+  };
+
+  const getDaysElapsed = (startDate: string | null): number | null => {
+    if (!startDate) return null;
+    const start = new Date(startDate);
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const handleDeleteCase = (legalCase: LegalCase) => {
+    setCaseToDelete(legalCase);
+  };
+
+  const confirmDelete = () => {
+    if (caseToDelete) {
+      deleteCaseMutation.mutate(caseToDelete.id);
+    }
+  };
 
   const handleCreateCase = () => {
     if (!newCase.employeeName || !newCase.reason || !newCase.endDate) {
@@ -399,111 +608,61 @@ export function CasosLegalesKanban({ hideNewButton = false }: CasosLegalesKanban
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-start">
-        {KANBAN_COLUMNS.map((column) => (
-          <div key={column.id} className="flex flex-col gap-2">
-            <div className={`p-2 rounded-md ${column.color} min-h-[88px] flex flex-col justify-between`}>
-              <div>
-                <h3 className="font-semibold text-xs">{column.title}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{column.description}</p>
-              </div>
-              <Badge variant="outline" className="mt-1 text-xs w-fit">
-                {getCasesByStatus(column.id).length}
-              </Badge>
-            </div>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-start">
+          {KANBAN_COLUMNS.map((column) => (
+            <DroppableColumn
+              key={column.id}
+              column={column}
+              cases={getCasesByStatus(column.id)}
+              onCardClick={onCardClick}
+              onDeleteCase={handleDeleteCase}
+              getDaysElapsed={getDaysElapsed}
+              formatDate={formatDate}
+            />
+          ))}
+        </div>
+      </DndContext>
 
-            <div className="flex flex-col gap-2 min-h-[200px]">
-              {getCasesByStatus(column.id).map((legalCase) => (
-                <Card 
-                  key={legalCase.id} 
-                  className="hover-elevate cursor-pointer"
-                  data-testid={`case-card-${legalCase.id}`}
-                >
-                  <CardHeader className="p-2 space-y-1 min-h-[72px]">
-                    <div className="flex justify-between items-start gap-1">
-                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                        <Badge 
-                          variant={
-                            legalCase.bajaCategory === 'involuntaria' ? 'destructive' : 
-                            legalCase.bajaCategory === 'especial' ? 'secondary' : 
-                            'default'
-                          } 
-                          className="text-xs w-fit"
-                        >
-                          {bajaCategoryLabels[legalCase.bajaCategory as BajaCategory]}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground line-clamp-1">
-                          {bajaTypeLabels[legalCase.bajaType]}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5 flex-shrink-0"
-                        onClick={() => deleteCaseMutation.mutate(legalCase.id)}
-                        data-testid={`button-delete-${legalCase.id}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                    <CardTitle className="text-xs line-clamp-1">{legalCase.employeeName || legalCase.reason}</CardTitle>
-                    <CardDescription className="text-xs line-clamp-1">
-                      {formatDate(legalCase.endDate)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-2 pt-0 space-y-2">
-                    <Select
-                      value={legalCase.status}
-                      onValueChange={(value) => 
-                        updateCaseStatusMutation.mutate({ 
-                          id: legalCase.id, 
-                          status: value, 
-                          legalCase: legalCase,
-                          previousStatus: legalCase.status
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-7 text-xs" data-testid={`select-status-${legalCase.id}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {KANBAN_COLUMNS.map((col) => (
-                          <SelectItem key={col.id} value={col.id}>
-                            {col.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    
-                    {legalCase.status === "calculo" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full h-7 text-xs gap-1"
-                        onClick={() => {
-                          window.location.href = `/employees/simulador?legalCaseId=${legalCase.id}&employeeName=${encodeURIComponent(legalCase.employeeName)}`;
-                        }}
-                        data-testid={`button-add-concepts-${legalCase.id}`}
-                      >
-                        <PlusIcon className="h-3 w-3" />
-                        Agregar Conceptos
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-
-              {getCasesByStatus(column.id).length === 0 && (
-                <Card className="border-dashed">
-                  <CardContent className="p-2 text-center text-xs text-muted-foreground">
-                    Vacío
-                  </CardContent>
-                </Card>
+      {/* Modal de confirmación de eliminación */}
+      <AlertDialog open={!!caseToDelete} onOpenChange={(open) => !open && setCaseToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              ¿Eliminar proceso de baja?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Esta acción <span className="font-semibold text-destructive">no se puede deshacer</span>.
+                Se eliminará permanentemente el proceso de baja de:
+              </p>
+              {caseToDelete && (
+                <div className="bg-muted p-3 rounded-md space-y-1">
+                  <p className="font-medium">{caseToDelete.employeeName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {bajaTypeLabels[caseToDelete.bajaType]} - {formatDate(caseToDelete.endDate)}
+                  </p>
+                </div>
               )}
-            </div>
-          </div>
-        ))}
-      </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDelete}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              Eliminar Definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
