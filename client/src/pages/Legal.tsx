@@ -1,16 +1,16 @@
-import { CasosLegalesKanban } from "@/components/CasosLegalesKanban";
+import { KanbanDemandas } from "@/components/KanbanDemandas";
 
 export default function Legal() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Bajas de Personal</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Demandas Laborales</h1>
         <p className="text-muted-foreground mt-2">
-          Gestión del proceso de bajas y terminaciones laborales
+          Gestión de procesos judiciales y demandas laborales
         </p>
       </div>
 
-      <CasosLegalesKanban />
+      <KanbanDemandas />
     </div>
   );
 }
