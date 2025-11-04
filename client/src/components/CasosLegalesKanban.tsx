@@ -68,14 +68,14 @@ export function CasosLegalesKanban() {
         notes: "",
       });
       toast({
-        title: "Caso creado",
-        description: "El caso legal ha sido creado exitosamente",
+        title: "Baja registrada",
+        description: "La baja del empleado ha sido registrada exitosamente",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Error al crear caso",
+        description: error.message || "Error al registrar baja",
         variant: "destructive",
       });
     },
@@ -88,7 +88,7 @@ export function CasosLegalesKanban() {
       legalCase?: LegalCase;
       previousStatus?: string;
     }) => {
-      // Primero actualizar el status del caso
+      // Primero actualizar el status de la baja
       const result = await apiRequest("PATCH", `/api/legal/cases/${id}`, { status });
       
       let lawsuitCreated = false;
@@ -124,9 +124,9 @@ export function CasosLegalesKanban() {
             
             // Lanzar error apropiado después del intento de rollback
             if (rollbackSucceeded) {
-              throw new Error("No se pudo crear la demanda. El caso ha sido revertido a su estado anterior.");
+              throw new Error("No se pudo crear la demanda. La baja ha sido revertida a su estado anterior.");
             } else {
-              throw new Error("Error crítico: no se pudo crear la demanda ni revertir el estado del caso.");
+              throw new Error("Error crítico: no se pudo crear la demanda ni revertir el estado de la baja.");
             }
           }
         }
@@ -138,12 +138,12 @@ export function CasosLegalesKanban() {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
       queryClient.invalidateQueries({ queryKey: ["/api/legal/lawsuits"] });
       
-      let description = "El estado del caso ha sido actualizado";
+      let description = "El estado de la baja ha sido actualizado";
       if (variables.status === "demanda") {
         if (data.lawsuitCreated) {
-          description = "La baja se ha convertido en demanda. Se ha creado automáticamente en el módulo de Demandas.";
+          description = "La baja se ha convertido en demanda. Se ha creado automáticamente en el módulo Legal > Demandas.";
         } else if (data.lawsuitExisted) {
-          description = "La baja se ha movido a demanda. Ya existe una demanda vinculada en el módulo de Demandas.";
+          description = "La baja se ha movido a demanda. Ya existe una demanda vinculada en el módulo Legal > Demandas.";
         }
       }
       
@@ -156,7 +156,7 @@ export function CasosLegalesKanban() {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
       toast({
         title: "Error al actualizar estado",
-        description: error.message || "No se pudo actualizar el estado del caso",
+        description: error.message || "No se pudo actualizar el estado de la baja",
         variant: "destructive",
       });
     },
@@ -169,8 +169,8 @@ export function CasosLegalesKanban() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
       toast({
-        title: "Caso eliminado",
-        description: "El caso ha sido eliminado exitosamente",
+        title: "Baja eliminada",
+        description: "El registro de baja ha sido eliminado exitosamente",
       });
     },
   });
@@ -179,7 +179,7 @@ export function CasosLegalesKanban() {
     if (!newCase.employeeName || !newCase.reason || !newCase.endDate) {
       toast({
         title: "Campos incompletos",
-        description: "Por favor completa todos los campos requeridos",
+        description: "Por favor completa el nombre del empleado, motivo y fecha de terminación",
         variant: "destructive",
       });
       return;
@@ -209,7 +209,7 @@ export function CasosLegalesKanban() {
     return (
       <Card>
         <CardContent className="p-8 text-center text-muted-foreground">
-          Cargando casos legales...
+          Cargando bajas de empleados...
         </CardContent>
       </Card>
     );
@@ -219,23 +219,23 @@ export function CasosLegalesKanban() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Tablero Kanban - Casos Legales</h2>
+          <h2 className="text-2xl font-bold">Gestión de Bajas</h2>
           <p className="text-muted-foreground mt-1">
-            Gestiona el flujo de procesos legales de despidos y renuncias
+            Administra el proceso de baja de empleados desde el inicio hasta la finalización
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button data-testid="button-nuevo-caso">
+            <Button data-testid="button-nueva-baja">
               <Plus className="h-4 w-4 mr-2" />
-              Nuevo Caso Legal
+              Nueva Baja
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Crear Nuevo Caso Legal</DialogTitle>
+              <DialogTitle>Registrar Nueva Baja</DialogTitle>
               <DialogDescription>
-                Registra un nuevo caso de despido o renuncia
+                Inicia el proceso de baja de un empleado (renuncia voluntaria o despido)
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -252,7 +252,7 @@ export function CasosLegalesKanban() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="case-type">Tipo de Caso *</Label>
+                  <Label htmlFor="case-type">Tipo de Baja *</Label>
                   <Select 
                     value={newCase.caseType} 
                     onValueChange={(value) => setNewCase({ ...newCase, caseType: value })}
@@ -312,9 +312,9 @@ export function CasosLegalesKanban() {
                 <Button 
                   onClick={handleCreateCase} 
                   disabled={createCaseMutation.isPending}
-                  data-testid="button-crear-caso"
+                  data-testid="button-crear-baja"
                 >
-                  {createCaseMutation.isPending ? "Creando..." : "Crear Caso"}
+                  {createCaseMutation.isPending ? "Registrando..." : "Registrar Baja"}
                 </Button>
               </div>
             </div>
@@ -328,7 +328,7 @@ export function CasosLegalesKanban() {
             <div className={`p-3 rounded-md ${column.color}`}>
               <h3 className="font-semibold text-sm">{column.title}</h3>
               <Badge variant="outline" className="mt-1">
-                {getCasesByStatus(column.id).length} casos
+                {getCasesByStatus(column.id).length} bajas
               </Badge>
             </div>
 
@@ -395,7 +395,7 @@ export function CasosLegalesKanban() {
               {getCasesByStatus(column.id).length === 0 && (
                 <Card className="border-dashed">
                   <CardContent className="p-4 text-center text-sm text-muted-foreground">
-                    Sin casos
+                    Sin bajas
                   </CardContent>
                 </Card>
               )}
