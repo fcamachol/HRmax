@@ -66,11 +66,65 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
 export const legalCaseStatuses = ["detonante", "calculo", "documentacion", "firma", "tramites", "entrega", "completado", "demanda"] as const;
 export type LegalCaseStatus = typeof legalCaseStatuses[number];
 
+// Categorías de bajas
+export const bajaCategories = ["voluntaria", "involuntaria", "especial"] as const;
+export type BajaCategory = typeof bajaCategories[number];
+
+// Tipos de bajas por categoría
+export const bajaTypes = {
+  voluntaria: [
+    "renuncia_voluntaria",
+    "mutuo_acuerdo", 
+    "jubilacion_pension",
+    "renuncia_con_causa"
+  ],
+  involuntaria: [
+    "despido_justificado",
+    "despido_injustificado",
+    "fin_de_contrato",
+    "cierre_empresa",
+    "inhabilitacion_legal"
+  ],
+  especial: [
+    "fallecimiento",
+    "incapacidad_permanente",
+    "baja_administrativa"
+  ]
+} as const;
+
+// Etiquetas legibles para tipos de bajas
+export const bajaTypeLabels: Record<string, string> = {
+  // Voluntarias
+  renuncia_voluntaria: "Renuncia voluntaria",
+  mutuo_acuerdo: "Mutuo acuerdo",
+  jubilacion_pension: "Jubilación / Pensión",
+  renuncia_con_causa: "Renuncia con causa (por falta del patrón)",
+  // Involuntarias
+  despido_justificado: "Despido justificado",
+  despido_injustificado: "Despido injustificado",
+  fin_de_contrato: "Fin de contrato",
+  cierre_empresa: "Cierre de empresa / Reestructura",
+  inhabilitacion_legal: "Inhabilitación legal",
+  // Especiales
+  fallecimiento: "Fallecimiento",
+  incapacidad_permanente: "Incapacidad permanente",
+  baja_administrativa: "Baja administrativa",
+};
+
+// Etiquetas de categorías
+export const bajaCategoryLabels: Record<BajaCategory, string> = {
+  voluntaria: "Voluntaria",
+  involuntaria: "Involuntaria",
+  especial: "Especial"
+};
+
 export const legalCases = pgTable("legal_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id"), // null para simulaciones
   employeeName: text("employee_name").notNull(), // Nombre del empleado
-  caseType: text("case_type").notNull(), // 'despido_injustificado', 'despido_justificado', 'renuncia'
+  bajaCategory: text("baja_category").notNull().default("voluntaria"), // 'voluntaria', 'involuntaria', 'especial'
+  bajaType: text("baja_type").notNull().default("renuncia_voluntaria"), // Subtipo específico según categoría
+  caseType: text("case_type").notNull(), // DEPRECATED: mantener por compatibilidad
   reason: text("reason").notNull(), // Motivo del despido/renuncia
   status: text("status").notNull().default("detonante"), // 'detonante', 'calculo', 'documentacion', 'firma', 'tramites', 'entrega', 'completado', 'demanda'
   mode: text("mode").notNull(), // 'simulacion' o 'real'

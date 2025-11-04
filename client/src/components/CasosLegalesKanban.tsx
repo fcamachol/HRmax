@@ -19,6 +19,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { LegalCase } from "@shared/schema";
+import { 
+  bajaCategories, 
+  bajaTypes, 
+  bajaTypeLabels, 
+  bajaCategoryLabels,
+  type BajaCategory 
+} from "@shared/schema";
 
 const KANBAN_COLUMNS = [
   { id: "detonante", title: "1. Detonante", color: "bg-yellow-100 dark:bg-yellow-900/30", description: "Inicio del proceso de baja" },
@@ -31,12 +38,31 @@ const KANBAN_COLUMNS = [
   { id: "demanda", title: "8. Demanda", color: "bg-red-100 dark:bg-red-900/30", description: "Escalado a proceso legal" },
 ];
 
+// Mapeo de bajaType a caseType legacy para compatibilidad hacia atrás
+const bajaTypeToLegacyCaseType = (bajaType: string): string => {
+  // Mapear tipos específicos a categorías legacy
+  if (bajaType === 'despido_justificado') return 'despido_justificado';
+  if (bajaType === 'despido_injustificado') return 'despido_injustificado';
+  if (bajaType.includes('renuncia')) return 'renuncia';
+  if (bajaType === 'fin_de_contrato') return 'despido_justificado';
+  if (bajaType === 'cierre_empresa') return 'despido_injustificado';
+  if (bajaType === 'inhabilitacion_legal') return 'despido_justificado';
+  if (bajaType === 'mutuo_acuerdo') return 'renuncia';
+  if (bajaType === 'jubilacion_pension') return 'renuncia';
+  if (bajaType === 'fallecimiento') return 'renuncia';
+  if (bajaType === 'incapacidad_permanente') return 'renuncia';
+  if (bajaType === 'baja_administrativa') return 'renuncia';
+  return 'renuncia'; // Default
+};
+
 export function CasosLegalesKanban() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newCase, setNewCase] = useState({
     employeeId: "",
     employeeName: "",
-    caseType: "renuncia",
+    bajaCategory: "voluntaria" as "voluntaria" | "involuntaria" | "especial",
+    bajaType: "renuncia_voluntaria",
+    caseType: "renuncia", // Mantener por compatibilidad
     reason: "",
     startDate: new Date().toISOString().split('T')[0],
     endDate: "",
@@ -63,7 +89,9 @@ export function CasosLegalesKanban() {
       setNewCase({
         employeeId: "",
         employeeName: "",
-        caseType: "renuncia",
+        bajaCategory: "voluntaria",
+        bajaType: "renuncia_voluntaria",
+        caseType: bajaTypeToLegacyCaseType("renuncia_voluntaria"),
         reason: "",
         startDate: new Date().toISOString().split('T')[0],
         endDate: "",
@@ -254,31 +282,69 @@ export function CasosLegalesKanban() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="case-type">Tipo de Baja *</Label>
+                  <Label htmlFor="baja-category">Categoría de Baja *</Label>
                   <Select 
-                    value={newCase.caseType} 
-                    onValueChange={(value) => setNewCase({ ...newCase, caseType: value })}
+                    value={newCase.bajaCategory} 
+                    onValueChange={(value: BajaCategory) => {
+                      const firstType = bajaTypes[value][0];
+                      const legacyCaseType = bajaTypeToLegacyCaseType(firstType);
+                      setNewCase({ 
+                        ...newCase, 
+                        bajaCategory: value,
+                        bajaType: firstType,
+                        caseType: legacyCaseType
+                      });
+                    }}
                   >
-                    <SelectTrigger id="case-type" data-testid="select-case-type">
+                    <SelectTrigger id="baja-category" data-testid="select-baja-category">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="renuncia">Renuncia Voluntaria</SelectItem>
-                      <SelectItem value="despido">Despido</SelectItem>
+                      {bajaCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {bajaCategoryLabels[category]}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="end-date">Fecha de Terminación *</Label>
-                  <Input
-                    id="end-date"
-                    type="date"
-                    value={newCase.endDate}
-                    onChange={(e) => setNewCase({ ...newCase, endDate: e.target.value })}
-                    data-testid="input-end-date"
-                  />
+                  <Label htmlFor="baja-type">Tipo Específico *</Label>
+                  <Select 
+                    value={newCase.bajaType} 
+                    onValueChange={(value) => {
+                      const legacyCaseType = bajaTypeToLegacyCaseType(value);
+                      setNewCase({ 
+                        ...newCase, 
+                        bajaType: value,
+                        caseType: legacyCaseType
+                      });
+                    }}
+                  >
+                    <SelectTrigger id="baja-type" data-testid="select-baja-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bajaTypes[newCase.bajaCategory].map((type) => (
+                        <SelectItem key={type} value={type}>
+                          {bajaTypeLabels[type]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="end-date">Fecha de Terminación *</Label>
+                <Input
+                  id="end-date"
+                  type="date"
+                  value={newCase.endDate}
+                  onChange={(e) => setNewCase({ ...newCase, endDate: e.target.value })}
+                  data-testid="input-end-date"
+                />
               </div>
 
               <div className="space-y-2">
@@ -344,9 +410,21 @@ export function CasosLegalesKanban() {
                 >
                   <CardHeader className="p-2 space-y-1">
                     <div className="flex justify-between items-start gap-1">
-                      <Badge variant={legalCase.caseType === 'despido' ? 'destructive' : 'default'} className="text-xs">
-                        {legalCase.caseType === 'despido' ? 'Despido' : 'Renuncia'}
-                      </Badge>
+                      <div className="flex flex-col gap-0.5">
+                        <Badge 
+                          variant={
+                            legalCase.bajaCategory === 'involuntaria' ? 'destructive' : 
+                            legalCase.bajaCategory === 'especial' ? 'secondary' : 
+                            'default'
+                          } 
+                          className="text-xs"
+                        >
+                          {bajaCategoryLabels[legalCase.bajaCategory as BajaCategory]}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {bajaTypeLabels[legalCase.bajaType]}
+                        </span>
+                      </div>
                       <Button
                         variant="ghost"
                         size="icon"
