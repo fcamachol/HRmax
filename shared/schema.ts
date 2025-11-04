@@ -62,13 +62,17 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
 });
 
 // Módulo Legal - Casos de despidos/renuncias (Bajas)
+// Estados válidos del proceso de baja
+export const legalCaseStatuses = ["detonante", "calculo", "documentacion", "firma", "tramites", "entrega", "completado", "demanda"] as const;
+export type LegalCaseStatus = typeof legalCaseStatuses[number];
+
 export const legalCases = pgTable("legal_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id"), // null para simulaciones
   employeeName: text("employee_name").notNull(), // Nombre del empleado
   caseType: text("case_type").notNull(), // 'despido_injustificado', 'despido_justificado', 'renuncia'
   reason: text("reason").notNull(), // Motivo del despido/renuncia
-  status: text("status").notNull().default("pendiente"), // 'pendiente', 'en_proceso', 'documentacion', 'aprobado', 'completado', 'cancelado', 'demanda'
+  status: text("status").notNull().default("detonante"), // 'detonante', 'calculo', 'documentacion', 'firma', 'tramites', 'entrega', 'completado', 'demanda'
   mode: text("mode").notNull(), // 'simulacion' o 'real'
   startDate: date("start_date").notNull(), // Fecha de inicio del caso
   endDate: date("end_date"), // Fecha de terminación de la relación laboral

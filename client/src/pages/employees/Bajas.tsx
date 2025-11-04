@@ -9,7 +9,7 @@ export default function Bajas() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Bajas</h1>
         <p className="text-muted-foreground mt-2">
-          Gestión de bajas de empleados: renuncias, despidos, finiquitos y liquidaciones
+          Proceso completo de baja de empleados: desde el detonante hasta el seguimiento post-baja, cumpliendo con la normativa mexicana (IMSS, INFONAVIT, SAT)
         </p>
       </div>
 

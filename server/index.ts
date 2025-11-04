@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { migrateLegalCaseStatuses } from "./migrations/migrate-legal-case-statuses";
 
 const app = express();
 
@@ -47,6 +48,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Ejecutar migraciones automáticas
+  await migrateLegalCaseStatuses();
+  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

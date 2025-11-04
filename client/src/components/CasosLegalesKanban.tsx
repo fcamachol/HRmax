@@ -21,12 +21,14 @@ import { useToast } from "@/hooks/use-toast";
 import type { LegalCase } from "@shared/schema";
 
 const KANBAN_COLUMNS = [
-  { id: "pendiente", title: "Pendiente", color: "bg-yellow-100 dark:bg-yellow-900/30" },
-  { id: "en_proceso", title: "En Proceso", color: "bg-blue-100 dark:bg-blue-900/30" },
-  { id: "documentacion", title: "Documentación", color: "bg-purple-100 dark:bg-purple-900/30" },
-  { id: "aprobado", title: "Aprobado", color: "bg-green-100 dark:bg-green-900/30" },
-  { id: "completado", title: "Completado", color: "bg-gray-100 dark:bg-gray-900/30" },
-  { id: "demanda", title: "Demanda", color: "bg-red-100 dark:bg-red-900/30" },
+  { id: "detonante", title: "1. Detonante", color: "bg-yellow-100 dark:bg-yellow-900/30", description: "Inicio del proceso de baja" },
+  { id: "calculo", title: "2. Cálculo", color: "bg-blue-100 dark:bg-blue-900/30", description: "Cálculo de finiquito/liquidación" },
+  { id: "documentacion", title: "3. Documentación", color: "bg-purple-100 dark:bg-purple-900/30", description: "Revisión documental y expediente" },
+  { id: "firma", title: "4. Firma/Junta", color: "bg-indigo-100 dark:bg-indigo-900/30", description: "Presentación ante autoridad" },
+  { id: "tramites", title: "5. Trámites", color: "bg-cyan-100 dark:bg-cyan-900/30", description: "IMSS, INFONAVIT, CFDI" },
+  { id: "entrega", title: "6. Entrega", color: "bg-teal-100 dark:bg-teal-900/30", description: "Cierre y documentos finales" },
+  { id: "completado", title: "7. Completado", color: "bg-green-100 dark:bg-green-900/30", description: "Seguimiento post-baja" },
+  { id: "demanda", title: "8. Demanda", color: "bg-red-100 dark:bg-red-900/30", description: "Escalado a proceso legal" },
 ];
 
 export function CasosLegalesKanban() {
@@ -115,7 +117,7 @@ export function CasosLegalesKanban() {
             let rollbackSucceeded = false;
             try {
               await apiRequest("PATCH", `/api/legal/cases/${id}`, { 
-                status: previousStatus || "pendiente" 
+                status: previousStatus || "detonante" 
               });
               rollbackSucceeded = true;
             } catch (rollbackError) {
@@ -188,7 +190,7 @@ export function CasosLegalesKanban() {
     createCaseMutation.mutate({
       ...newCase,
       mode: "real",
-      status: "pendiente",
+      status: "detonante",
     });
   };
 
@@ -322,13 +324,14 @@ export function CasosLegalesKanban() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
         {KANBAN_COLUMNS.map((column) => (
-          <div key={column.id} className="space-y-3">
-            <div className={`p-3 rounded-md ${column.color}`}>
-              <h3 className="font-semibold text-sm">{column.title}</h3>
-              <Badge variant="outline" className="mt-1">
-                {getCasesByStatus(column.id).length} bajas
+          <div key={column.id} className="space-y-2">
+            <div className={`p-2 rounded-md ${column.color}`}>
+              <h3 className="font-semibold text-xs">{column.title}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{column.description}</p>
+              <Badge variant="outline" className="mt-1 text-xs">
+                {getCasesByStatus(column.id).length}
               </Badge>
             </div>
 
@@ -339,27 +342,27 @@ export function CasosLegalesKanban() {
                   className="hover-elevate cursor-pointer"
                   data-testid={`case-card-${legalCase.id}`}
                 >
-                  <CardHeader className="p-4 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <Badge variant={legalCase.caseType === 'despido' ? 'destructive' : 'default'}>
+                  <CardHeader className="p-2 space-y-1">
+                    <div className="flex justify-between items-start gap-1">
+                      <Badge variant={legalCase.caseType === 'despido' ? 'destructive' : 'default'} className="text-xs">
                         {legalCase.caseType === 'despido' ? 'Despido' : 'Renuncia'}
                       </Badge>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-6 w-6"
+                        className="h-5 w-5"
                         onClick={() => deleteCaseMutation.mutate(legalCase.id)}
                         data-testid={`button-delete-${legalCase.id}`}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
-                    <CardTitle className="text-sm line-clamp-2">{legalCase.reason}</CardTitle>
+                    <CardTitle className="text-xs line-clamp-1">{legalCase.employeeName || legalCase.reason}</CardTitle>
                     <CardDescription className="text-xs">
-                      Termina: {formatDate(legalCase.endDate)}
+                      {formatDate(legalCase.endDate)}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-4 pt-0">
+                  <CardContent className="p-2 pt-0">
                     <Select
                       value={legalCase.status}
                       onValueChange={(value) => 
@@ -371,7 +374,7 @@ export function CasosLegalesKanban() {
                         })
                       }
                     >
-                      <SelectTrigger className="h-8 text-xs" data-testid={`select-status-${legalCase.id}`}>
+                      <SelectTrigger className="h-7 text-xs" data-testid={`select-status-${legalCase.id}`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -382,20 +385,14 @@ export function CasosLegalesKanban() {
                         ))}
                       </SelectContent>
                     </Select>
-                    {legalCase.notes && (
-                      <div className="mt-2 p-2 bg-muted rounded text-xs">
-                        <FileText className="h-3 w-3 inline mr-1" />
-                        {legalCase.notes}
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               ))}
 
               {getCasesByStatus(column.id).length === 0 && (
                 <Card className="border-dashed">
-                  <CardContent className="p-4 text-center text-sm text-muted-foreground">
-                    Sin bajas
+                  <CardContent className="p-2 text-center text-xs text-muted-foreground">
+                    Vacío
                   </CardContent>
                 </Card>
               )}

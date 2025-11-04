@@ -1,0 +1,80 @@
+1. Detonante de la baja
+
+Renuncia, despido, fin de contrato, mutuo acuerdo, fallecimiento, etc.
+
+Se abre expediente de baja y se notifica a RH.
+
+2. Cálculo previo de finiquito o liquidación
+
+Se hace antes de la revisión documental, porque define la cantidad que se negociará o firmará.
+Incluye:
+
+Salario pendiente
+
+Vacaciones y prima vacacional proporcionales
+
+Aguinaldo proporcional
+
+Comisiones o bonos pendientes
+
+Descuentos autorizados
+
+(Si aplica) 3 meses de indemnización + 20 días por año + prima de antigüedad
+
+💡 Este cálculo puede ajustarse después según acuerdos en la Junta.
+
+3. Revisión documental
+
+Una vez calculado el monto, se revisa el expediente para preparar la firma:
+
+Contrato individual y anexos
+
+Actas administrativas o antecedentes (si es despido)
+
+Carta de renuncia (si es voluntaria)
+
+Cédula fiscal, IMSS, INFONAVIT
+
+Verificación de adeudos o préstamos
+
+Cotejo de documentos para la Junta o convenio
+
+👉 Aquí se prepara el paquete legal con toda la evidencia que se presentará.
+
+4. Firma o presentación ante la autoridad
+
+Se elabora y firma el documento que formaliza la terminación:
+
+Renuncia voluntaria: firmada por el trabajador ante testigos o RH.
+
+Despido o mutuo acuerdo: se presenta ante el Centro de Conciliación Laboral o Junta (si es caso previo a 2019).
+
+Se entrega el finiquito o liquidación al trabajador (con comprobante de pago).
+
+📎 Este paso da validez jurídica a la baja.
+
+5. Ejecución administrativa de la baja
+
+Una vez firmado o presentado el convenio:
+
+Se procesa la baja en IMSS e INFONAVIT (IDSE o SUA) dentro de los 5 días hábiles.
+
+Se emite el CFDI de nómina por finiquito o liquidación.
+
+Se guarda el acuse de baja IMSS y el recibo timbrado.
+
+6. Entrega y cierre
+
+Entregar carta de baja, constancia de trabajo o carta de recomendación.
+
+Firmar acuse de recibo de pago y documentos.
+
+Cerrar accesos, cuentas, biométricos, correo, etc.
+
+Archivar expediente digital en módulo Legal / Compliance.
+
+7. Seguimiento
+
+Monitorear conciliaciones o demandas laborales.
+
+Actualizar indicadores de rotación, ausentismo y causas de baja.
