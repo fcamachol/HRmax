@@ -9,6 +9,10 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
+import Altas from "@/pages/employees/Altas";
+import Bajas from "@/pages/employees/Bajas";
+import Reingresos from "@/pages/employees/Reingresos";
+import Cambios from "@/pages/employees/Cambios";
 import Payroll from "@/pages/Payroll";
 import Attendance from "@/pages/Attendance";
 import Reports from "@/pages/Reports";
@@ -22,6 +26,10 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/employees" component={Employees} />
+      <Route path="/employees/altas" component={Altas} />
+      <Route path="/employees/bajas" component={Bajas} />
+      <Route path="/employees/reingresos" component={Reingresos} />
+      <Route path="/employees/cambios" component={Cambios} />
       <Route path="/payroll" component={Payroll} />
       <Route path="/attendance" component={Attendance} />
       <Route path="/reports" component={Reports} />

@@ -8,6 +8,12 @@ import {
   Building2,
   Calculator,
   Scale,
+  UserPlus,
+  UserMinus,
+  UserCheck,
+  RefreshCw,
+  ChevronRight,
+  LayoutList,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -19,19 +25,50 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarHeader,
 } from "@/components/ui/sidebar";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
-const menuItems = [
+const employeeSubItems = [
+  {
+    title: "Vista General",
+    url: "/employees",
+    icon: LayoutList,
+  },
+  {
+    title: "Altas",
+    url: "/employees/altas",
+    icon: UserPlus,
+  },
+  {
+    title: "Bajas",
+    url: "/employees/bajas",
+    icon: UserMinus,
+  },
+  {
+    title: "Reingresos",
+    url: "/employees/reingresos",
+    icon: UserCheck,
+  },
+  {
+    title: "Cambios",
+    url: "/employees/cambios",
+    icon: RefreshCw,
+  },
+];
+
+const mainMenuItems = [
   {
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Empleados",
-    url: "/employees",
-    icon: Users,
   },
   {
     title: "Nómina",
@@ -67,6 +104,7 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
+  const isEmployeesActive = location.startsWith("/employees");
 
   return (
     <Sidebar>
@@ -84,7 +122,7 @@ export function AppSidebar() {
           <SidebarGroupLabel>Menú Principal</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {mainMenuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
@@ -98,6 +136,39 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isEmployeesActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isEmployeesActive}
+                      data-testid="link-empleados"
+                    >
+                      <Users className="h-4 w-4" />
+                      <span>Empleados</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {employeeSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase()}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
