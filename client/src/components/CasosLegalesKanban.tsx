@@ -390,45 +390,47 @@ export function CasosLegalesKanban() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 items-start">
         {KANBAN_COLUMNS.map((column) => (
-          <div key={column.id} className="space-y-2">
-            <div className={`p-2 rounded-md ${column.color}`}>
-              <h3 className="font-semibold text-xs">{column.title}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">{column.description}</p>
-              <Badge variant="outline" className="mt-1 text-xs">
+          <div key={column.id} className="flex flex-col gap-2">
+            <div className={`p-2 rounded-md ${column.color} min-h-[88px] flex flex-col justify-between`}>
+              <div>
+                <h3 className="font-semibold text-xs">{column.title}</h3>
+                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{column.description}</p>
+              </div>
+              <Badge variant="outline" className="mt-1 text-xs w-fit">
                 {getCasesByStatus(column.id).length}
               </Badge>
             </div>
 
-            <div className="space-y-2">
+            <div className="flex flex-col gap-2 min-h-[200px]">
               {getCasesByStatus(column.id).map((legalCase) => (
                 <Card 
                   key={legalCase.id} 
                   className="hover-elevate cursor-pointer"
                   data-testid={`case-card-${legalCase.id}`}
                 >
-                  <CardHeader className="p-2 space-y-1">
+                  <CardHeader className="p-2 space-y-1 min-h-[72px]">
                     <div className="flex justify-between items-start gap-1">
-                      <div className="flex flex-col gap-0.5">
+                      <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                         <Badge 
                           variant={
                             legalCase.bajaCategory === 'involuntaria' ? 'destructive' : 
                             legalCase.bajaCategory === 'especial' ? 'secondary' : 
                             'default'
                           } 
-                          className="text-xs"
+                          className="text-xs w-fit"
                         >
                           {bajaCategoryLabels[legalCase.bajaCategory as BajaCategory]}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground line-clamp-1">
                           {bajaTypeLabels[legalCase.bajaType]}
                         </span>
                       </div>
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-5 w-5"
+                        className="h-5 w-5 flex-shrink-0"
                         onClick={() => deleteCaseMutation.mutate(legalCase.id)}
                         data-testid={`button-delete-${legalCase.id}`}
                       >
@@ -436,7 +438,7 @@ export function CasosLegalesKanban() {
                       </Button>
                     </div>
                     <CardTitle className="text-xs line-clamp-1">{legalCase.employeeName || legalCase.reason}</CardTitle>
-                    <CardDescription className="text-xs">
+                    <CardDescription className="text-xs line-clamp-1">
                       {formatDate(legalCase.endDate)}
                     </CardDescription>
                   </CardHeader>
