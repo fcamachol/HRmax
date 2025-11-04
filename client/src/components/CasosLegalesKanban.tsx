@@ -26,12 +26,14 @@ const KANBAN_COLUMNS = [
   { id: "documentacion", title: "Documentación", color: "bg-purple-100 dark:bg-purple-900/30" },
   { id: "aprobado", title: "Aprobado", color: "bg-green-100 dark:bg-green-900/30" },
   { id: "completado", title: "Completado", color: "bg-gray-100 dark:bg-gray-900/30" },
+  { id: "demanda", title: "Demanda", color: "bg-red-100 dark:bg-red-900/30" },
 ];
 
 export function CasosLegalesKanban() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newCase, setNewCase] = useState({
     employeeId: "",
+    employeeName: "",
     caseType: "renuncia",
     reason: "",
     startDate: new Date().toISOString().split('T')[0],
@@ -58,6 +60,7 @@ export function CasosLegalesKanban() {
       setIsDialogOpen(false);
       setNewCase({
         employeeId: "",
+        employeeName: "",
         caseType: "renuncia",
         reason: "",
         startDate: new Date().toISOString().split('T')[0],
@@ -79,14 +82,27 @@ export function CasosLegalesKanban() {
   });
 
   const updateCaseStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+    mutationFn: async ({ id, status, legalCase }: { id: string; status: string; legalCase?: LegalCase }) => {
+      // Si se mueve a "demanda", crear automáticamente una demanda vinculada
+      if (status === "demanda" && legalCase) {
+        await apiRequest("POST", "/api/legal/lawsuits", {
+          title: `Demanda - ${legalCase.reason}`,
+          employeeName: legalCase.employeeName,
+          legalCaseId: legalCase.id,
+          stage: "conciliacion",
+          description: `Demanda generada automáticamente desde baja. Motivo: ${legalCase.reason}. Notas: ${legalCase.notes || 'N/A'}`,
+        });
+      }
       return await apiRequest("PATCH", `/api/legal/cases/${id}`, { status });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/legal/lawsuits"] });
       toast({
         title: "Estado actualizado",
-        description: "El estado del caso ha sido actualizado",
+        description: variables.status === "demanda" 
+          ? "La baja se ha convertido en demanda. Se ha creado automáticamente en el módulo de Demandas."
+          : "El estado del caso ha sido actualizado",
       });
     },
   });
@@ -105,7 +121,7 @@ export function CasosLegalesKanban() {
   });
 
   const handleCreateCase = () => {
-    if (!newCase.reason || !newCase.endDate) {
+    if (!newCase.employeeName || !newCase.reason || !newCase.endDate) {
       toast({
         title: "Campos incompletos",
         description: "Por favor completa todos los campos requeridos",
@@ -168,6 +184,17 @@ export function CasosLegalesKanban() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="employee-name">Nombre del Empleado *</Label>
+                <Input
+                  id="employee-name"
+                  placeholder="Ej: Juan Pérez García"
+                  value={newCase.employeeName}
+                  onChange={(e) => setNewCase({ ...newCase, employeeName: e.target.value })}
+                  data-testid="input-employee-name"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="case-type">Tipo de Caso *</Label>
@@ -281,7 +308,11 @@ export function CasosLegalesKanban() {
                     <Select
                       value={legalCase.status}
                       onValueChange={(value) => 
-                        updateCaseStatusMutation.mutate({ id: legalCase.id, status: value })
+                        updateCaseStatusMutation.mutate({ 
+                          id: legalCase.id, 
+                          status: value, 
+                          legalCase: legalCase 
+                        })
                       }
                     >
                       <SelectTrigger className="h-8 text-xs" data-testid={`select-status-${legalCase.id}`}>

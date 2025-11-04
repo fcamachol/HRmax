@@ -65,9 +65,10 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
 export const legalCases = pgTable("legal_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id"), // null para simulaciones
+  employeeName: text("employee_name").notNull(), // Nombre del empleado
   caseType: text("case_type").notNull(), // 'despido_injustificado', 'despido_justificado', 'renuncia'
   reason: text("reason").notNull(), // Motivo del despido/renuncia
-  status: text("status").notNull().default("pendiente"), // 'pendiente', 'en_proceso', 'documentacion', 'aprobado', 'completado', 'cancelado'
+  status: text("status").notNull().default("pendiente"), // 'pendiente', 'en_proceso', 'documentacion', 'aprobado', 'completado', 'cancelado', 'demanda'
   mode: text("mode").notNull(), // 'simulacion' o 'real'
   startDate: date("start_date").notNull(), // Fecha de inicio del caso
   endDate: date("end_date"), // Fecha de terminación de la relación laboral
