@@ -208,6 +208,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/legal/lawsuits", async (req, res) => {
     try {
       const validatedData = insertLawsuitSchema.parse(req.body);
+      
+      // Si se está vinculando a un caso legal, verificar que no exista ya una demanda para ese caso
+      if (validatedData.legalCaseId) {
+        const duplicate = await storage.getLawsuitByLegalCaseId(validatedData.legalCaseId);
+        
+        if (duplicate) {
+          return res.status(409).json({ 
+            message: "Ya existe una demanda vinculada a este caso legal",
+            existingLawsuitId: duplicate.id 
+          });
+        }
+      }
+      
       const lawsuit = await storage.createLawsuit(validatedData);
       res.json(lawsuit);
     } catch (error: any) {

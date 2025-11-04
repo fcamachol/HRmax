@@ -82,27 +82,82 @@ export function CasosLegalesKanban() {
   });
 
   const updateCaseStatusMutation = useMutation({
-    mutationFn: async ({ id, status, legalCase }: { id: string; status: string; legalCase?: LegalCase }) => {
-      // Si se mueve a "demanda", crear automáticamente una demanda vinculada
+    mutationFn: async ({ id, status, legalCase, previousStatus }: { 
+      id: string; 
+      status: string; 
+      legalCase?: LegalCase;
+      previousStatus?: string;
+    }) => {
+      // Primero actualizar el status del caso
+      const result = await apiRequest("PATCH", `/api/legal/cases/${id}`, { status });
+      
+      let lawsuitCreated = false;
+      let lawsuitExisted = false;
+      
+      // Solo si la actualización fue exitosa Y el nuevo status es "demanda"
       if (status === "demanda" && legalCase) {
-        await apiRequest("POST", "/api/legal/lawsuits", {
-          title: `Demanda - ${legalCase.reason}`,
-          employeeName: legalCase.employeeName,
-          legalCaseId: legalCase.id,
-          stage: "conciliacion",
-          description: `Demanda generada automáticamente desde baja. Motivo: ${legalCase.reason}. Notas: ${legalCase.notes || 'N/A'}`,
-        });
+        try {
+          // El servidor verificará duplicados antes de crear
+          await apiRequest("POST", "/api/legal/lawsuits", {
+            title: `Demanda - ${legalCase.reason}`,
+            employeeName: legalCase.employeeName,
+            legalCaseId: legalCase.id,
+            stage: "conciliacion",
+            description: `Demanda generada automáticamente desde baja. Motivo: ${legalCase.reason}. Notas: ${legalCase.notes || 'N/A'}`,
+          });
+          lawsuitCreated = true;
+        } catch (lawsuitError: any) {
+          if (lawsuitError.status === 409) {
+            // Duplicado - la demanda ya existía
+            lawsuitExisted = true;
+          } else {
+            // Otro error - intentar rollback
+            let rollbackSucceeded = false;
+            try {
+              await apiRequest("PATCH", `/api/legal/cases/${id}`, { 
+                status: previousStatus || "pendiente" 
+              });
+              rollbackSucceeded = true;
+            } catch (rollbackError) {
+              // Rollback falló - error crítico
+            }
+            
+            // Lanzar error apropiado después del intento de rollback
+            if (rollbackSucceeded) {
+              throw new Error("No se pudo crear la demanda. El caso ha sido revertido a su estado anterior.");
+            } else {
+              throw new Error("Error crítico: no se pudo crear la demanda ni revertir el estado del caso.");
+            }
+          }
+        }
       }
-      return await apiRequest("PATCH", `/api/legal/cases/${id}`, { status });
+      
+      return { ...result, lawsuitCreated, lawsuitExisted };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
       queryClient.invalidateQueries({ queryKey: ["/api/legal/lawsuits"] });
+      
+      let description = "El estado del caso ha sido actualizado";
+      if (variables.status === "demanda") {
+        if (data.lawsuitCreated) {
+          description = "La baja se ha convertido en demanda. Se ha creado automáticamente en el módulo de Demandas.";
+        } else if (data.lawsuitExisted) {
+          description = "La baja se ha movido a demanda. Ya existe una demanda vinculada en el módulo de Demandas.";
+        }
+      }
+      
       toast({
         title: "Estado actualizado",
-        description: variables.status === "demanda" 
-          ? "La baja se ha convertido en demanda. Se ha creado automáticamente en el módulo de Demandas."
-          : "El estado del caso ha sido actualizado",
+        description,
+      });
+    },
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/legal/cases"] });
+      toast({
+        title: "Error al actualizar estado",
+        description: error.message || "No se pudo actualizar el estado del caso",
+        variant: "destructive",
       });
     },
   });
@@ -311,7 +366,8 @@ export function CasosLegalesKanban() {
                         updateCaseStatusMutation.mutate({ 
                           id: legalCase.id, 
                           status: value, 
-                          legalCase: legalCase 
+                          legalCase: legalCase,
+                          previousStatus: legalCase.status
                         })
                       }
                     >

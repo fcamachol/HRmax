@@ -272,6 +272,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(lawsuits.createdAt));
   }
 
+  async getLawsuitByLegalCaseId(legalCaseId: string): Promise<Lawsuit | undefined> {
+    const [lawsuit] = await db
+      .select()
+      .from(lawsuits)
+      .where(eq(lawsuits.legalCaseId, legalCaseId));
+    return lawsuit || undefined;
+  }
+
   async updateLawsuit(id: string, updates: Partial<InsertLawsuit>): Promise<Lawsuit> {
     const [updated] = await db
       .update(lawsuits)
