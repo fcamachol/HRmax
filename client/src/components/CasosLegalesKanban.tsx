@@ -55,7 +55,11 @@ const bajaTypeToLegacyCaseType = (bajaType: string): string => {
   return 'renuncia'; // Default
 };
 
-export function CasosLegalesKanban() {
+interface CasosLegalesKanbanProps {
+  hideNewButton?: boolean;
+}
+
+export function CasosLegalesKanban({ hideNewButton = false }: CasosLegalesKanbanProps = {}) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [expandedCalculoCard, setExpandedCalculoCard] = useState<string | null>(null);
   const [newConcept, setNewConcept] = useState<{[key: string]: { conceptType: string; description: string; amount: string }}>({});
@@ -257,13 +261,14 @@ export function CasosLegalesKanban() {
             Administra el proceso de baja de empleados desde el inicio hasta la finalización
           </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-nueva-baja">
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Baja
-            </Button>
-          </DialogTrigger>
+        {!hideNewButton && (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-nueva-baja">
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva Baja
+              </Button>
+            </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Registrar Nueva Baja</DialogTitle>
@@ -390,7 +395,8 @@ export function CasosLegalesKanban() {
               </div>
             </div>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-start">
