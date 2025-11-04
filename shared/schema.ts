@@ -62,8 +62,8 @@ export const configurationChangeLogs = pgTable("configuration_change_logs", {
 });
 
 // Módulo Legal - Casos de despidos/renuncias (Bajas)
-// Estados válidos del proceso de baja
-export const legalCaseStatuses = ["detonante", "calculo", "documentacion", "firma", "tramites", "entrega", "completado", "demanda"] as const;
+// Estados válidos del proceso de baja (sin detonante - el proceso inicia en cálculo)
+export const legalCaseStatuses = ["calculo", "documentacion", "firma", "tramites", "entrega", "completado", "demanda"] as const;
 export type LegalCaseStatus = typeof legalCaseStatuses[number];
 
 // Categorías de bajas
@@ -126,13 +126,23 @@ export const legalCases = pgTable("legal_cases", {
   bajaType: text("baja_type").notNull().default("renuncia_voluntaria"), // Subtipo específico según categoría
   caseType: text("case_type").notNull(), // DEPRECATED: mantener por compatibilidad
   reason: text("reason").notNull(), // Motivo del despido/renuncia
-  status: text("status").notNull().default("detonante"), // 'detonante', 'calculo', 'documentacion', 'firma', 'tramites', 'entrega', 'completado', 'demanda'
+  status: text("status").notNull().default("calculo"), // 'calculo', 'documentacion', 'firma', 'tramites', 'entrega', 'completado', 'demanda'
   mode: text("mode").notNull(), // 'simulacion' o 'real'
   startDate: date("start_date").notNull(), // Fecha de inicio del caso
   endDate: date("end_date"), // Fecha de terminación de la relación laboral
   notes: text("notes"), // Notas adicionales
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+// Conceptos especiales para bajas (descuentos o adicionales)
+export const bajaSpecialConcepts = pgTable("baja_special_concepts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  legalCaseId: varchar("legal_case_id").notNull(), // Vinculado al caso de baja
+  conceptType: text("concept_type").notNull(), // 'descuento' o 'adicional'
+  description: text("description").notNull(), // Descripción del concepto
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(), // Monto
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
 });
 
 // Liquidaciones y Finiquitos
@@ -202,6 +212,11 @@ export const insertSettlementSchema = createInsertSchema(settlements).omit({
   createdAt: true,
 });
 
+export const insertBajaSpecialConceptSchema = createInsertSchema(bajaSpecialConcepts).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertLawsuitSchema = createInsertSchema(lawsuits).omit({
   id: true,
   createdAt: true,
@@ -227,6 +242,8 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type ConfigurationChangeLog = typeof configurationChangeLogs.$inferSelect;
 export type InsertConfigurationChangeLog = z.infer<typeof insertConfigurationChangeLogSchema>;
+export type BajaSpecialConcept = typeof bajaSpecialConcepts.$inferSelect;
+export type InsertBajaSpecialConcept = z.infer<typeof insertBajaSpecialConceptSchema>;
 export type LegalCase = typeof legalCases.$inferSelect;
 export type InsertLegalCase = z.infer<typeof insertLegalCaseSchema>;
 export type Settlement = typeof settlements.$inferSelect;

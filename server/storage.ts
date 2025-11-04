@@ -11,10 +11,13 @@ import {
   type InsertSettlement,
   type Lawsuit,
   type InsertLawsuit,
+  type BajaSpecialConcept,
+  type InsertBajaSpecialConcept,
   configurationChangeLogs,
   legalCases,
   settlements,
   lawsuits,
+  bajaSpecialConcepts,
   users,
   employees
 } from "@shared/schema";
@@ -58,6 +61,11 @@ export interface IStorage {
   getLawsuits(): Promise<Lawsuit[]>;
   updateLawsuit(id: string, updates: Partial<InsertLawsuit>): Promise<Lawsuit>;
   deleteLawsuit(id: string): Promise<void>;
+  
+  // Baja Special Concepts
+  createBajaSpecialConcept(concept: InsertBajaSpecialConcept): Promise<BajaSpecialConcept>;
+  getBajaSpecialConcepts(legalCaseId: string): Promise<BajaSpecialConcept[]>;
+  deleteBajaSpecialConcept(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -293,6 +301,28 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(lawsuits)
       .where(eq(lawsuits.id, id));
+  }
+  
+  async createBajaSpecialConcept(concept: InsertBajaSpecialConcept): Promise<BajaSpecialConcept> {
+    const [created] = await db
+      .insert(bajaSpecialConcepts)
+      .values(concept)
+      .returning();
+    return created;
+  }
+  
+  async getBajaSpecialConcepts(legalCaseId: string): Promise<BajaSpecialConcept[]> {
+    return await db
+      .select()
+      .from(bajaSpecialConcepts)
+      .where(eq(bajaSpecialConcepts.legalCaseId, legalCaseId))
+      .orderBy(desc(bajaSpecialConcepts.createdAt));
+  }
+  
+  async deleteBajaSpecialConcept(id: string): Promise<void> {
+    await db
+      .delete(bajaSpecialConcepts)
+      .where(eq(bajaSpecialConcepts.id, id));
   }
 }
 

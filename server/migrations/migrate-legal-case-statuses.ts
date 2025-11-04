@@ -13,12 +13,13 @@ export async function migrateLegalCaseStatuses() {
     const result = await db.execute(sql`
       UPDATE legal_cases
       SET status = CASE
-        WHEN status = 'pendiente' THEN 'detonante'
+        WHEN status = 'pendiente' THEN 'calculo'
+        WHEN status = 'detonante' THEN 'calculo'
         WHEN status = 'en_proceso' THEN 'calculo'
         WHEN status = 'aprobado' THEN 'firma'
         ELSE status
       END
-      WHERE status IN ('pendiente', 'en_proceso', 'aprobado')
+      WHERE status IN ('pendiente', 'detonante', 'en_proceso', 'aprobado')
     `);
     
     console.log(`✅ Migración completada: ${result.rowCount || 0} registros actualizados`);

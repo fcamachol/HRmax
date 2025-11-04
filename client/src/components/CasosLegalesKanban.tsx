@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { LegalCase } from "@shared/schema";
+import type { LegalCase, BajaSpecialConcept } from "@shared/schema";
 import { 
   bajaCategories, 
   bajaTypes, 
@@ -26,16 +26,16 @@ import {
   bajaCategoryLabels,
   type BajaCategory 
 } from "@shared/schema";
+import { ChevronDown, ChevronUp, Plus as PlusIcon, X } from "lucide-react";
 
 const KANBAN_COLUMNS = [
-  { id: "detonante", title: "1. Detonante", color: "bg-yellow-100 dark:bg-yellow-900/30", description: "Inicio del proceso de baja" },
-  { id: "calculo", title: "2. Cálculo", color: "bg-blue-100 dark:bg-blue-900/30", description: "Cálculo de finiquito/liquidación" },
-  { id: "documentacion", title: "3. Documentación", color: "bg-purple-100 dark:bg-purple-900/30", description: "Revisión documental y expediente" },
-  { id: "firma", title: "4. Firma/Junta", color: "bg-indigo-100 dark:bg-indigo-900/30", description: "Presentación ante autoridad" },
-  { id: "tramites", title: "5. Trámites", color: "bg-cyan-100 dark:bg-cyan-900/30", description: "IMSS, INFONAVIT, CFDI" },
-  { id: "entrega", title: "6. Entrega", color: "bg-teal-100 dark:bg-teal-900/30", description: "Cierre y documentos finales" },
-  { id: "completado", title: "7. Completado", color: "bg-green-100 dark:bg-green-900/30", description: "Seguimiento post-baja" },
-  { id: "demanda", title: "8. Demanda", color: "bg-red-100 dark:bg-red-900/30", description: "Escalado a proceso legal" },
+  { id: "calculo", title: "1. Cálculo", color: "bg-blue-100 dark:bg-blue-900/30", description: "Cálculo de finiquito/liquidación" },
+  { id: "documentacion", title: "2. Documentación", color: "bg-purple-100 dark:bg-purple-900/30", description: "Revisión documental y expediente" },
+  { id: "firma", title: "3. Firma/Junta", color: "bg-indigo-100 dark:bg-indigo-900/30", description: "Presentación ante autoridad" },
+  { id: "tramites", title: "4. Trámites", color: "bg-cyan-100 dark:bg-cyan-900/30", description: "IMSS, INFONAVIT, CFDI" },
+  { id: "entrega", title: "5. Entrega", color: "bg-teal-100 dark:bg-teal-900/30", description: "Cierre y documentos finales" },
+  { id: "completado", title: "6. Completado", color: "bg-green-100 dark:bg-green-900/30", description: "Seguimiento post-baja" },
+  { id: "demanda", title: "7. Demanda", color: "bg-red-100 dark:bg-red-900/30", description: "Escalado a proceso legal" },
 ];
 
 // Mapeo de bajaType a caseType legacy para compatibilidad hacia atrás
@@ -57,6 +57,8 @@ const bajaTypeToLegacyCaseType = (bajaType: string): string => {
 
 export function CasosLegalesKanban() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [expandedCalculoCard, setExpandedCalculoCard] = useState<string | null>(null);
+  const [newConcept, setNewConcept] = useState<{[key: string]: { conceptType: string; description: string; amount: string }}>({});
   const [newCase, setNewCase] = useState({
     employeeId: "",
     employeeName: "",
@@ -145,11 +147,12 @@ export function CasosLegalesKanban() {
             let rollbackSucceeded = false;
             try {
               await apiRequest("PATCH", `/api/legal/cases/${id}`, { 
-                status: previousStatus || "detonante" 
+                status: previousStatus || "calculo" 
               });
               rollbackSucceeded = true;
             } catch (rollbackError) {
               // Rollback falló - error crítico
+              console.error("Rollback failed:", rollbackError);
             }
             
             // Lanzar error apropiado después del intento de rollback
@@ -218,7 +221,7 @@ export function CasosLegalesKanban() {
     createCaseMutation.mutate({
       ...newCase,
       mode: "real",
-      status: "detonante",
+      status: "calculo",
     });
   };
 
@@ -382,7 +385,7 @@ export function CasosLegalesKanban() {
                   disabled={createCaseMutation.isPending}
                   data-testid="button-crear-baja"
                 >
-                  {createCaseMutation.isPending ? "Registrando..." : "Registrar Baja"}
+                  {createCaseMutation.isPending ? "Iniciando..." : "Iniciar Proceso"}
                 </Button>
               </div>
             </div>
@@ -390,7 +393,7 @@ export function CasosLegalesKanban() {
         </Dialog>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3 items-start">
         {KANBAN_COLUMNS.map((column) => (
           <div key={column.id} className="flex flex-col gap-2">
             <div className={`p-2 rounded-md ${column.color} min-h-[88px] flex flex-col justify-between`}>
@@ -442,7 +445,7 @@ export function CasosLegalesKanban() {
                       {formatDate(legalCase.endDate)}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-2 pt-0">
+                  <CardContent className="p-2 pt-0 space-y-2">
                     <Select
                       value={legalCase.status}
                       onValueChange={(value) => 
@@ -465,6 +468,21 @@ export function CasosLegalesKanban() {
                         ))}
                       </SelectContent>
                     </Select>
+                    
+                    {legalCase.status === "calculo" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-7 text-xs gap-1"
+                        onClick={() => {
+                          window.location.href = `/employees/simulador?legalCaseId=${legalCase.id}&employeeName=${encodeURIComponent(legalCase.employeeName)}`;
+                        }}
+                        data-testid={`button-add-concepts-${legalCase.id}`}
+                      >
+                        <PlusIcon className="h-3 w-3" />
+                        Agregar Conceptos
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}

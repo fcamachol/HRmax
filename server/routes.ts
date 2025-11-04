@@ -7,7 +7,8 @@ import {
   insertSettlementSchema,
   insertLawsuitSchema,
   updateLawsuitSchema,
-  insertEmployeeSchema
+  insertEmployeeSchema,
+  insertBajaSpecialConceptSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 
@@ -147,6 +148,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       await storage.deleteLegalCase(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Baja Special Concepts
+  app.post("/api/legal/cases/:legalCaseId/special-concepts", async (req, res) => {
+    try {
+      const { legalCaseId } = req.params;
+      const validatedData = insertBajaSpecialConceptSchema.parse({
+        ...req.body,
+        legalCaseId
+      });
+      const concept = await storage.createBajaSpecialConcept(validatedData);
+      res.json(concept);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/legal/cases/:legalCaseId/special-concepts", async (req, res) => {
+    try {
+      const { legalCaseId } = req.params;
+      const concepts = await storage.getBajaSpecialConcepts(legalCaseId);
+      res.json(concepts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/legal/special-concepts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteBajaSpecialConcept(id);
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ message: error.message });
