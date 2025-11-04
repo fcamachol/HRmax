@@ -136,6 +136,57 @@ Preferred communication style: Simple, everyday language.
 ### Fonts
 - **Google Fonts CDN** - Inter (primary UI font) and JetBrains Mono (monospace for financial data)
 
+## Recent Changes (November 2025)
+
+### Bajas Module - Employee Termination Workflow
+
+**Complete Mexican Labor Law Compliance System**
+
+The Bajas module implements a comprehensive employee termination workflow that automatically calculates severance pay (finiquito/liquidación) according to Mexican Federal Labor Law (Ley Federal del Trabajo).
+
+**Key Features**:
+1. **Automatic Calculation Engine** (`shared/finiquitoCalculations.ts`)
+   - Aguinaldo proporcional (proportional Christmas bonus)
+   - Vacaciones proporcionales (proportional vacation days)
+   - Prima vacacional (vacation premium - 25% of vacation pay)
+   - Prima de antigüedad (seniority premium for employees with 15+ years)
+   - Indemnización constitutional (3 months salary for unjustified termination)
+   - Indemnización de 20 días (20 days per year for specific termination types)
+   - Accounts for days already paid/taken in current year
+
+2. **Multi-Step Wizard** (`client/src/components/BajaWizard.tsx`)
+   - Step 1: Basic Information (employee, termination type, dates, salary, employment start date)
+   - Step 2: Automatic Calculation Display with approval workflow
+   - Step 3: Documentation checklist
+   - Step 4: Final authorization and signature
+
+3. **Termination Letter Generation** (`client/src/components/CartaFiniquito.tsx`)
+   - Professional legal format compliant with Mexican labor law
+   - Detailed breakdown of all concepts and amounts
+   - Signature lines for employee and employer
+   - Witness signatures for liquidación cases
+   - Download as text file or print functionality
+   - Automatic distinction between finiquito (simple termination) and liquidación (termination with indemnification)
+
+4. **Drag-and-Drop Kanban Board** (`client/src/components/CasosLegalesKanban.tsx`)
+   - Visual workflow management with status columns: Cálculo, Documentación, Firma, Trámites, Entrega, Completado, Demanda
+   - Drag-and-drop to update case status
+   - Color-coded cards by termination category
+   - Quick view of case details and progress
+
+**Database Schema Extensions**:
+- `salarioDiario` (decimal) - Daily salary for calculations
+- `empleadoFechaInicio` (date) - Employment start date
+- `calculoAprobado` (text) - Approval status of calculation ("true"/"false")
+- `calculoData` (jsonb) - Complete calculation breakdown storage
+
+**Technical Implementation**:
+- Reactive calculations using useMemo - recalculates when salary/dates/type change
+- Zod validation for PATCH updates (updateLegalCaseSchema)
+- Early return validation in CartaFiniquito to prevent "Invalid Date" errors
+- Modal state cleanup to prevent UI blocking
+- Type-safe calculation functions shared between frontend and backend
+
 ### Future Considerations
 - Authentication system needs to be fully implemented
 - CFDI (Mexican electronic invoicing) integration may be required
