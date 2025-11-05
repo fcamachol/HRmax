@@ -13,11 +13,14 @@ import {
   type InsertLawsuit,
   type BajaSpecialConcept,
   type InsertBajaSpecialConcept,
+  type HiringProcess,
+  type InsertHiringProcess,
   configurationChangeLogs,
   legalCases,
   settlements,
   lawsuits,
   bajaSpecialConcepts,
+  hiringProcess,
   users,
   employees
 } from "@shared/schema";
@@ -66,6 +69,15 @@ export interface IStorage {
   createBajaSpecialConcept(concept: InsertBajaSpecialConcept): Promise<BajaSpecialConcept>;
   getBajaSpecialConcepts(legalCaseId: string): Promise<BajaSpecialConcept[]>;
   deleteBajaSpecialConcept(id: string): Promise<void>;
+  
+  // Hiring Process (Altas)
+  createHiringProcess(process: InsertHiringProcess): Promise<HiringProcess>;
+  getHiringProcess(id: string): Promise<HiringProcess | undefined>;
+  getHiringProcesses(): Promise<HiringProcess[]>;
+  updateHiringProcess(id: string, updates: Partial<InsertHiringProcess>): Promise<HiringProcess>;
+  deleteHiringProcess(id: string): Promise<void>;
+  
+  getLawsuitByLegalCaseId(legalCaseId: string): Promise<Lawsuit | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -323,6 +335,45 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(bajaSpecialConcepts)
       .where(eq(bajaSpecialConcepts.id, id));
+  }
+  
+  // Hiring Process (Altas)
+  async createHiringProcess(process: InsertHiringProcess): Promise<HiringProcess> {
+    const [newProcess] = await db
+      .insert(hiringProcess)
+      .values(process)
+      .returning();
+    return newProcess;
+  }
+
+  async getHiringProcess(id: string): Promise<HiringProcess | undefined> {
+    const [process] = await db
+      .select()
+      .from(hiringProcess)
+      .where(eq(hiringProcess.id, id));
+    return process || undefined;
+  }
+
+  async getHiringProcesses(): Promise<HiringProcess[]> {
+    return await db
+      .select()
+      .from(hiringProcess)
+      .orderBy(desc(hiringProcess.createdAt));
+  }
+
+  async updateHiringProcess(id: string, updates: Partial<InsertHiringProcess>): Promise<HiringProcess> {
+    const [updated] = await db
+      .update(hiringProcess)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(hiringProcess.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHiringProcess(id: string): Promise<void> {
+    await db
+      .delete(hiringProcess)
+      .where(eq(hiringProcess.id, id));
   }
 }
 

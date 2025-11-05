@@ -238,6 +238,67 @@ export const updateLawsuitSchema = insertLawsuitSchema.extend({
   stage: z.enum(lawsuitStages).optional(),
 }).partial();
 
+// Proceso de Altas (Contratación)
+export const hiringStages = ["oferta", "documentos", "alta_imss", "contrato", "onboarding", "completado"] as const;
+export type HiringStage = typeof hiringStages[number];
+
+export const hiringStageLabels: Record<HiringStage, string> = {
+  oferta: "Carta Oferta",
+  documentos: "Recolección Documentos",
+  alta_imss: "Alta IMSS",
+  contrato: "Firma de Contrato",
+  onboarding: "Onboarding",
+  completado: "Completado"
+};
+
+export const hiringProcess = pgTable("hiring_process", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidateName: text("candidate_name").notNull(), // Nombre del candidato
+  position: text("position").notNull(), // Puesto ofrecido
+  department: text("department").notNull(), // Departamento
+  proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto
+  startDate: date("start_date").notNull(), // Fecha propuesta de inicio
+  stage: text("stage").notNull().default("oferta"), // Etapa actual del proceso
+  status: text("status").notNull().default("activo"), // 'activo', 'cancelado', 'completado'
+  contractType: text("contract_type").notNull(), // Tipo de contrato
+  // Datos personales del candidato
+  email: text("email"),
+  phone: text("phone"),
+  rfc: varchar("rfc", { length: 13 }),
+  curp: varchar("curp", { length: 18 }),
+  nss: varchar("nss", { length: 11 }),
+  // Datos de la oferta
+  offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
+  offerAcceptedDate: date("offer_accepted_date"),
+  // Documentos requeridos
+  documentsChecklist: jsonb("documents_checklist"), // Lista de documentos recibidos
+  // IMSS
+  imssNumber: text("imss_number"), // Número de seguro social
+  imssRegistrationDate: date("imss_registration_date"),
+  // Contrato
+  contractSignedDate: date("contract_signed_date"),
+  // Onboarding
+  onboardingCompletedDate: date("onboarding_completed_date"),
+  notes: text("notes"), // Notas adicionales
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertHiringProcessSchema = createInsertSchema(hiringProcess).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  stage: z.enum(hiringStages).default("oferta"),
+});
+
+export const updateHiringProcessSchema = insertHiringProcessSchema.extend({
+  stage: z.enum(hiringStages).optional(),
+}).partial();
+
+export type HiringProcess = typeof hiringProcess.$inferSelect;
+export type InsertHiringProcess = z.infer<typeof insertHiringProcessSchema>;
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Department = typeof departments.$inferSelect;
