@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreVertical, Trash2, Edit } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Edit, Upload, FileCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ObjectUploader } from "@/components/ObjectUploader";
 import type { Lawsuit, LegalCase } from "@shared/schema";
 
 type LawsuitStage = 'conciliacion' | 'contestacion' | 'desahogo' | 'alegatos' | 'sentencia' | 'cerrado';
@@ -28,6 +29,13 @@ const STAGES: { value: LawsuitStage; label: string; color: string }[] = [
 export function KanbanDemandas() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLawsuit, setEditingLawsuit] = useState<Lawsuit | null>(null);
+  const [extractedData, setExtractedData] = useState<{
+    title: string;
+    employeeName: string;
+    description: string;
+    documentUrl: string;
+  } | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const { toast } = useToast();
 
   const { data: lawsuits = [], isLoading } = useQuery<Lawsuit[]>({
@@ -101,6 +109,46 @@ export function KanbanDemandas() {
     },
   });
 
+  const handleGetUploadUrl = async () => {
+    const response = await apiRequest("POST", "/api/objects/upload");
+    return {
+      method: "PUT" as const,
+      url: response.uploadURL,
+    };
+  };
+
+  const handleDocumentUploadComplete = async (result: { uploadURL: string }) => {
+    if (!result.uploadURL) {
+      toast({
+        title: "Error",
+        description: "No se pudo obtener la URL del documento",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsAnalyzing(true);
+    try {
+      const analysisResult = await apiRequest("POST", "/api/legal/lawsuits/analyze-document", {
+        documentUrl: result.uploadURL,
+      });
+
+      setExtractedData(analysisResult);
+      toast({
+        title: "Documento analizado",
+        description: "Se ha extraído la información automáticamente del documento",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error al analizar",
+        description: error.message || "No se pudo analizar el documento",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -111,6 +159,7 @@ export function KanbanDemandas() {
       legalCaseId: formData.get('legalCaseId') as string || null,
       stage: (formData.get('stage') as LawsuitStage) || 'conciliacion',
       description: formData.get('description') as string || '',
+      documentUrl: extractedData?.documentUrl || editingLawsuit?.documentUrl || null,
     };
 
     if (editingLawsuit) {
@@ -141,6 +190,7 @@ export function KanbanDemandas() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingLawsuit(null);
+    setExtractedData(null);
   };
 
   const getLawsuitsByStage = (stage: LawsuitStage) => {
@@ -191,16 +241,50 @@ export function KanbanDemandas() {
               <DialogDescription>
                 {editingLawsuit 
                   ? 'Actualiza la información de la demanda' 
-                  : 'Registra una nueva demanda laboral'}
+                  : 'Registra una nueva demanda laboral. Puedes subir un documento escaneado para extraer información automáticamente.'}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
+              {!editingLawsuit && (
+                <div className="space-y-2">
+                  <Label>Subir Documento (Opcional)</Label>
+                  <div className="flex items-center gap-2">
+                    <ObjectUploader
+                      maxNumberOfFiles={1}
+                      maxFileSize={10485760}
+                      onGetUploadParameters={handleGetUploadUrl}
+                      onComplete={handleDocumentUploadComplete}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {extractedData ? 'Cambiar Documento' : 'Subir Documento'}
+                    </ObjectUploader>
+                    {extractedData && (
+                      <Badge variant="secondary" className="gap-1">
+                        <FileCheck className="h-3 w-3" />
+                        Documento analizado
+                      </Badge>
+                    )}
+                    {isAnalyzing && (
+                      <Badge variant="secondary">
+                        Analizando...
+                      </Badge>
+                    )}
+                  </div>
+                  {extractedData && (
+                    <p className="text-sm text-muted-foreground">
+                      Se han prellenado los campos con la información extraída del documento
+                    </p>
+                  )}
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="title">Título *</Label>
                 <Input
                   id="title"
                   name="title"
-                  defaultValue={editingLawsuit?.title}
+                  key={extractedData?.title || editingLawsuit?.title}
+                  defaultValue={extractedData?.title || editingLawsuit?.title}
                   placeholder="Ej: Demanda por despido injustificado"
                   required
                   data-testid="input-title"
@@ -212,7 +296,8 @@ export function KanbanDemandas() {
                 <Input
                   id="employeeName"
                   name="employeeName"
-                  defaultValue={editingLawsuit?.employeeName}
+                  key={extractedData?.employeeName || editingLawsuit?.employeeName}
+                  defaultValue={extractedData?.employeeName || editingLawsuit?.employeeName}
                   placeholder="Ej: Juan Pérez"
                   required
                   data-testid="input-employee-name"
@@ -257,7 +342,8 @@ export function KanbanDemandas() {
                 <Textarea
                   id="description"
                   name="description"
-                  defaultValue={editingLawsuit?.description || ''}
+                  key={extractedData?.description || editingLawsuit?.description}
+                  defaultValue={extractedData?.description || editingLawsuit?.description || ''}
                   placeholder="Detalles de la demanda..."
                   rows={4}
                   data-testid="textarea-description"
