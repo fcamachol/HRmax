@@ -240,7 +240,7 @@ export function KanbanAltas() {
                         </DropdownMenu>
                       </div>
                       <CardTitle className="text-xs line-clamp-1" data-testid={`text-process-name-${process.id}`}>
-                        {process.nombre} {process.apellidoPaterno} {process.apellidoMaterno}
+                        {process.nombre} {process.apellidoPaterno}{process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}
                       </CardTitle>
                       <CardDescription className="text-xs line-clamp-1 flex items-center gap-1" data-testid={`text-process-salary-${process.id}`}>
                         <DollarSign className="h-3 w-3" />

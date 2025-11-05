@@ -256,7 +256,7 @@ export const hiringProcess = pgTable("hiring_process", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   nombre: text("nombre").notNull(), // Nombre del candidato
   apellidoPaterno: text("apellido_paterno").notNull(), // Apellido paterno
-  apellidoMaterno: text("apellido_materno").notNull(), // Apellido materno
+  apellidoMaterno: text("apellido_materno"), // Apellido materno (opcional)
   position: text("position").notNull(), // Puesto ofrecido
   department: text("department").notNull(), // Departamento
   proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto

@@ -227,10 +227,10 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
 
   const handleSubmit = () => {
     // Validaciones básicas
-    if (!formData.nombre.trim() || !formData.apellidoPaterno.trim() || !formData.apellidoMaterno.trim()) {
+    if (!formData.nombre.trim() || !formData.apellidoPaterno.trim()) {
       toast({
         title: "Error de validación",
-        description: "El nombre completo del candidato es requerido (nombre, apellido paterno y materno)",
+        description: "El nombre y apellido paterno del candidato son requeridos",
         variant: "destructive",
       });
       return;
@@ -294,13 +294,13 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 />
               </div>
               <div>
-                <Label htmlFor="apellidoMaterno" data-testid="label-apellido-materno">Apellido Materno *</Label>
+                <Label htmlFor="apellidoMaterno" data-testid="label-apellido-materno">Apellido Materno</Label>
                 <Input
                   id="apellidoMaterno"
                   data-testid="input-apellido-materno"
                   value={formData.apellidoMaterno}
                   onChange={(e) => setFormData({ ...formData, apellidoMaterno: e.target.value })}
-                  placeholder="García"
+                  placeholder="García (opcional)"
                 />
               </div>
             </div>
@@ -485,7 +485,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 <div>
                   <h4 className="font-medium text-sm text-muted-foreground">Candidato</h4>
                   <p className="text-base" data-testid="text-summary-candidate">
-                    {formData.nombre} {formData.apellidoPaterno} {formData.apellidoMaterno}
+                    {formData.nombre} {formData.apellidoPaterno}{formData.apellidoMaterno ? ' ' + formData.apellidoMaterno : ''}
                   </p>
                 </div>
                 <Separator />

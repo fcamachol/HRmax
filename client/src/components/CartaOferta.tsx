@@ -8,10 +8,10 @@ interface CartaOfertaProps {
 }
 
 export function CartaOferta({ process }: CartaOfertaProps) {
-  const nombreCompleto = `${process.nombre} ${process.apellidoPaterno} ${process.apellidoMaterno}`;
+  const nombreCompleto = `${process.nombre} ${process.apellidoPaterno}${process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}`.trim();
   
   // Validar que tengamos los datos necesarios
-  if (!process || !process.nombre || !process.apellidoPaterno || !process.apellidoMaterno || !process.position || !process.proposedSalary) {
+  if (!process || !process.nombre || !process.apellidoPaterno || !process.position || !process.proposedSalary) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
