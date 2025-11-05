@@ -4,7 +4,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, MoreVertical, Trash2, Edit, User, DollarSign, Calendar, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -272,9 +272,9 @@ export function KanbanAltas() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-carta-dialog-title">Carta Oferta de Empleo</DialogTitle>
-            <p className="text-sm text-muted-foreground">
+            <DialogDescription>
               Genera e imprime la carta oferta para el candidato
-            </p>
+            </DialogDescription>
           </DialogHeader>
           {selectedProcessForCarta && (
             <CartaOferta process={selectedProcessForCarta} />
