@@ -187,6 +187,67 @@ The Bajas module implements a comprehensive employee termination workflow that a
 - Modal state cleanup to prevent UI blocking
 - Type-safe calculation functions shared between frontend and backend
 
+### Altas Module - Employee Hiring Process Workflow
+
+**Complete Hiring Process Management System**
+
+The Altas module implements a comprehensive hiring process workflow that manages candidate onboarding from offer letter to completion, with automatic document tracking and stage-based workflow management.
+
+**Key Features**:
+1. **Multi-Step Hiring Wizard** (`client/src/components/AltaWizard.tsx`)
+   - Step 1: Candidate Information (name, email, phone, RFC, CURP, NSS)
+   - Step 2: Offer Details (position, department, salary, start date, contract type, notes)
+   - Step 3: Documentation Checklist (10 standard documents: acta de nacimiento, CURP, RFC, comprobante de domicilio, etc.)
+   - Step 4: Review and Confirmation
+
+2. **Kanban Board Workflow** (`client/src/components/KanbanAltas.tsx`)
+   - Visual process tracking with 6 stages: Carta Oferta → Documentos → Alta IMSS → Contrato → Onboarding → Completado
+   - Drag-and-drop to update process stage
+   - Color-coded badges showing process counts per stage
+   - Quick actions: Edit, Move Forward/Back, Delete
+   - Integrated offer letter generation
+
+3. **Offer Letter Generation** (`client/src/components/CartaOferta.tsx`)
+   - Professional format for job offer letters
+   - Includes candidate details, position, salary, start date, benefits
+   - Placeholder for company-specific information
+   - Print and download functionality
+   - Accessible from Kanban board dropdown menu when process is in "oferta" stage
+
+**Database Schema** (`hiring_process` table):
+- `id` (uuid) - Primary key
+- `candidateName`, `position`, `department` - Basic job information
+- `proposedSalary` (decimal), `startDate` (date) - Compensation details
+- `stage` (text) - Current workflow stage (oferta, documentos, alta_imss, contrato, onboarding, completado)
+- `status` (text) - Process status
+- `contractType` (text) - Type of employment contract (planta, temporal, por_obra, honorarios, practicante)
+- `email`, `phone`, `rfc`, `curp`, `nss` - Candidate identification
+- `documentsChecklist` (jsonb) - Document collection tracking
+- `notes` (text) - Additional information
+- `createdAt`, `updatedAt` - Timestamps
+
+**Contract Types Supported**:
+- Planta (Indefinido) - Permanent employment
+- Temporal - Fixed-term contract
+- Por Obra Determinada - Project-based contract
+- Honorarios - Professional services
+- Practicante - Internship
+
+**API Endpoints**:
+- `POST /api/hiring/processes` - Create new hiring process
+- `GET /api/hiring/processes` - Get all hiring processes
+- `GET /api/hiring/processes/:id` - Get single hiring process
+- `PATCH /api/hiring/processes/:id` - Update hiring process (including stage changes)
+- `DELETE /api/hiring/processes/:id` - Delete hiring process
+
+**Technical Implementation**:
+- Consistent architecture with Bajas module (wizard + Kanban pattern)
+- Zod validation for all data inputs
+- Type-safe schemas shared between frontend and backend
+- React Query for optimistic updates and cache invalidation
+- Document checklist stored as JSONB for flexibility
+- Stage transitions tracked for compliance and auditing
+
 ### Future Considerations
 - Authentication system needs to be fully implemented
 - CFDI (Mexican electronic invoicing) integration may be required
