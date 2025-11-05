@@ -247,7 +247,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Lawsuits (Demandas)
   app.post("/api/legal/lawsuits", async (req, res) => {
     try {
-      const validatedData = insertLawsuitSchema.parse(req.body);
+      // Convert 'none' to undefined for legalCaseId (frontend uses 'none' for "no case")
+      const body = {
+        ...req.body,
+        legalCaseId: req.body.legalCaseId === 'none' ? undefined : req.body.legalCaseId
+      };
+      
+      const validatedData = insertLawsuitSchema.parse(body);
       
       // Si se está vinculando a un caso legal, verificar que no exista ya una demanda para ese caso
       if (validatedData.legalCaseId) {
@@ -293,8 +299,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/legal/lawsuits/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      // Convert 'none' to undefined for legalCaseId (frontend uses 'none' for "no case")
+      const body = {
+        ...req.body,
+        legalCaseId: req.body.legalCaseId === 'none' ? undefined : req.body.legalCaseId
+      };
       // Validate partial update with updateLawsuitSchema (no defaults, validates stage enum if provided)
-      const validatedData = updateLawsuitSchema.parse(req.body);
+      const validatedData = updateLawsuitSchema.parse(body);
       const updated = await storage.updateLawsuit(id, validatedData);
       res.json(updated);
     } catch (error: any) {

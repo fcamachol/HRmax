@@ -306,12 +306,12 @@ export function KanbanDemandas() {
 
               <div className="space-y-2">
                 <Label htmlFor="legalCaseId">Caso Legal (Opcional)</Label>
-                <Select name="legalCaseId" defaultValue={editingLawsuit?.legalCaseId || ''}>
+                <Select name="legalCaseId" defaultValue={editingLawsuit?.legalCaseId || 'none'}>
                   <SelectTrigger id="legalCaseId" data-testid="select-legal-case">
                     <SelectValue placeholder="Seleccionar caso legal..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Sin caso legal asociado</SelectItem>
+                    <SelectItem value="none">Sin caso legal asociado</SelectItem>
                     {legalCases.map((legalCase) => (
                       <SelectItem key={legalCase.id} value={legalCase.id}>
                         {legalCase.caseType}
