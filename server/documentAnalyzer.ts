@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { objectStorageClient } from "./objectStorage";
 import { Buffer } from "node:buffer";
+import { pdfToImg } from "pdftoimg-js";
 
 // This is using Replit's AI Integrations service, which provides OpenAI-compatible API access without requiring your own OpenAI API key
 const openai = new OpenAI({
@@ -34,9 +35,42 @@ export async function analyzeLawsuitDocument(documentUrl: string): Promise<Lawsu
     const [fileContents] = await file.download();
     const [metadata] = await file.getMetadata();
     
-    // Convert to base64
-    const base64Document = fileContents.toString('base64');
     const mimeType = metadata.contentType || 'application/pdf';
+    let base64Document: string;
+    let finalMimeType: string;
+    
+    // If it's a PDF, convert the first page to an image
+    if (mimeType === 'application/pdf' || objectName.toLowerCase().endsWith('.pdf')) {
+      console.log('Converting PDF to image for analysis...');
+      
+      // pdfToImg expects a file path or buffer
+      // Convert first page only for efficiency
+      const images = await pdfToImg(fileContents, {
+        pages: "firstPage",
+        imgType: "png",
+        scale: 2,
+      });
+      
+      if (!images || images.length === 0) {
+        throw new Error('Failed to convert PDF to image');
+      }
+      
+      // Extract base64 from data URL (format: data:image/png;base64,...)
+      const dataUrl = images[0];
+      const base64Match = dataUrl.match(/^data:image\/png;base64,(.+)$/);
+      
+      if (!base64Match) {
+        throw new Error('Invalid image data from PDF conversion');
+      }
+      
+      base64Document = base64Match[1];
+      finalMimeType = 'image/png';
+      console.log('PDF converted to image successfully');
+    } else {
+      // It's already an image
+      base64Document = fileContents.toString('base64');
+      finalMimeType = mimeType;
+    }
     
     // Use GPT-5 with vision to analyze the document
     // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
@@ -60,7 +94,7 @@ Si algún campo no está claramente visible en el documento, usa un valor descri
             {
               type: "image_url",
               image_url: {
-                url: `data:${mimeType};base64,${base64Document}`
+                url: `data:${finalMimeType};base64,${base64Document}`
               }
             }
           ]
