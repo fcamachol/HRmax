@@ -11,6 +11,8 @@ import {
   insertBajaSpecialConceptSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
+import { ObjectStorageService } from "./objectStorage";
+import { analyzeLawsuitDocument } from "./documentAnalyzer";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configuration Change Logs
@@ -307,6 +309,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Object Storage endpoints for document upload
+  app.post("/api/objects/upload", async (req, res) => {
+    try {
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      res.json({ uploadURL });
+    } catch (error: any) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Analyze lawsuit document using OpenAI
+  app.post("/api/legal/lawsuits/analyze-document", async (req, res) => {
+    try {
+      const { documentUrl } = req.body;
+      
+      if (!documentUrl) {
+        return res.status(400).json({ message: "documentUrl is required" });
+      }
+
+      const objectStorageService = new ObjectStorageService();
+      const normalizedPath = objectStorageService.normalizeObjectEntityPath(documentUrl);
+      
+      const extractedData = await analyzeLawsuitDocument(documentUrl);
+      
+      res.json({
+        ...extractedData,
+        documentUrl: normalizedPath
+      });
+    } catch (error: any) {
+      console.error("Error analyzing document:", error);
+      res.status(500).json({ message: "Failed to analyze document" });
     }
   });
 
