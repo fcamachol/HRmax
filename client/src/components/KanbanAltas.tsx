@@ -13,15 +13,16 @@ import { hiringStageLabels } from "@shared/schema";
 import { AltaWizard } from "./AltaWizard";
 import { CartaOferta } from "./CartaOferta";
 
-type HiringStage = 'oferta' | 'documentos' | 'alta_imss' | 'contrato' | 'onboarding' | 'completado';
+type HiringStage = 'oferta' | 'documentos' | 'contrato' | 'alta_imss' | 'onboarding' | 'completado' | 'cancelado';
 
 const STAGES: { value: HiringStage; label: string; color: string; description: string }[] = [
   { value: 'oferta', label: '1. Carta Oferta', color: 'bg-blue-100 dark:bg-blue-900/30', description: 'Generación y envío de oferta' },
   { value: 'documentos', label: '2. Documentos', color: 'bg-purple-100 dark:bg-purple-900/30', description: 'Recopilación documental' },
-  { value: 'alta_imss', label: '3. Alta IMSS', color: 'bg-indigo-100 dark:bg-indigo-900/30', description: 'Registro ante el IMSS' },
-  { value: 'contrato', label: '4. Contrato', color: 'bg-cyan-100 dark:bg-cyan-900/30', description: 'Firma de contrato laboral' },
+  { value: 'contrato', label: '3. Contrato', color: 'bg-indigo-100 dark:bg-indigo-900/30', description: 'Firma de contrato laboral' },
+  { value: 'alta_imss', label: '4. Alta IMSS', color: 'bg-cyan-100 dark:bg-cyan-900/30', description: 'Registro ante el IMSS' },
   { value: 'onboarding', label: '5. Onboarding', color: 'bg-teal-100 dark:bg-teal-900/30', description: 'Integración y capacitación' },
   { value: 'completado', label: '6. Completado', color: 'bg-green-100 dark:bg-green-900/30', description: 'Proceso finalizado' },
+  { value: 'cancelado', label: '7. No Completado', color: 'bg-red-100 dark:bg-red-900/30', description: 'Proceso cancelado o no finalizado' },
 ];
 
 export function KanbanAltas() {
@@ -128,7 +129,7 @@ export function KanbanAltas() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-6 gap-4">
+      <div className="grid grid-cols-7 gap-4">
         {STAGES.map((stage) => {
           const stageProcesses = getProcessesByStage(stage.value);
           
@@ -206,17 +207,25 @@ export function KanbanAltas() {
                                 Mover Atrás
                               </DropdownMenuItem>
                             )}
-                            {stage.value !== 'completado' && (
+                            {stage.value !== 'completado' && stage.value !== 'cancelado' && (
                               <DropdownMenuItem 
                                 onClick={() => {
                                   const currentIndex = STAGES.findIndex(s => s.value === stage.value);
-                                  if (currentIndex < STAGES.length - 1) {
+                                  if (currentIndex < STAGES.length - 2) { // -2 para excluir completado y cancelado
                                     handleMoveStage(process.id, STAGES[currentIndex + 1].value);
                                   }
                                 }}
                                 data-testid={`menu-move-forward-${process.id}`}
                               >
                                 Mover Adelante
+                              </DropdownMenuItem>
+                            )}
+                            {stage.value !== 'cancelado' && (
+                              <DropdownMenuItem 
+                                onClick={() => handleMoveStage(process.id, 'cancelado')}
+                                data-testid={`menu-move-canceled-${process.id}`}
+                              >
+                                Marcar como No Completado
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuItem 

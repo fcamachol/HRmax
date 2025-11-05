@@ -239,16 +239,17 @@ export const updateLawsuitSchema = insertLawsuitSchema.extend({
 }).partial();
 
 // Proceso de Altas (Contratación)
-export const hiringStages = ["oferta", "documentos", "alta_imss", "contrato", "onboarding", "completado"] as const;
+export const hiringStages = ["oferta", "documentos", "contrato", "alta_imss", "onboarding", "completado", "cancelado"] as const;
 export type HiringStage = typeof hiringStages[number];
 
 export const hiringStageLabels: Record<HiringStage, string> = {
   oferta: "Carta Oferta",
   documentos: "Recolección Documentos",
-  alta_imss: "Alta IMSS",
   contrato: "Firma de Contrato",
+  alta_imss: "Alta IMSS",
   onboarding: "Onboarding",
-  completado: "Completado"
+  completado: "Completado",
+  cancelado: "No Completado"
 };
 
 export const hiringProcess = pgTable("hiring_process", {
