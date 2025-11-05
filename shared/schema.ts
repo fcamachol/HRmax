@@ -177,6 +177,7 @@ export const lawsuits = pgTable("lawsuits", {
   legalCaseId: varchar("legal_case_id"), // Vincula con un caso legal de bajas si existe
   stage: text("stage").notNull().default("conciliacion"), // Etapa actual del proceso
   description: text("description"), // Descripción detallada de la demanda
+  documentUrl: text("document_url"), // URL del documento escaneado de la demanda
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
