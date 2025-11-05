@@ -8,7 +8,9 @@ import {
   insertLawsuitSchema,
   updateLawsuitSchema,
   insertEmployeeSchema,
-  insertBajaSpecialConceptSchema
+  insertBajaSpecialConceptSchema,
+  insertHiringProcessSchema,
+  updateHiringProcessSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -317,6 +319,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       await storage.deleteLawsuit(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Hiring Process (Altas)
+  app.post("/api/hiring/processes", async (req, res) => {
+    try {
+      const validatedData = insertHiringProcessSchema.parse(req.body);
+      const process = await storage.createHiringProcess(validatedData);
+      res.json(process);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/hiring/processes", async (req, res) => {
+    try {
+      const processes = await storage.getHiringProcesses();
+      res.json(processes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/hiring/processes/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const process = await storage.getHiringProcess(id);
+      if (!process) {
+        return res.status(404).json({ message: "Hiring process not found" });
+      }
+      res.json(process);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/hiring/processes/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = updateHiringProcessSchema.parse(req.body);
+      const updated = await storage.updateHiringProcess(id, validatedData);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/hiring/processes/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteHiringProcess(id);
       res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ message: error.message });
