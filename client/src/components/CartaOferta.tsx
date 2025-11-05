@@ -8,8 +8,10 @@ interface CartaOfertaProps {
 }
 
 export function CartaOferta({ process }: CartaOfertaProps) {
+  const nombreCompleto = `${process.nombre} ${process.apellidoPaterno} ${process.apellidoMaterno}`;
+  
   // Validar que tengamos los datos necesarios
-  if (!process || !process.candidateName || !process.position || !process.proposedSalary) {
+  if (!process || !process.nombre || !process.apellidoPaterno || !process.apellidoMaterno || !process.position || !process.proposedSalary) {
     return (
       <Card>
         <CardContent className="p-8 text-center">
@@ -31,7 +33,7 @@ export function CartaOferta({ process }: CartaOfertaProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `oferta_${process.candidateName.replace(/\s/g, '_')}.txt`;
+    a.download = `oferta_${nombreCompleto.replace(/\s/g, '_')}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -41,7 +43,7 @@ export function CartaOferta({ process }: CartaOfertaProps) {
   const generateTextContent = () => {
     let text = `CARTA OFERTA DE EMPLEO\n\n`;
     text += `Fecha: ${new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}\n\n`;
-    text += `Estimado(a) ${process.candidateName},\n\n`;
+    text += `Estimado(a) ${nombreCompleto},\n\n`;
     text += `Nos complace ofrecerle el puesto de ${process.position} en nuestro departamento de ${process.department}.\n\n`;
     text += `TÉRMINOS DE LA OFERTA:\n\n`;
     text += `Puesto: ${process.position}\n`;
@@ -107,7 +109,7 @@ export function CartaOferta({ process }: CartaOfertaProps) {
 
           {/* Greeting */}
           <div className="space-y-4">
-            <p>Estimado(a) <span className="font-semibold">{process.candidateName}</span>,</p>
+            <p>Estimado(a) <span className="font-semibold">{nombreCompleto}</span>,</p>
             <p>
               Nos complace ofrecerle el puesto de <span className="font-semibold">{process.position}</span> en 
               nuestro departamento de <span className="font-semibold">{process.department}</span>.
