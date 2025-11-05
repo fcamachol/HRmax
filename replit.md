@@ -201,10 +201,11 @@ The Altas module implements a comprehensive hiring process workflow that manages
    - Step 4: Review and Confirmation
 
 2. **Kanban Board Workflow** (`client/src/components/KanbanAltas.tsx`)
-   - Visual process tracking with 6 stages: Carta Oferta → Documentos → Alta IMSS → Contrato → Onboarding → Completado
-   - Drag-and-drop to update process stage
-   - Color-coded badges showing process counts per stage
-   - Quick actions: Edit, Move Forward/Back, Delete
+   - Visual process tracking with 7 stages: Carta Oferta → Documentos → Contrato → Alta IMSS → Onboarding → Completado → No Completado
+   - Stage order reflects real-world Mexican hiring process (contract signature before IMSS registration)
+   - "No Completado" (red column) for canceled or incomplete hiring processes
+   - Color-coded column headers with visual hierarchy (blue, purple, indigo, cyan, teal, green, red)
+   - Quick actions: Edit, Move Forward/Back, Mark as Not Completed, Delete
    - Integrated offer letter generation
 
 3. **Offer Letter Generation** (`client/src/components/CartaOferta.tsx`)
@@ -218,7 +219,9 @@ The Altas module implements a comprehensive hiring process workflow that manages
 - `id` (uuid) - Primary key
 - `candidateName`, `position`, `department` - Basic job information
 - `proposedSalary` (decimal), `startDate` (date) - Compensation details
-- `stage` (text) - Current workflow stage (oferta, documentos, alta_imss, contrato, onboarding, completado)
+- `stage` (text) - Current workflow stage (oferta, documentos, contrato, alta_imss, onboarding, completado, cancelado)
+  - Stage order reflects real-world process: contract signature comes before IMSS registration
+  - "cancelado" stage for incomplete or canceled hiring processes
 - `status` (text) - Process status
 - `contractType` (text) - Type of employment contract (planta, temporal, por_obra, honorarios, practicante)
 - `email`, `phone`, `rfc`, `curp`, `nss` - Candidate identification
