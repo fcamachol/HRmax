@@ -4,12 +4,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreVertical, Trash2, Edit, User, DollarSign, Calendar } from "lucide-react";
+import { Plus, MoreVertical, Trash2, Edit, User, DollarSign, Calendar, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { HiringProcess } from "@shared/schema";
 import { hiringStageLabels } from "@shared/schema";
 import { AltaWizard } from "./AltaWizard";
+import { CartaOferta } from "./CartaOferta";
 
 type HiringStage = 'oferta' | 'documentos' | 'alta_imss' | 'contrato' | 'onboarding' | 'completado';
 
@@ -25,6 +27,8 @@ const STAGES: { value: HiringStage; label: string; color: string }[] = [
 export function KanbanAltas() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [editingProcess, setEditingProcess] = useState<HiringProcess | null>(null);
+  const [showCartaModal, setShowCartaModal] = useState(false);
+  const [selectedProcessForCarta, setSelectedProcessForCarta] = useState<HiringProcess | null>(null);
   const { toast } = useToast();
 
   const { data: processes = [], isLoading } = useQuery<HiringProcess[]>({
@@ -92,6 +96,11 @@ export function KanbanAltas() {
   const handleNewProcess = () => {
     setEditingProcess(null);
     setIsWizardOpen(true);
+  };
+
+  const handleShowCarta = (process: HiringProcess) => {
+    setSelectedProcessForCarta(process);
+    setShowCartaModal(true);
   };
 
   const getProcessesByStage = (stage: HiringStage) => {
@@ -168,6 +177,15 @@ export function KanbanAltas() {
                               <Edit className="w-4 h-4 mr-2" />
                               Editar
                             </DropdownMenuItem>
+                            {stage.value === 'oferta' && (
+                              <DropdownMenuItem 
+                                onClick={() => handleShowCarta(process)}
+                                data-testid={`menu-carta-oferta-${process.id}`}
+                              >
+                                <FileText className="w-4 h-4 mr-2" />
+                                Generar Carta Oferta
+                              </DropdownMenuItem>
+                            )}
                             {stage.value !== 'oferta' && (
                               <DropdownMenuItem 
                                 onClick={() => {
@@ -249,6 +267,17 @@ export function KanbanAltas() {
         }}
         existingProcess={editingProcess}
       />
+
+      <Dialog open={showCartaModal} onOpenChange={setShowCartaModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle data-testid="text-carta-dialog-title">Carta Oferta de Empleo</DialogTitle>
+          </DialogHeader>
+          {selectedProcessForCarta && (
+            <CartaOferta process={selectedProcessForCarta} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
