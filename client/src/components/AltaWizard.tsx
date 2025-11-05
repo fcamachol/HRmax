@@ -31,7 +31,9 @@ interface AltaWizardProps {
 }
 
 interface AltaFormData {
-  candidateName: string;
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string;
   position: string;
   department: string;
   proposedSalary: string;
@@ -78,7 +80,9 @@ const TIPOS_CONTRATO = [
 export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState<AltaFormData>({
-    candidateName: "",
+    nombre: "",
+    apellidoPaterno: "",
+    apellidoMaterno: "",
     position: "",
     department: "",
     proposedSalary: "",
@@ -100,7 +104,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     if (open && existingProcess) {
       const docs = existingProcess.documentsChecklist as string[] | null;
       setFormData({
-        candidateName: existingProcess.candidateName || "",
+        nombre: existingProcess.nombre || "",
+        apellidoPaterno: existingProcess.apellidoPaterno || "",
+        apellidoMaterno: existingProcess.apellidoMaterno || "",
         position: existingProcess.position || "",
         department: existingProcess.department || "",
         proposedSalary: existingProcess.proposedSalary || "",
@@ -122,7 +128,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
   const resetWizard = () => {
     setCurrentStep(1);
     setFormData({
-      candidateName: "",
+      nombre: "",
+      apellidoPaterno: "",
+      apellidoMaterno: "",
       position: "",
       department: "",
       proposedSalary: "",
@@ -142,7 +150,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     mutationFn: async (data: AltaFormData) => {
       if (isEditMode && existingProcess) {
         const response = await apiRequest("PATCH", `/api/hiring/processes/${existingProcess.id}`, {
-          candidateName: data.candidateName,
+          nombre: data.nombre,
+          apellidoPaterno: data.apellidoPaterno,
+          apellidoMaterno: data.apellidoMaterno,
           position: data.position,
           department: data.department,
           proposedSalary: data.proposedSalary,
@@ -159,7 +169,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         return response;
       } else {
         const response = await apiRequest("POST", "/api/hiring/processes", {
-          candidateName: data.candidateName,
+          nombre: data.nombre,
+          apellidoPaterno: data.apellidoPaterno,
+          apellidoMaterno: data.apellidoMaterno,
           position: data.position,
           department: data.department,
           proposedSalary: data.proposedSalary,
@@ -215,10 +227,10 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
 
   const handleSubmit = () => {
     // Validaciones básicas
-    if (!formData.candidateName.trim()) {
+    if (!formData.nombre.trim() || !formData.apellidoPaterno.trim() || !formData.apellidoMaterno.trim()) {
       toast({
         title: "Error de validación",
-        description: "El nombre del candidato es requerido",
+        description: "El nombre completo del candidato es requerido (nombre, apellido paterno y materno)",
         variant: "destructive",
       });
       return;
@@ -260,15 +272,37 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       case 1:
         return (
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="candidateName" data-testid="label-candidate-name">Nombre Completo del Candidato *</Label>
-              <Input
-                id="candidateName"
-                data-testid="input-candidate-name"
-                value={formData.candidateName}
-                onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
-                placeholder="Ej: Juan Pérez García"
-              />
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="nombre" data-testid="label-nombre">Nombre(s) *</Label>
+                <Input
+                  id="nombre"
+                  data-testid="input-nombre"
+                  value={formData.nombre}
+                  onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
+                  placeholder="Juan"
+                />
+              </div>
+              <div>
+                <Label htmlFor="apellidoPaterno" data-testid="label-apellido-paterno">Apellido Paterno *</Label>
+                <Input
+                  id="apellidoPaterno"
+                  data-testid="input-apellido-paterno"
+                  value={formData.apellidoPaterno}
+                  onChange={(e) => setFormData({ ...formData, apellidoPaterno: e.target.value })}
+                  placeholder="Pérez"
+                />
+              </div>
+              <div>
+                <Label htmlFor="apellidoMaterno" data-testid="label-apellido-materno">Apellido Materno *</Label>
+                <Input
+                  id="apellidoMaterno"
+                  data-testid="input-apellido-materno"
+                  value={formData.apellidoMaterno}
+                  onChange={(e) => setFormData({ ...formData, apellidoMaterno: e.target.value })}
+                  placeholder="García"
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -450,7 +484,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
               <CardContent className="space-y-4">
                 <div>
                   <h4 className="font-medium text-sm text-muted-foreground">Candidato</h4>
-                  <p className="text-base" data-testid="text-summary-candidate">{formData.candidateName}</p>
+                  <p className="text-base" data-testid="text-summary-candidate">
+                    {formData.nombre} {formData.apellidoPaterno} {formData.apellidoMaterno}
+                  </p>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-2 gap-4">
