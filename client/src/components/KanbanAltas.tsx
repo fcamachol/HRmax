@@ -15,13 +15,13 @@ import { CartaOferta } from "./CartaOferta";
 
 type HiringStage = 'oferta' | 'documentos' | 'alta_imss' | 'contrato' | 'onboarding' | 'completado';
 
-const STAGES: { value: HiringStage; label: string; color: string }[] = [
-  { value: 'oferta', label: 'Carta Oferta', color: 'bg-blue-500' },
-  { value: 'documentos', label: 'Documentos', color: 'bg-purple-500' },
-  { value: 'alta_imss', label: 'Alta IMSS', color: 'bg-yellow-500' },
-  { value: 'contrato', label: 'Contrato', color: 'bg-green-500' },
-  { value: 'onboarding', label: 'Onboarding', color: 'bg-orange-500' },
-  { value: 'completado', label: 'Completado', color: 'bg-gray-500' },
+const STAGES: { value: HiringStage; label: string; color: string; description: string }[] = [
+  { value: 'oferta', label: '1. Carta Oferta', color: 'bg-blue-100 dark:bg-blue-900/30', description: 'Generación y envío de oferta' },
+  { value: 'documentos', label: '2. Documentos', color: 'bg-purple-100 dark:bg-purple-900/30', description: 'Recopilación documental' },
+  { value: 'alta_imss', label: '3. Alta IMSS', color: 'bg-indigo-100 dark:bg-indigo-900/30', description: 'Registro ante el IMSS' },
+  { value: 'contrato', label: '4. Contrato', color: 'bg-cyan-100 dark:bg-cyan-900/30', description: 'Firma de contrato laboral' },
+  { value: 'onboarding', label: '5. Onboarding', color: 'bg-teal-100 dark:bg-teal-900/30', description: 'Integración y capacitación' },
+  { value: 'completado', label: '6. Completado', color: 'bg-green-100 dark:bg-green-900/30', description: 'Proceso finalizado' },
 ];
 
 export function KanbanAltas() {
@@ -133,43 +133,50 @@ export function KanbanAltas() {
           const stageProcesses = getProcessesByStage(stage.value);
           
           return (
-            <div key={stage.value} className="flex flex-col gap-3">
-              <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${stage.color}`} />
-                <h3 className="font-semibold text-sm" data-testid={`text-stage-${stage.value}`}>
-                  {stage.label}
-                </h3>
-                <Badge variant="secondary" data-testid={`badge-count-${stage.value}`}>
+            <div key={stage.value} className="flex flex-col gap-2">
+              <div className={`p-2 rounded-md ${stage.color} min-h-[88px] flex flex-col justify-between`}>
+                <div>
+                  <h3 className="font-semibold text-xs" data-testid={`text-stage-${stage.value}`}>
+                    {stage.label}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                    {stage.description}
+                  </p>
+                </div>
+                <Badge variant="outline" className="mt-1 text-xs w-fit" data-testid={`badge-count-${stage.value}`}>
                   {stageProcesses.length}
                 </Badge>
               </div>
 
-              <div className="space-y-2">
+              <div className="flex flex-col gap-2 min-h-[200px]">
                 {stageProcesses.map((process) => (
                   <Card 
                     key={process.id} 
-                    className="hover-elevate cursor-pointer transition-all"
+                    className="hover-elevate cursor-pointer"
                     data-testid={`card-process-${process.id}`}
                   >
-                    <CardHeader className="p-3 space-y-1">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-sm font-semibold truncate" data-testid={`text-process-name-${process.id}`}>
-                            {process.candidateName}
-                          </CardTitle>
-                          <CardDescription className="text-xs truncate" data-testid={`text-process-position-${process.id}`}>
+                    <CardHeader className="p-2 space-y-1">
+                      <div className="flex justify-between items-start gap-1">
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                          <Badge 
+                            variant="default"
+                            className="text-xs w-fit"
+                          >
                             {process.position}
-                          </CardDescription>
+                          </Badge>
+                          <span className="text-xs text-muted-foreground line-clamp-1">
+                            {process.department}
+                          </span>
                         </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button 
                               variant="ghost" 
                               size="icon" 
-                              className="h-7 w-7 -mr-1"
+                              className="h-5 w-5 flex-shrink-0"
                               data-testid={`button-menu-${process.id}`}
                             >
-                              <MoreVertical className="w-4 h-4" />
+                              <MoreVertical className="h-3 w-3" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
@@ -223,32 +230,25 @@ export function KanbanAltas() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
-                    </CardHeader>
-                    <CardContent className="p-3 pt-0 space-y-2">
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <User className="w-3 h-3" />
-                        <span className="truncate" data-testid={`text-process-dept-${process.id}`}>
-                          {process.department}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <DollarSign className="w-3 h-3" />
-                        <span data-testid={`text-process-salary-${process.id}`}>
-                          ${parseFloat(process.proposedSalary).toLocaleString('es-MX')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="w-3 h-3" />
+                      <CardTitle className="text-xs line-clamp-1" data-testid={`text-process-name-${process.id}`}>
+                        {process.candidateName}
+                      </CardTitle>
+                      <CardDescription className="text-xs line-clamp-1 flex items-center gap-1" data-testid={`text-process-salary-${process.id}`}>
+                        <DollarSign className="h-3 w-3" />
+                        ${parseFloat(process.proposedSalary).toLocaleString('es-MX')}
+                      </CardDescription>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Calendar className="h-3 w-3" />
                         <span data-testid={`text-process-date-${process.id}`}>
                           {process.startDate}
                         </span>
                       </div>
                       {process.contractType && (
-                        <Badge variant="outline" className="text-xs" data-testid={`badge-contract-${process.id}`}>
+                        <Badge variant="outline" className="text-xs mt-1" data-testid={`badge-contract-${process.id}`}>
                           {process.contractType}
                         </Badge>
                       )}
-                    </CardContent>
+                    </CardHeader>
                   </Card>
                 ))}
               </div>
@@ -272,6 +272,9 @@ export function KanbanAltas() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle data-testid="text-carta-dialog-title">Carta Oferta de Empleo</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Genera e imprime la carta oferta para el candidato
+            </p>
           </DialogHeader>
           {selectedProcessForCarta && (
             <CartaOferta process={selectedProcessForCarta} />
