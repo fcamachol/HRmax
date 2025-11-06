@@ -9,9 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { LegalCase } from "@shared/schema";
+import type { LegalCase, Employee } from "@shared/schema";
 import { 
   bajaCategories, 
   bajaTypes, 
@@ -106,7 +106,33 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
 
   const { toast } = useToast();
 
+  // Cargar lista de empleados activos
+  const { data: employees = [], isLoading: isLoadingEmployees } = useQuery<Employee[]>({
+    queryKey: ['/api/employees'],
+    enabled: open, // Solo cargar cuando el wizard está abierto
+  });
+
+  const activeEmployees = employees.filter(emp => emp.status === 'active');
+
   const isEditMode = !!existingCase;
+
+  // Manejar la selección de empleado del dropdown
+  const handleEmployeeSelect = (employeeId: string) => {
+    const employee = employees.find(emp => emp.id === employeeId);
+    if (employee) {
+      // Calcular salario diario desde el salario mensual
+      const salarioMensual = parseFloat(employee.salary);
+      const salarioDiario = (salarioMensual / 30).toFixed(2);
+
+      setFormData(prev => ({
+        ...prev,
+        employeeId: employee.id,
+        employeeName: `${employee.firstName} ${employee.lastName}`,
+        salarioDiario: salarioDiario,
+        empleadoFechaInicio: employee.startDate || "",
+      }));
+    }
+  };
 
   // Mapear estado de la baja a paso del wizard
   const getStepFromStatus = (status: string): number => {
@@ -349,7 +375,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
-        return formData.employeeName && formData.bajaCategory && formData.bajaType && formData.endDate;
+        return formData.employeeId && formData.employeeName && formData.bajaCategory && formData.bajaType && formData.endDate && formData.salarioDiario && formData.empleadoFechaInicio;
       case 2:
         return true; // Cálculo es opcional
       case 3:
@@ -416,27 +442,37 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                   <CardDescription>Datos básicos del empleado que causará baja</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="employeeName">Nombre del Empleado *</Label>
-                      <Input
-                        id="employeeName"
-                        value={formData.employeeName}
-                        onChange={(e) => updateFormData("employeeName", e.target.value)}
-                        placeholder="Nombre completo"
-                        data-testid="input-employee-name"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="employeeId">ID de Empleado (Opcional)</Label>
-                      <Input
-                        id="employeeId"
-                        value={formData.employeeId}
-                        onChange={(e) => updateFormData("employeeId", e.target.value)}
-                        placeholder="EMP-001"
-                        data-testid="input-employee-id"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="employeeSelect">Seleccionar Empleado *</Label>
+                    <Select
+                      value={formData.employeeId}
+                      onValueChange={handleEmployeeSelect}
+                      disabled={isLoadingEmployees || isEditMode}
+                    >
+                      <SelectTrigger data-testid="select-employee">
+                        <SelectValue placeholder={isLoadingEmployees ? "Cargando empleados..." : "Seleccionar empleado"}>
+                          {formData.employeeName || "Seleccionar empleado"}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeEmployees.length === 0 ? (
+                          <SelectItem value="no-employees" disabled>
+                            No hay empleados activos disponibles
+                          </SelectItem>
+                        ) : (
+                          activeEmployees.map((employee) => (
+                            <SelectItem key={employee.id} value={employee.id}>
+                              {employee.firstName} {employee.lastName} - {employee.position}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    {isEditMode && (
+                      <p className="text-xs text-muted-foreground">
+                        El empleado no puede cambiarse en modo edición
+                      </p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -502,7 +538,9 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                         onChange={(e) => updateFormData("empleadoFechaInicio", e.target.value)}
                         data-testid="input-empleado-fecha-inicio"
                       />
-                      <p className="text-xs text-muted-foreground">Primer día de trabajo del empleado</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.employeeId ? "Auto-llenado del registro del empleado (editable)" : "Primer día de trabajo del empleado"}
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="endDate">Fecha de Terminación *</Label>
@@ -528,7 +566,9 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                         placeholder="0.00"
                         data-testid="input-salario-diario"
                       />
-                      <p className="text-xs text-muted-foreground">Incluye prestaciones y aguinaldo</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.employeeId ? "Auto-calculado desde salario mensual (editable)" : "Incluye prestaciones y aguinaldo"}
+                      </p>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="startDate">Fecha de Inicio del Caso</Label>
