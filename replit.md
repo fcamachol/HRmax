@@ -155,7 +155,11 @@ The Bajas module implements a comprehensive employee termination workflow that a
    - Accounts for days already paid/taken in current year
 
 2. **Multi-Step Wizard** (`client/src/components/BajaWizard.tsx`)
-   - Step 1: Basic Information (employee, termination type, dates, salary, employment start date)
+   - Step 1: Basic Information with employee selection dropdown
+     - Employee dropdown loads active employees from database
+     - Auto-fills employee data: salarioDiario (calculated from monthly salary), empleadoFechaInicio
+     - Manual entry fields for termination type, dates, and additional details
+     - Dropdown disabled in edit mode to prevent changing employee after creation
    - Step 2: Automatic Calculation Display with approval workflow
    - Step 3: Documentation checklist
    - Step 4: Final authorization and signature
@@ -181,11 +185,14 @@ The Bajas module implements a comprehensive employee termination workflow that a
 - `calculoData` (jsonb) - Complete calculation breakdown storage
 
 **Technical Implementation**:
+- Employee selection via dropdown: useQuery loads active employees from GET /api/employees
+- Auto-fill logic: handleEmployeeSelect calculates salarioDiario as (salary/30).toFixed(2) and populates empleadoFechaInicio
 - Reactive calculations using useMemo - recalculates when salary/dates/type change
 - Zod validation for PATCH updates (updateLegalCaseSchema)
 - Early return validation in CartaFiniquito to prevent "Invalid Date" errors
 - Modal state cleanup to prevent UI blocking
 - Type-safe calculation functions shared between frontend and backend
+- salarioDiario sent as string (not number) to match Drizzle decimal field expectations
 
 ### Altas Module - Employee Hiring Process Workflow
 
