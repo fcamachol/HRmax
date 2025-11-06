@@ -258,6 +258,81 @@ The Altas module implements a comprehensive hiring process workflow that manages
 - Document checklist stored as JSONB for flexibility
 - Stage transitions tracked for compliance and auditing
 
+**Document Upload & Management** (November 2025):
+
+The Altas module has been enhanced with comprehensive document upload capabilities and special NSS handling:
+
+1. **DocumentInfo Structure**:
+   - Changed from simple `string[]` to rich `DocumentInfo[]` objects
+   - Structure: `{ name: string, uploaded: boolean, url?: string, uploadedAt?: string }`
+   - Allows tracking of upload status, file URLs, and timestamps
+   - Optional fields (url, uploadedAt) enable backward compatibility
+
+2. **Enhanced UI for Step 3 - Documentation**:
+   - Individual Card components for each required document
+   - Checkbox to mark documents as received
+   - "Recibido" badge appears when document is marked
+   - "Subir" button with ObjectUploader integration for file uploads
+   - Download link and "Remover" button when document has been uploaded
+   - Visual feedback for upload completion and errors
+
+3. **Special NSS Handling**:
+   - NSS captured in Step 1 (Personal Information)
+   - In Step 3 (Documentation), NSS is displayed as text instead of requiring upload
+   - Shows captured NSS value (e.g., "12345678901") with checkbox
+   - No upload button for NSS (it's not a physical document)
+   - If NSS not captured in Step 1, shows input field for manual entry
+   - Checkbox allows marking NSS as "verified" without file upload
+
+4. **Object Storage Integration**:
+   - Uses Replit Object Storage for secure file hosting
+   - ObjectUploader component (`client/src/components/ObjectUploader.tsx`)
+   - Unique file input IDs using React `useId` hook to prevent conflicts
+   - Supports multiple simultaneous uploads
+   - Upload process: POST to `/api/object-storage/upload` → stores in PRIVATE_OBJECT_DIR
+   - Returns uploadURL for permanent storage reference
+   - Error handling and validation for upload completion
+
+5. **Backward Compatibility & Data Migration**:
+   - Legacy hiring processes used `documentsChecklist: string[]`
+   - New processes use `documentsChecklist: DocumentInfo[]`
+   - Migration logic in `useEffect` of AltaWizard.tsx:
+     - Detects legacy string[] data using `typeof docs[0] === 'string'`
+     - Converts to DocumentInfo[] with `uploaded: true` flag
+     - Handles mixed data scenarios gracefully
+   - JSONB field in PostgreSQL accommodates both formats transparently
+
+6. **Required Documents**:
+   - Identificación oficial
+   - Comprobante de domicilio
+   - Acta de nacimiento
+   - NSS (special handling - text display only)
+   - RFC
+   - CURP
+   - Currículum vitae
+   - Carta de recomendación
+   - Estudios (certificado o título)
+   - Certificado médico
+
+7. **State Management**:
+   - Toggle function clears `url` and `uploadedAt` when unchecking document
+   - Prevents stale data from persisting
+   - Upload completion validates response before marking as uploaded
+   - Consistent state across wizard steps and Kanban board
+
+**Object Storage Configuration**:
+- Requires user to configure Object Storage in Replit
+- Uses environment variables: `PRIVATE_OBJECT_DIR`, `PUBLIC_OBJECT_SEARCH_PATHS`
+- File uploads will not function until Object Storage is properly configured
+- Setup instructions provided in `OBJECT_STORAGE_SETUP.md`
+
+**Technical Notes**:
+- ObjectUploader generates unique IDs per instance using React's `useId` hook
+- Supports prop `inputId` for custom ID override if needed
+- Upload validation prevents false positive completions
+- Error handling with toast notifications for user feedback
+- Compatible with existing Kanban workflow and process editing
+
 ### Future Considerations
 - Authentication system needs to be fully implemented
 - CFDI (Mexican electronic invoicing) integration may be required
