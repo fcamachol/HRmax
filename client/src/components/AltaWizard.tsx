@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { HiringProcess } from "@shared/schema";
+import { ObjectUploader } from "@/components/ObjectUploader";
 import { 
   CheckCircle2, 
   Circle, 
@@ -21,13 +22,24 @@ import {
   FileText,
   Briefcase,
   ClipboardCheck,
-  UserCheck
+  UserCheck,
+  Upload,
+  FileCheck,
+  Download,
+  X
 } from "lucide-react";
 
 interface AltaWizardProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingProcess?: HiringProcess | null;
+}
+
+interface DocumentInfo {
+  name: string;
+  uploaded: boolean;
+  url?: string;
+  uploadedAt?: string;
 }
 
 interface AltaFormData {
@@ -46,7 +58,7 @@ interface AltaFormData {
   nss: string;
   notes: string;
   // Documentos
-  documentsChecklist: string[];
+  documentsChecklist: DocumentInfo[];
 }
 
 const WIZARD_STEPS = [
@@ -102,7 +114,27 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
 
   useEffect(() => {
     if (open && existingProcess) {
-      const docs = existingProcess.documentsChecklist as string[] | null;
+      const docs = existingProcess.documentsChecklist;
+      let normalizedDocs: DocumentInfo[];
+      
+      // Handle legacy data migration: convert string[] to DocumentInfo[]
+      if (docs && Array.isArray(docs) && docs.length > 0 && typeof docs[0] === 'string') {
+        // Legacy data: array of strings
+        normalizedDocs = (docs as string[]).map(name => ({
+          name,
+          uploaded: true, // They were marked, so consider them uploaded
+        }));
+      } else if (docs && Array.isArray(docs) && docs.length > 0) {
+        // New data: array of DocumentInfo
+        normalizedDocs = docs as DocumentInfo[];
+      } else {
+        // No data: initialize with default documents
+        normalizedDocs = DOCUMENTOS_REQUERIDOS.map(name => ({
+          name,
+          uploaded: false
+        }));
+      }
+      
       setFormData({
         nombre: existingProcess.nombre || "",
         apellidoPaterno: existingProcess.apellidoPaterno || "",
@@ -118,7 +150,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         curp: existingProcess.curp || "",
         nss: existingProcess.nss || "",
         notes: existingProcess.notes || "",
-        documentsChecklist: docs || [],
+        documentsChecklist: normalizedDocs,
       });
     } else if (open && !existingProcess) {
       resetWizard();
@@ -142,7 +174,10 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       curp: "",
       nss: "",
       notes: "",
-      documentsChecklist: [],
+      documentsChecklist: DOCUMENTOS_REQUERIDOS.map(name => ({
+        name,
+        uploaded: false
+      })),
     });
   };
 
@@ -255,14 +290,90 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     saveProcessMutation.mutate(formData);
   };
 
-  const toggleDocument = (doc: string) => {
+  const toggleDocument = (docName: string) => {
     setFormData(prev => {
-      const checked = prev.documentsChecklist.includes(doc);
+      const docs = [...prev.documentsChecklist];
+      const docIndex = docs.findIndex(d => d.name === docName);
+      if (docIndex >= 0) {
+        const currentlyUploaded = docs[docIndex].uploaded;
+        docs[docIndex] = {
+          name: docs[docIndex].name,
+          uploaded: !currentlyUploaded,
+          // Clear url and uploadedAt when marking as not uploaded
+          url: currentlyUploaded ? undefined : docs[docIndex].url,
+          uploadedAt: currentlyUploaded ? undefined : docs[docIndex].uploadedAt
+        };
+      }
       return {
         ...prev,
-        documentsChecklist: checked
-          ? prev.documentsChecklist.filter(d => d !== doc)
-          : [...prev.documentsChecklist, doc]
+        documentsChecklist: docs
+      };
+    });
+  };
+
+  const handleDocumentUpload = async (docName: string) => {
+    try {
+      const response = await apiRequest("POST", "/api/objects/upload");
+      const data = await response.json();
+      return { method: "PUT" as const, url: data.uploadURL };
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "No se pudo obtener URL de carga",
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleDocumentUploadComplete = (docName: string, result: { uploadURL: string }) => {
+    // Validate that upload actually succeeded
+    if (!result || !result.uploadURL) {
+      toast({
+        title: "Error",
+        description: "No se pudo completar la carga del documento",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setFormData(prev => {
+      const docs = [...prev.documentsChecklist];
+      const docIndex = docs.findIndex(d => d.name === docName);
+      if (docIndex >= 0) {
+        docs[docIndex] = {
+          ...docs[docIndex],
+          uploaded: true,
+          url: result.uploadURL,
+          uploadedAt: new Date().toISOString()
+        };
+      }
+      return {
+        ...prev,
+        documentsChecklist: docs
+      };
+    });
+    toast({
+      title: "Documento subido",
+      description: `${docName} se ha subido correctamente`,
+    });
+  };
+
+  const handleRemoveDocument = (docName: string) => {
+    setFormData(prev => {
+      const docs = [...prev.documentsChecklist];
+      const docIndex = docs.findIndex(d => d.name === docName);
+      if (docIndex >= 0) {
+        docs[docIndex] = {
+          ...docs[docIndex],
+          uploaded: false,
+          url: undefined,
+          uploadedAt: undefined
+        };
+      }
+      return {
+        ...prev,
+        documentsChecklist: docs
       };
     });
   };
@@ -451,24 +562,108 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
           <div className="space-y-4">
             <div>
               <h4 className="text-sm font-medium mb-3">Documentos Requeridos</h4>
-              <div className="space-y-2">
-                {DOCUMENTOS_REQUERIDOS.map((doc) => (
-                  <div key={doc} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={doc}
-                      data-testid={`checkbox-${doc.toLowerCase().replace(/ /g, '-')}`}
-                      checked={formData.documentsChecklist.includes(doc)}
-                      onCheckedChange={() => toggleDocument(doc)}
-                    />
-                    <Label
-                      htmlFor={doc}
-                      className="text-sm font-normal cursor-pointer"
-                      data-testid={`label-doc-${doc.toLowerCase().replace(/ /g, '-')}`}
-                    >
-                      {doc}
-                    </Label>
-                  </div>
-                ))}
+              <p className="text-sm text-muted-foreground mb-4">
+                Para cada documento, puedes marcarlo como recibido o subir el archivo
+              </p>
+              <div className="space-y-3">
+                {formData.documentsChecklist.map((doc) => {
+                  const isNSS = doc.name === "Número de seguro social";
+                  const hasNSSFromStep1 = formData.nss && formData.nss.trim().length > 0;
+                  
+                  return (
+                    <Card key={doc.name} className="p-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 flex-1">
+                          <Checkbox
+                            id={doc.name}
+                            data-testid={`checkbox-${doc.name.toLowerCase().replace(/ /g, '-')}`}
+                            checked={doc.uploaded}
+                            onCheckedChange={() => toggleDocument(doc.name)}
+                          />
+                          <div className="flex-1">
+                            <Label
+                              htmlFor={doc.name}
+                              className="text-sm font-medium cursor-pointer flex items-center gap-2"
+                              data-testid={`label-doc-${doc.name.toLowerCase().replace(/ /g, '-')}`}
+                            >
+                              {doc.name}
+                              {doc.uploaded && (
+                                <Badge variant="default" className="ml-2">
+                                  <FileCheck className="w-3 h-3 mr-1" />
+                                  Recibido
+                                </Badge>
+                              )}
+                            </Label>
+                            
+                            {/* Manejo especial para NSS */}
+                            {isNSS && !hasNSSFromStep1 && (
+                              <div className="mt-2">
+                                <Input
+                                  placeholder="Capturar NSS (11 dígitos)"
+                                  value={formData.nss}
+                                  onChange={(e) => setFormData({ ...formData, nss: e.target.value })}
+                                  maxLength={11}
+                                  className="text-sm"
+                                  data-testid="input-nss-step3"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  No se capturó en el paso 1, puedes capturarlo aquí
+                                </p>
+                              </div>
+                            )}
+                            {isNSS && hasNSSFromStep1 && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                NSS: {formData.nss} (capturado en paso 1)
+                              </p>
+                            )}
+                            
+                            {doc.url && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <a 
+                                  href={doc.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                                  data-testid={`link-download-${doc.name.toLowerCase().replace(/ /g, '-')}`}
+                                >
+                                  <Download className="w-3 h-3" />
+                                  Ver documento
+                                </a>
+                                <span className="text-xs text-muted-foreground">
+                                  Subido: {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('es-MX') : ''}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {!doc.url && !isNSS && (
+                            <ObjectUploader
+                              onGetUploadParameters={() => handleDocumentUpload(doc.name)}
+                              onComplete={(result) => handleDocumentUploadComplete(doc.name, result)}
+                              buttonClassName="h-8"
+                            >
+                              <Upload className="w-4 h-4 mr-1" />
+                              Subir
+                            </ObjectUploader>
+                          )}
+                          {doc.url && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveDocument(doc.name)}
+                              data-testid={`button-remove-${doc.name.toLowerCase().replace(/ /g, '-')}`}
+                              className="h-8 w-8"
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -520,17 +715,18 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
                   <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
                 </div>
-                {formData.documentsChecklist.length > 0 && (
+                {formData.documentsChecklist.filter(d => d.uploaded).length > 0 && (
                   <>
                     <Separator />
                     <div>
                       <h4 className="font-medium text-sm text-muted-foreground mb-2">
-                        Documentos Marcados ({formData.documentsChecklist.length})
+                        Documentos Recibidos ({formData.documentsChecklist.filter(d => d.uploaded).length})
                       </h4>
                       <div className="flex flex-wrap gap-2">
-                        {formData.documentsChecklist.map((doc) => (
-                          <Badge key={doc} variant="secondary" data-testid={`badge-doc-${doc.toLowerCase().replace(/ /g, '-')}`}>
-                            {doc}
+                        {formData.documentsChecklist.filter(d => d.uploaded).map((doc) => (
+                          <Badge key={doc.name} variant="secondary" data-testid={`badge-doc-${doc.name.toLowerCase().replace(/ /g, '-')}`}>
+                            <FileCheck className="w-3 h-3 mr-1" />
+                            {doc.name}
                           </Badge>
                         ))}
                       </div>

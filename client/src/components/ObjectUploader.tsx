@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,6 +12,7 @@ interface ObjectUploaderProps {
   onComplete?: (result: { uploadURL: string }) => void;
   buttonClassName?: string;
   children: React.ReactNode;
+  inputId?: string; // Allow custom id or auto-generate
 }
 
 /**
@@ -24,9 +25,12 @@ export function ObjectUploader({
   onComplete,
   buttonClassName,
   children,
+  inputId,
 }: ObjectUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
+  const autoId = useId();
+  const fileInputId = inputId || `file-upload-${autoId}`;
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -75,18 +79,18 @@ export function ObjectUploader({
     <div>
       <input
         type="file"
-        id="file-upload-input"
+        id={fileInputId}
         className="hidden"
         onChange={handleFileSelect}
         accept="image/*,application/pdf"
         disabled={isUploading}
       />
-      <label htmlFor="file-upload-input">
+      <label htmlFor={fileInputId}>
         <Button
           type="button"
           onClick={(e) => {
             e.preventDefault();
-            document.getElementById("file-upload-input")?.click();
+            document.getElementById(fileInputId)?.click();
           }}
           className={buttonClassName}
           disabled={isUploading}
