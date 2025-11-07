@@ -16,16 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  rfc: string;
-  department: string;
-  position: string;
-  status: string;
-}
+import type { Employee } from "@shared/schema";
 
 interface EmployeeTableProps {
   employees: Employee[];
@@ -35,34 +26,34 @@ interface EmployeeTableProps {
 }
 
 export function EmployeeTable({ employees, onView, onEdit, onDelete }: EmployeeTableProps) {
-  const getStatusVariant = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "active":
+  const getStatusVariant = (status: string | null) => {
+    switch (status?.toLowerCase()) {
+      case "activo":
         return "default";
-      case "inactive":
+      case "inactivo":
         return "secondary";
-      case "on leave":
+      case "licencia":
         return "outline";
       default:
         return "secondary";
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "active":
+  const getStatusLabel = (status: string | null) => {
+    switch (status?.toLowerCase()) {
+      case "activo":
         return "Activo";
-      case "inactive":
+      case "inactivo":
         return "Inactivo";
-      case "on leave":
+      case "licencia":
         return "En Licencia";
       default:
-        return status;
+        return status || "N/A";
     }
   };
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  const getInitials = (nombre: string, apellidoPaterno: string) => {
+    return `${nombre.charAt(0)}${apellidoPaterno.charAt(0)}`.toUpperCase();
   };
 
   return (
@@ -85,23 +76,23 @@ export function EmployeeTable({ employees, onView, onEdit, onDelete }: EmployeeT
               <TableCell>
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="text-xs">
-                    {getInitials(employee.firstName, employee.lastName)}
+                    {getInitials(employee.nombre, employee.apellidoPaterno)}
                   </AvatarFallback>
                 </Avatar>
               </TableCell>
               <TableCell className="font-medium" data-testid={`text-employee-name-${employee.id}`}>
-                {employee.firstName} {employee.lastName}
+                {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ""}
               </TableCell>
               <TableCell>
                 <span className="font-mono text-sm uppercase tracking-wide">
-                  {employee.rfc}
+                  {employee.rfc || "N/A"}
                 </span>
               </TableCell>
-              <TableCell>{employee.department}</TableCell>
-              <TableCell>{employee.position}</TableCell>
+              <TableCell>{employee.departamento}</TableCell>
+              <TableCell>{employee.puesto}</TableCell>
               <TableCell>
-                <Badge variant={getStatusVariant(employee.status)} data-testid={`badge-status-${employee.id}`}>
-                  {getStatusLabel(employee.status)}
+                <Badge variant={getStatusVariant(employee.estatus)} data-testid={`badge-status-${employee.id}`}>
+                  {getStatusLabel(employee.estatus)}
                 </Badge>
               </TableCell>
               <TableCell>

@@ -26,9 +26,11 @@ export default function Employees() {
 
   const filteredEmployees = employees.filter(
     (emp) =>
-      emp.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      emp.rfc.toLowerCase().includes(searchQuery.toLowerCase())
+      emp.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      emp.apellidoPaterno.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (emp.apellidoMaterno?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      (emp.rfc?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
+      emp.numeroEmpleado.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (

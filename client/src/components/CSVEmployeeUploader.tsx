@@ -24,18 +24,19 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface CSVRow {
-  firstName: string;
-  lastName: string;
-  rfc: string;
-  curp: string;
-  nss: string;
+  numeroEmpleado: string;
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno?: string;
   email: string;
-  phone?: string;
-  department: string;
-  position: string;
-  salary: string;
-  contractType: string;
-  startDate: string;
+  telefono: string;
+  departamento: string;
+  puesto: string;
+  salarioBrutoMensual: string;
+  fechaIngreso: string;
+  rfc?: string;
+  curp?: string;
+  nss?: string;
 }
 
 interface ValidationError {
@@ -61,50 +62,38 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     const rowErrors: ValidationError[] = [];
     const rowNum = index + 2;
 
-    if (!row.firstName?.trim()) {
-      rowErrors.push({ row: rowNum, field: "firstName", message: "Nombre requerido" });
+    if (!row.numeroEmpleado?.trim()) {
+      rowErrors.push({ row: rowNum, field: "numeroEmpleado", message: "Número de empleado requerido" });
     }
-    if (!row.lastName?.trim()) {
-      rowErrors.push({ row: rowNum, field: "lastName", message: "Apellido requerido" });
+    if (!row.nombre?.trim()) {
+      rowErrors.push({ row: rowNum, field: "nombre", message: "Nombre requerido" });
     }
-    if (!row.rfc?.trim()) {
-      rowErrors.push({ row: rowNum, field: "rfc", message: "RFC requerido" });
-    } else if (row.rfc.length !== 13) {
-      rowErrors.push({ row: rowNum, field: "rfc", message: "RFC debe tener 13 caracteres" });
-    }
-    if (!row.curp?.trim()) {
-      rowErrors.push({ row: rowNum, field: "curp", message: "CURP requerido" });
-    } else if (row.curp.length !== 18) {
-      rowErrors.push({ row: rowNum, field: "curp", message: "CURP debe tener 18 caracteres" });
-    }
-    if (!row.nss?.trim()) {
-      rowErrors.push({ row: rowNum, field: "nss", message: "NSS requerido" });
-    } else if (row.nss.length !== 11) {
-      rowErrors.push({ row: rowNum, field: "nss", message: "NSS debe tener 11 caracteres" });
+    if (!row.apellidoPaterno?.trim()) {
+      rowErrors.push({ row: rowNum, field: "apellidoPaterno", message: "Apellido paterno requerido" });
     }
     if (!row.email?.trim()) {
       rowErrors.push({ row: rowNum, field: "email", message: "Email requerido" });
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
       rowErrors.push({ row: rowNum, field: "email", message: "Email inválido" });
     }
-    if (!row.department?.trim()) {
-      rowErrors.push({ row: rowNum, field: "department", message: "Departamento requerido" });
+    if (!row.telefono?.trim()) {
+      rowErrors.push({ row: rowNum, field: "telefono", message: "Teléfono requerido" });
     }
-    if (!row.position?.trim()) {
-      rowErrors.push({ row: rowNum, field: "position", message: "Puesto requerido" });
+    if (!row.departamento?.trim()) {
+      rowErrors.push({ row: rowNum, field: "departamento", message: "Departamento requerido" });
     }
-    if (!row.salary?.trim()) {
-      rowErrors.push({ row: rowNum, field: "salary", message: "Salario requerido" });
-    } else if (isNaN(parseFloat(row.salary))) {
-      rowErrors.push({ row: rowNum, field: "salary", message: "Salario debe ser un número" });
+    if (!row.puesto?.trim()) {
+      rowErrors.push({ row: rowNum, field: "puesto", message: "Puesto requerido" });
     }
-    if (!row.contractType?.trim()) {
-      rowErrors.push({ row: rowNum, field: "contractType", message: "Tipo de contrato requerido" });
+    if (!row.salarioBrutoMensual?.trim()) {
+      rowErrors.push({ row: rowNum, field: "salarioBrutoMensual", message: "Salario requerido" });
+    } else if (isNaN(parseFloat(row.salarioBrutoMensual))) {
+      rowErrors.push({ row: rowNum, field: "salarioBrutoMensual", message: "Salario debe ser un número" });
     }
-    if (!row.startDate?.trim()) {
-      rowErrors.push({ row: rowNum, field: "startDate", message: "Fecha de ingreso requerida" });
-    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.startDate)) {
-      rowErrors.push({ row: rowNum, field: "startDate", message: "Fecha debe estar en formato YYYY-MM-DD" });
+    if (!row.fechaIngreso?.trim()) {
+      rowErrors.push({ row: rowNum, field: "fechaIngreso", message: "Fecha de ingreso requerida" });
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.fechaIngreso)) {
+      rowErrors.push({ row: rowNum, field: "fechaIngreso", message: "Fecha debe estar en formato YYYY-MM-DD" });
     }
 
     return rowErrors;
@@ -121,18 +110,19 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       skipEmptyLines: true,
       transformHeader: (header) => {
         const headerMap: Record<string, string> = {
-          'nombre': 'firstName',
-          'apellido': 'lastName',
-          'apellidos': 'lastName',
-          'departamento': 'department',
-          'puesto': 'position',
-          'salario': 'salary',
-          'tipo_contrato': 'contractType',
-          'tipo de contrato': 'contractType',
-          'fecha_ingreso': 'startDate',
-          'fecha de ingreso': 'startDate',
-          'telefono': 'phone',
-          'teléfono': 'phone',
+          'numero_empleado': 'numeroEmpleado',
+          'numero empleado': 'numeroEmpleado',
+          'apellido_paterno': 'apellidoPaterno',
+          'apellido paterno': 'apellidoPaterno',
+          'apellido_materno': 'apellidoMaterno',
+          'apellido materno': 'apellidoMaterno',
+          'salario_bruto_mensual': 'salarioBrutoMensual',
+          'salario bruto mensual': 'salarioBrutoMensual',
+          'salario': 'salarioBrutoMensual',
+          'fecha_ingreso': 'fechaIngreso',
+          'fecha de ingreso': 'fechaIngreso',
+          'telefono': 'telefono',
+          'teléfono': 'telefono',
           'correo': 'email',
         };
 
@@ -182,21 +172,20 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     mutationFn: async (employees: CSVRow[]) => {
       const transformedEmployees = employees.map((emp) => {
         return {
-          firstName: emp.firstName.trim(),
-          lastName: emp.lastName.trim(),
-          rfc: emp.rfc.trim(),
-          curp: emp.curp.trim(),
-          nss: emp.nss.trim(),
+          numeroEmpleado: emp.numeroEmpleado.trim(),
+          nombre: emp.nombre.trim(),
+          apellidoPaterno: emp.apellidoPaterno.trim(),
+          apellidoMaterno: emp.apellidoMaterno?.trim() || null,
           email: emp.email.trim(),
-          phone: emp.phone?.trim() || "",
-          department: emp.department.trim(),
-          position: emp.position.trim(),
-          salary: emp.salary,
-          contractType: emp.contractType.trim(),
-          startDate: emp.startDate.trim(),
-          status: "active",
-          vacationDays: 12,
-          sickDays: 0,
+          telefono: emp.telefono.trim(),
+          departamento: emp.departamento.trim(),
+          puesto: emp.puesto.trim(),
+          salarioBrutoMensual: emp.salarioBrutoMensual.trim(),
+          fechaIngreso: emp.fechaIngreso.trim(),
+          rfc: emp.rfc?.trim() || null,
+          curp: emp.curp?.trim() || null,
+          nss: emp.nss?.trim() || null,
+          estatus: "activo",
         };
       });
 
@@ -242,9 +231,9 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
 
   const downloadTemplate = () => {
     const template = [
-      "firstName,lastName,rfc,curp,nss,email,phone,department,position,salary,contractType,startDate",
-      "Juan,Pérez Martínez,PEXJ900215AB1,PEXJ900215HDFRNS01,12345678901,juan.perez@example.com,5512345678,Ventas,Gerente,25000,planta,2024-01-15",
-      "María,García López,GACM850101CD2,GACM850101MDFRNS02,98765432109,maria.garcia@example.com,5598765432,IT,Desarrollador,30000,planta,2024-02-01",
+      "numeroEmpleado,nombre,apellidoPaterno,apellidoMaterno,email,telefono,departamento,puesto,salarioBrutoMensual,fechaIngreso,rfc,curp,nss",
+      "EMP001,Juan,Pérez,Martínez,juan.perez@example.com,5512345678,Ventas,Gerente,25000,2024-01-15,PEXJ900215AB1,PEXJ900215HDFRNS01,12345678901",
+      "EMP002,María,García,López,maria.garcia@example.com,5598765432,IT,Desarrollador,30000,2024-02-01,GACM850101CD2,GACM850101MDFRNS02,98765432109",
     ].join("\n");
 
     const blob = new Blob([template], { type: "text/csv" });
@@ -311,10 +300,10 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Formato del CSV:</strong> El archivo debe contener las siguientes columnas:
-                firstName, lastName, rfc, curp, nss, email, phone, department, position, salary, contractType, startDate.
+                <strong>Formato del CSV:</strong> El archivo debe contener las siguientes columnas mínimas:
+                numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
                 <br />
-                También se aceptan nombres en español: nombre, apellido, departamento, puesto, salario, etc.
+                Opcionales: apellidoMaterno, rfc, curp, nss.
               </AlertDescription>
             </Alert>
           )}
@@ -357,9 +346,8 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-12">#</TableHead>
+                      <TableHead>Num. Emp</TableHead>
                       <TableHead>Nombre</TableHead>
-                      <TableHead>RFC</TableHead>
-                      <TableHead>CURP</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Departamento</TableHead>
                       <TableHead>Puesto</TableHead>
@@ -379,13 +367,12 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                           data-testid={`row-csv-${index}`}
                         >
                           <TableCell>{index + 1}</TableCell>
-                          <TableCell>{row.firstName} {row.lastName}</TableCell>
-                          <TableCell>{row.rfc}</TableCell>
-                          <TableCell>{row.curp}</TableCell>
+                          <TableCell>{row.numeroEmpleado}</TableCell>
+                          <TableCell>{row.nombre} {row.apellidoPaterno}</TableCell>
                           <TableCell>{row.email}</TableCell>
-                          <TableCell>{row.department}</TableCell>
-                          <TableCell>{row.position}</TableCell>
-                          <TableCell>${row.salary}</TableCell>
+                          <TableCell>{row.departamento}</TableCell>
+                          <TableCell>{row.puesto}</TableCell>
+                          <TableCell>${row.salarioBrutoMensual}</TableCell>
                           <TableCell>
                             {hasErrors ? (
                               <div className="flex items-center gap-2">

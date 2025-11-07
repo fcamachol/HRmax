@@ -133,7 +133,7 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(employees)
-      .where(eq(employees.status, 'active'));
+      .where(eq(employees.estatus, 'activo'));
   }
 
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {

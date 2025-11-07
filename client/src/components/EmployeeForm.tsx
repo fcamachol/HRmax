@@ -1,5 +1,6 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { insertEmployeeSchema } from "@shared/schema";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,20 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const employeeFormSchema = z.object({
-  firstName: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
-  lastName: z.string().min(2, "El apellido debe tener al menos 2 caracteres"),
-  rfc: z.string().length(13, "El RFC debe tener 13 caracteres").toUpperCase(),
-  curp: z.string().length(18, "El CURP debe tener 18 caracteres").toUpperCase(),
-  nss: z.string().length(11, "El NSS debe tener 11 dígitos"),
-  email: z.string().email("Email inválido"),
-  phone: z.string().min(10, "El teléfono debe tener al menos 10 dígitos"),
-  department: z.string().min(1, "Selecciona un departamento"),
-  position: z.string().min(1, "El puesto es requerido"),
-  salary: z.string().min(1, "El salario es requerido"),
-  contractType: z.string().min(1, "Selecciona un tipo de contrato"),
-  startDate: z.string().min(1, "La fecha de ingreso es requerida"),
-});
+const employeeFormSchema = insertEmployeeSchema;
 
 type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
@@ -45,18 +33,20 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: defaultValues || {
-      firstName: "",
-      lastName: "",
+      numeroEmpleado: "",
+      nombre: "",
+      apellidoPaterno: "",
+      apellidoMaterno: "",
       rfc: "",
       curp: "",
       nss: "",
       email: "",
-      phone: "",
-      department: "",
-      position: "",
-      salary: "",
-      contractType: "",
-      startDate: "",
+      telefono: "",
+      departamento: "",
+      puesto: "",
+      salarioBrutoMensual: "",
+      tipoContrato: "indeterminado",
+      fechaIngreso: "",
     },
   });
 
@@ -66,12 +56,12 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           <FormField
             control={form.control}
-            name="firstName"
+            name="numeroEmpleado"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Nombre(s) *</FormLabel>
+                <FormLabel>Número de Empleado *</FormLabel>
                 <FormControl>
-                  <Input placeholder="María" {...field} data-testid="input-firstName" />
+                  <Input placeholder="EMP001" {...field} data-testid="input-numeroEmpleado" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -80,12 +70,40 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="lastName"
+            name="nombre"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Apellido(s) *</FormLabel>
+                <FormLabel>Nombre(s) *</FormLabel>
                 <FormControl>
-                  <Input placeholder="García López" {...field} data-testid="input-lastName" />
+                  <Input placeholder="María" {...field} data-testid="input-nombre" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="apellidoPaterno"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Apellido Paterno *</FormLabel>
+                <FormControl>
+                  <Input placeholder="García" {...field} data-testid="input-apellidoPaterno" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="apellidoMaterno"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Apellido Materno</FormLabel>
+                <FormControl>
+                  <Input placeholder="López" {...field} value={field.value || ""} data-testid="input-apellidoMaterno" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -97,13 +115,14 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
             name="rfc"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>RFC *</FormLabel>
+                <FormLabel>RFC</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="GACM850101AB1"
                     className="font-mono uppercase"
                     maxLength={13}
                     {...field}
+                    value={field.value || ""}
                     data-testid="input-rfc"
                   />
                 </FormControl>
@@ -117,13 +136,14 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
             name="curp"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>CURP *</FormLabel>
+                <FormLabel>CURP</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="GACM850101MDFRLR09"
                     className="font-mono uppercase"
                     maxLength={18}
                     {...field}
+                    value={field.value || ""}
                     data-testid="input-curp"
                   />
                 </FormControl>
@@ -137,13 +157,14 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
             name="nss"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>NSS *</FormLabel>
+                <FormLabel>NSS</FormLabel>
                 <FormControl>
                   <Input
                     placeholder="12345678901"
                     className="font-mono"
                     maxLength={11}
                     {...field}
+                    value={field.value || ""}
                     data-testid="input-nss"
                   />
                 </FormControl>
@@ -173,12 +194,12 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="phone"
+            name="telefono"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Teléfono *</FormLabel>
                 <FormControl>
-                  <Input placeholder="5512345678" {...field} data-testid="input-phone" />
+                  <Input placeholder="5512345678" {...field} data-testid="input-telefono" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -187,22 +208,22 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="department"
+            name="departamento"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Departamento *</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <SelectTrigger data-testid="select-department">
+                    <SelectTrigger data-testid="select-departamento">
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="ventas">Ventas</SelectItem>
-                    <SelectItem value="it">IT</SelectItem>
-                    <SelectItem value="rrhh">RRHH</SelectItem>
-                    <SelectItem value="finanzas">Finanzas</SelectItem>
-                    <SelectItem value="operaciones">Operaciones</SelectItem>
+                    <SelectItem value="Ventas">Ventas</SelectItem>
+                    <SelectItem value="IT">IT</SelectItem>
+                    <SelectItem value="RRHH">RRHH</SelectItem>
+                    <SelectItem value="Finanzas">Finanzas</SelectItem>
+                    <SelectItem value="Operaciones">Operaciones</SelectItem>
                   </SelectContent>
                 </Select>
                 <FormMessage />
@@ -212,12 +233,12 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="position"
+            name="puesto"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Puesto *</FormLabel>
                 <FormControl>
-                  <Input placeholder="Gerente de Ventas" {...field} data-testid="input-position" />
+                  <Input placeholder="Gerente de Ventas" {...field} data-testid="input-puesto" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -226,16 +247,17 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="salary"
+            name="salarioBrutoMensual"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Salario Mensual (MXN) *</FormLabel>
+                <FormLabel>Salario Bruto Mensual (MXN) *</FormLabel>
                 <FormControl>
                   <Input
                     type="number"
                     placeholder="15000.00"
                     {...field}
-                    data-testid="input-salary"
+                    value={field.value || ""}
+                    data-testid="input-salarioBrutoMensual"
                   />
                 </FormControl>
                 <FormMessage />
@@ -245,18 +267,18 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="contractType"
+            name="tipoContrato"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Tipo de Contrato *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormLabel>Tipo de Contrato</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value || "indeterminado"}>
                   <FormControl>
-                    <SelectTrigger data-testid="select-contractType">
+                    <SelectTrigger data-testid="select-tipoContrato">
                       <SelectValue placeholder="Selecciona" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="indefinido">Indefinido</SelectItem>
+                    <SelectItem value="indeterminado">Indeterminado</SelectItem>
                     <SelectItem value="temporal">Temporal</SelectItem>
                     <SelectItem value="por_obra">Por Obra</SelectItem>
                     <SelectItem value="honorarios">Honorarios</SelectItem>
@@ -269,12 +291,12 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
           <FormField
             control={form.control}
-            name="startDate"
+            name="fechaIngreso"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Fecha de Ingreso *</FormLabel>
                 <FormControl>
-                  <Input type="date" {...field} data-testid="input-startDate" />
+                  <Input type="date" {...field} data-testid="input-fechaIngreso" />
                 </FormControl>
                 <FormMessage />
               </FormItem>
