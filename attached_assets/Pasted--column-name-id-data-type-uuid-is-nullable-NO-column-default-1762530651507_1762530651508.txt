@@ -1,0 +1,500 @@
+[
+  {
+    "column_name": "id",
+    "data_type": "uuid",
+    "is_nullable": "NO",
+    "column_default": "uuid_generate_v4()"
+  },
+  {
+    "column_name": "numero_empleado",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "nombre",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "apellido_paterno",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "apellido_materno",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "genero",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "curp",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "rfc",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "nss",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "estado_civil",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "calle",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "numero_exterior",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "numero_interior",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "colonia",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "municipio",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "estado",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "codigo_postal",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "telefono",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "email",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "correo",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "contacto_emergencia",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "parentesco_emergencia",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "telefono_emergencia",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "banco",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "clabe",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "sucursal",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "forma_pago",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'transferencia'::character varying"
+  },
+  {
+    "column_name": "periodicidad_pago",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'quincenal'::character varying"
+  },
+  {
+    "column_name": "tipo_calculo_salario",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'diario'::character varying"
+  },
+  {
+    "column_name": "tipo_contrato",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'indeterminado'::character varying"
+  },
+  {
+    "column_name": "fecha_ingreso",
+    "data_type": "date",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "fecha_alta_imss",
+    "data_type": "date",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "fecha_terminacion",
+    "data_type": "date",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "reconoce_antiguedad",
+    "data_type": "boolean",
+    "is_nullable": "YES",
+    "column_default": "false"
+  },
+  {
+    "column_name": "fecha_antiguedad",
+    "data_type": "date",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "modalidad_trabajo",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'presencial'::character varying"
+  },
+  {
+    "column_name": "lugar_trabajo",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "puesto",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "departamento",
+    "data_type": "character varying",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "funciones",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "dias_laborales",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'lunes_viernes'::character varying"
+  },
+  {
+    "column_name": "horario",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "tipo_jornada",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'diurna'::character varying"
+  },
+  {
+    "column_name": "tiempo_para_alimentos",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'30_minutos'::character varying"
+  },
+  {
+    "column_name": "dias_descanso",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'sabado_domingo'::character varying"
+  },
+  {
+    "column_name": "salario_bruto_mensual",
+    "data_type": "numeric",
+    "is_nullable": "NO",
+    "column_default": null
+  },
+  {
+    "column_name": "esquema_pago",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'tradicional'::character varying"
+  },
+  {
+    "column_name": "salario_diario_real",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "salario_diario_nominal",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "salario_diario_exento",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "sbc",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "sdi",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "tabla_imss",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'fija'::character varying"
+  },
+  {
+    "column_name": "dias_vacaciones_anuales",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "12"
+  },
+  {
+    "column_name": "dias_vacaciones_disponibles",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "12"
+  },
+  {
+    "column_name": "dias_vacaciones_usados",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "column_name": "dias_aguinaldo_adicionales",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "column_name": "dias_vacaciones_adicionales",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": "0"
+  },
+  {
+    "column_name": "credito_infonavit",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "numero_fonacot",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "otros_creditos",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": "'{}'::jsonb"
+  },
+  {
+    "column_name": "estatus",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'activo'::character varying"
+  },
+  {
+    "column_name": "cliente_proyecto",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "observaciones_internas",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "timezone",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": "'America/Mexico_City'::character varying"
+  },
+  {
+    "column_name": "preferencias",
+    "data_type": "jsonb",
+    "is_nullable": "YES",
+    "column_default": "'{}'::jsonb"
+  },
+  {
+    "column_name": "jefe_directo_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "empresa_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "registro_patronal_id",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "documento_contrato_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "created_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "column_name": "updated_at",
+    "data_type": "timestamp with time zone",
+    "is_nullable": "YES",
+    "column_default": "now()"
+  },
+  {
+    "column_name": "puesto_id",
+    "data_type": "uuid",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "esquema_contratacion",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "lugar_nacimiento",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "entidad_nacimiento",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "nacionalidad",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "escolaridad",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "periodo_prueba",
+    "data_type": "boolean",
+    "is_nullable": "YES",
+    "column_default": "false"
+  },
+  {
+    "column_name": "duracion_prueba",
+    "data_type": "integer",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "dia_pago",
+    "data_type": "character varying",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "drive_id",
+    "data_type": "text",
+    "is_nullable": "YES",
+    "column_default": null
+  },
+  {
+    "column_name": "cuenta",
+    "data_type": "numeric",
+    "is_nullable": "YES",
+    "column_default": null
+  }
+]
