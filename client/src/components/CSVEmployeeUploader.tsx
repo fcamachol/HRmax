@@ -59,7 +59,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
 
   const validateRow = (row: CSVRow, index: number): ValidationError[] => {
     const rowErrors: ValidationError[] = [];
-    const rowNum = index + 2; // +2 because index starts at 0 and we have header row
+    const rowNum = index + 2;
 
     if (!row.firstName?.trim()) {
       rowErrors.push({ row: rowNum, field: "firstName", message: "Nombre requerido" });
@@ -120,7 +120,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       header: true,
       skipEmptyLines: true,
       transformHeader: (header) => {
-        // Map common Spanish headers to expected English field names
         const headerMap: Record<string, string> = {
           'nombre': 'firstName',
           'apellido': 'lastName',
@@ -143,7 +142,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       complete: (results) => {
         const data = results.data as CSVRow[];
         
-        // Validate all rows
         const allErrors: ValidationError[] = [];
         data.forEach((row, index) => {
           const rowErrors = validateRow(row, index);
@@ -175,7 +173,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       },
     });
 
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -183,7 +180,27 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
 
   const bulkCreateMutation = useMutation({
     mutationFn: async (employees: CSVRow[]) => {
-      const response = await apiRequest("POST", "/api/employees/bulk", employees);
+      const transformedEmployees = employees.map((emp) => {
+        return {
+          firstName: emp.firstName.trim(),
+          lastName: emp.lastName.trim(),
+          rfc: emp.rfc.trim(),
+          curp: emp.curp.trim(),
+          nss: emp.nss.trim(),
+          email: emp.email.trim(),
+          phone: emp.phone?.trim() || "",
+          department: emp.department.trim(),
+          position: emp.position.trim(),
+          salary: emp.salary,
+          contractType: emp.contractType.trim(),
+          startDate: emp.startDate.trim(),
+          status: "active",
+          vacationDays: 12,
+          sickDays: 0,
+        };
+      });
+
+      const response = await apiRequest("POST", "/api/employees/bulk", transformedEmployees);
       return await response.json();
     },
     onSuccess: (data) => {
@@ -194,7 +211,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       });
       handleClose();
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "Error al importar",
         description: error.message || "Error al importar empleados",
@@ -254,7 +271,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* File Upload Section */}
           <div className="flex items-center gap-4 flex-wrap">
             <input
               ref={fileInputRef}
@@ -291,7 +307,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             )}
           </div>
 
-          {/* Instructions */}
           {csvData.length === 0 && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -304,7 +319,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             </Alert>
           )}
 
-          {/* Validation Summary */}
           {csvData.length > 0 && (
             <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/50">
               <div className="flex-1">
@@ -336,7 +350,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             </div>
           )}
 
-          {/* Preview Table */}
           {csvData.length > 0 && (
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto max-h-96">
@@ -397,7 +410,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             </div>
           )}
 
-          {/* Error Details */}
           {errors.length > 0 && (
             <div className="space-y-2">
               <h4 className="font-medium text-sm">Detalles de errores:</h4>

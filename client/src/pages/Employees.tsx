@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmployeeTable } from "@/components/EmployeeTable";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,60 +11,20 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { EmployeeForm } from "@/components/EmployeeForm";
+import { CSVEmployeeUploader } from "@/components/CSVEmployeeUploader";
+import { useQuery } from "@tanstack/react-query";
+import type { Employee } from "@shared/schema";
 
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCSVDialogOpen, setIsCSVDialogOpen] = useState(false);
 
-  const mockEmployees = [
-    {
-      id: "1",
-      firstName: "María",
-      lastName: "García López",
-      rfc: "GACM850101AB1",
-      department: "Ventas",
-      position: "Gerente de Ventas",
-      status: "active",
-    },
-    {
-      id: "2",
-      firstName: "Juan",
-      lastName: "Pérez Martínez",
-      rfc: "PEXJ900215CD2",
-      department: "IT",
-      position: "Desarrollador Senior",
-      status: "active",
-    },
-    {
-      id: "3",
-      firstName: "Ana",
-      lastName: "Martínez Sánchez",
-      rfc: "MASA920310EF3",
-      department: "RRHH",
-      position: "Coordinadora RH",
-      status: "active",
-    },
-    {
-      id: "4",
-      firstName: "Carlos",
-      lastName: "López Rodríguez",
-      rfc: "LORC880520GH4",
-      department: "Finanzas",
-      position: "Contador",
-      status: "on leave",
-    },
-    {
-      id: "5",
-      firstName: "Laura",
-      lastName: "Hernández Torres",
-      rfc: "HETL950705IJ5",
-      department: "Operaciones",
-      position: "Supervisor",
-      status: "active",
-    },
-  ];
+  const { data: employees = [], isLoading } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
 
-  const filteredEmployees = mockEmployees.filter(
+  const filteredEmployees = employees.filter(
     (emp) =>
       emp.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       emp.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -91,26 +51,41 @@ export default function Employees() {
             data-testid="input-search-employees"
           />
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-add-employee">
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Empleado
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Agregar Nuevo Empleado</DialogTitle>
-            </DialogHeader>
-            <EmployeeForm
-              onSubmit={(data) => {
-                console.log("Employee created:", data);
-                setIsDialogOpen(false);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setIsCSVDialogOpen(true)}
+            data-testid="button-import-csv"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Importar CSV
+          </Button>
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-add-employee">
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Empleado
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Agregar Nuevo Empleado</DialogTitle>
+              </DialogHeader>
+              <EmployeeForm
+                onSubmit={(data) => {
+                  console.log("Employee created:", data);
+                  setIsDialogOpen(false);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      <CSVEmployeeUploader
+        open={isCSVDialogOpen}
+        onOpenChange={setIsCSVDialogOpen}
+      />
 
       <EmployeeTable
         employees={filteredEmployees}

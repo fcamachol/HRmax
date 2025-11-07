@@ -60,6 +60,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/employees/bulk", async (req, res) => {
+    try {
+      const employees = req.body;
+      
+      if (!Array.isArray(employees)) {
+        return res.status(400).json({ message: "Expected array of employees" });
+      }
+
+      // Validate each employee
+      const validatedEmployees = employees.map((emp, index) => {
+        try {
+          return insertEmployeeSchema.parse(emp);
+        } catch (error: any) {
+          throw new Error(`Employee at index ${index}: ${error.message}`);
+        }
+      });
+
+      // Create all employees
+      const created = await storage.createBulkEmployees(validatedEmployees);
+      
+      res.json({ created: created.length, employees: created });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.get("/api/employees", async (req, res) => {
     try {
       const employees = await storage.getEmployees();

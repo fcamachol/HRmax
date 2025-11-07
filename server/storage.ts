@@ -34,6 +34,7 @@ export interface IStorage {
   
   // Employees
   createEmployee(employee: InsertEmployee): Promise<Employee>;
+  createBulkEmployees(employees: InsertEmployee[]): Promise<Employee[]>;
   getEmployee(id: string): Promise<Employee | undefined>;
   getEmployees(): Promise<Employee[]>;
   updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee>;
@@ -106,6 +107,18 @@ export class DatabaseStorage implements IStorage {
       .values(employee)
       .returning();
     return newEmployee;
+  }
+
+  async createBulkEmployees(employeeList: InsertEmployee[]): Promise<Employee[]> {
+    if (employeeList.length === 0) {
+      return [];
+    }
+    
+    const newEmployees = await db
+      .insert(employees)
+      .values(employeeList)
+      .returning();
+    return newEmployees;
   }
 
   async getEmployee(id: string): Promise<Employee | undefined> {
