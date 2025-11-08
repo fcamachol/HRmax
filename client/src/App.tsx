@@ -17,6 +17,7 @@ import Payroll from "@/pages/Payroll";
 import Attendance from "@/pages/Attendance";
 import Reports from "@/pages/Reports";
 import Configuration from "@/pages/Configuration";
+import Empresas from "@/pages/Empresas";
 import Settings from "@/pages/Settings";
 import Legal from "@/pages/Legal";
 import NotFound from "@/pages/not-found";
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/configuration" component={Configuration} />
+      <Route path="/empresas" component={Empresas} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>

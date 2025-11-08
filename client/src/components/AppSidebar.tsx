@@ -96,6 +96,11 @@ const mainMenuItems = [
     icon: Calculator,
   },
   {
+    title: "Empresas",
+    url: "/empresas",
+    icon: Building2,
+  },
+  {
     title: "Ajustes",
     url: "/settings",
     icon: Settings,
