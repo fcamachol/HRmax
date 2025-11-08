@@ -333,6 +333,7 @@ export const hiringProcess = pgTable("hiring_process", {
   stage: text("stage").notNull().default("oferta"), // Etapa actual del proceso
   status: text("status").notNull().default("activo"), // 'activo', 'cancelado', 'completado'
   contractType: text("contract_type").notNull(), // Tipo de contrato
+  contractDuration: text("contract_duration"), // Duración del contrato (para contratos temporales o por obra)
   // Datos personales del candidato
   email: text("email"),
   phone: text("phone"),

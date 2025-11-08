@@ -51,6 +51,7 @@ interface AltaFormData {
   proposedSalary: string;
   startDate: string;
   contractType: string;
+  contractDuration: string;
   email: string;
   phone: string;
   rfc: string;
@@ -100,6 +101,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     proposedSalary: "",
     startDate: new Date().toISOString().split('T')[0],
     contractType: "planta",
+    contractDuration: "",
     email: "",
     phone: "",
     rfc: "",
@@ -144,6 +146,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         proposedSalary: existingProcess.proposedSalary || "",
         startDate: existingProcess.startDate || new Date().toISOString().split('T')[0],
         contractType: existingProcess.contractType || "planta",
+        contractDuration: existingProcess.contractDuration || "",
         email: existingProcess.email || "",
         phone: existingProcess.phone || "",
         rfc: existingProcess.rfc || "",
@@ -168,6 +171,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       proposedSalary: "",
       startDate: new Date().toISOString().split('T')[0],
       contractType: "planta",
+      contractDuration: "",
       email: "",
       phone: "",
       rfc: "",
@@ -193,6 +197,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
           proposedSalary: data.proposedSalary,
           startDate: data.startDate,
           contractType: data.contractType,
+          contractDuration: data.contractDuration,
           email: data.email,
           phone: data.phone,
           rfc: data.rfc,
@@ -212,6 +217,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
           proposedSalary: data.proposedSalary,
           startDate: data.startDate,
           contractType: data.contractType,
+          contractDuration: data.contractDuration,
           email: data.email,
           phone: data.phone,
           rfc: data.rfc,
@@ -543,6 +549,18 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 </SelectContent>
               </Select>
             </div>
+            {(formData.contractType === "temporal" || formData.contractType === "por_obra") && (
+              <div>
+                <Label htmlFor="contractDuration" data-testid="label-contract-duration">Duración del Contrato *</Label>
+                <Input
+                  id="contractDuration"
+                  data-testid="input-contract-duration"
+                  value={formData.contractDuration}
+                  onChange={(e) => setFormData({ ...formData, contractDuration: e.target.value })}
+                  placeholder="Ej: 6 meses, 1 año, Hasta finalizar proyecto"
+                />
+              </div>
+            )}
             <div>
               <Label htmlFor="notes" data-testid="label-notes">Notas Adicionales</Label>
               <Textarea
@@ -711,6 +729,12 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     </p>
                   </div>
                 </div>
+                {(formData.contractType === "temporal" || formData.contractType === "por_obra") && formData.contractDuration && (
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Duración del Contrato</h4>
+                    <p className="text-base" data-testid="text-summary-duration">{formData.contractDuration}</p>
+                  </div>
+                )}
                 <div>
                   <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
                   <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
