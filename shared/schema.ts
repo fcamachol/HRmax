@@ -309,6 +309,8 @@ export const insertIncidenciaAsistenciaSchema = createInsertSchema(incidenciasAs
   updatedAt: true,
 });
 
+export const updateIncidenciaAsistenciaSchema = insertIncidenciaAsistenciaSchema.partial();
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
 });

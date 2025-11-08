@@ -24,6 +24,8 @@ import {
   insertEmpleadoCentroTrabajoSchema,
   updateEmpleadoCentroTrabajoSchema,
   insertAttendanceSchema,
+  insertIncidenciaAsistenciaSchema,
+  updateIncidenciaAsistenciaSchema,
   insertHoraExtraSchema,
   updateHoraExtraSchema,
   insertClienteREPSESchema,
@@ -900,6 +902,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/attendance/:id", async (req, res) => {
     try {
       await storage.deleteAttendance(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Incidencias de Asistencia
+  app.post("/api/incidencias-asistencia", async (req, res) => {
+    try {
+      const validatedData = insertIncidenciaAsistenciaSchema.parse(req.body);
+      const incidencia = await storage.createIncidenciaAsistencia(validatedData);
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incidencias-asistencia", async (req, res) => {
+    try {
+      const { fechaInicio, fechaFin, centroTrabajoId, empleadoId } = req.query;
+      
+      if (fechaInicio && fechaFin) {
+        const incidencias = await storage.getIncidenciasAsistenciaByPeriodo(
+          fechaInicio as string, 
+          fechaFin as string, 
+          centroTrabajoId as string | undefined
+        );
+        return res.json(incidencias);
+      }
+      
+      if (empleadoId) {
+        const incidencias = await storage.getIncidenciasAsistenciaByEmpleado(empleadoId as string);
+        return res.json(incidencias);
+      }
+      
+      const incidencias = await storage.getIncidenciasAsistencia();
+      res.json(incidencias);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incidencias-asistencia/:id", async (req, res) => {
+    try {
+      const incidencia = await storage.getIncidenciaAsistencia(req.params.id);
+      if (!incidencia) {
+        return res.status(404).json({ message: "Incidencia de asistencia no encontrada" });
+      }
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/incidencias-asistencia/:id", async (req, res) => {
+    try {
+      const validatedData = updateIncidenciaAsistenciaSchema.parse(req.body);
+      const incidencia = await storage.updateIncidenciaAsistencia(req.params.id, validatedData);
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/incidencias-asistencia/:id", async (req, res) => {
+    try {
+      await storage.deleteIncidenciaAsistencia(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
