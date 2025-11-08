@@ -691,3 +691,145 @@ export const updateHoraExtraSchema = insertHoraExtraSchema.partial();
 
 export type HoraExtra = typeof horasExtras.$inferSelect;
 export type InsertHoraExtra = z.infer<typeof insertHoraExtraSchema>;
+
+// ============================================================================
+// MÓDULO REPSE (Registro de Prestadoras de Servicios Especializados)
+// ============================================================================
+
+// Clientes para REPSE
+export const clientesREPSE = pgTable("clientes_repse", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  razonSocial: varchar("razon_social").notNull(),
+  rfc: varchar("rfc").notNull(),
+  nombreComercial: varchar("nombre_comercial"),
+  giro: varchar("giro"),
+  calle: varchar("calle"),
+  numeroExterior: varchar("numero_exterior"),
+  numeroInterior: varchar("numero_interior"),
+  colonia: varchar("colonia"),
+  municipio: varchar("municipio"),
+  estado: varchar("estado"),
+  codigoPostal: varchar("codigo_postal"),
+  telefono: varchar("telefono"),
+  email: varchar("email"),
+  contactoPrincipal: varchar("contacto_principal"),
+  puestoContacto: varchar("puesto_contacto"),
+  telefonoContacto: varchar("telefono_contacto"),
+  emailContacto: varchar("email_contacto"),
+  estatus: varchar("estatus").default("activo"), // activo, inactivo
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertClienteREPSESchema = createInsertSchema(clientesREPSE).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateClienteREPSESchema = insertClienteREPSESchema.partial();
+
+export type ClienteREPSE = typeof clientesREPSE.$inferSelect;
+export type InsertClienteREPSE = z.infer<typeof insertClienteREPSESchema>;
+
+// Registros REPSE de la Empresa
+export const estatusREPSE = ["vigente", "suspendido", "vencido", "en_tramite"] as const;
+export type EstatusREPSE = typeof estatusREPSE[number];
+
+export const registrosREPSE = pgTable("registros_repse", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  numeroRegistro: varchar("numero_registro").notNull(), // Número de registro REPSE
+  fechaEmision: date("fecha_emision").notNull(),
+  fechaVencimiento: date("fecha_vencimiento").notNull(), // 3 años después de emisión
+  estatus: varchar("estatus").default("vigente"), // vigente, suspendido, vencido, en_tramite
+  tipoRegistro: varchar("tipo_registro").default("servicios_especializados"), // servicios_especializados, obras_especializadas
+  archivoUrl: text("archivo_url"), // URL del archivo PDF en Object Storage
+  archivoNombre: varchar("archivo_nombre"), // Nombre original del archivo
+  alertaVencimiento90: boolean("alerta_vencimiento_90").default(false), // Alert enviada 90 días antes
+  alertaVencimiento60: boolean("alerta_vencimiento_60").default(false), // Alert enviada 60 días antes
+  alertaVencimiento30: boolean("alerta_vencimiento_30").default(false), // Alert enviada 30 días antes
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertRegistroREPSESchema = createInsertSchema(registrosREPSE).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  estatus: z.enum(estatusREPSE).default("vigente"),
+});
+
+export const updateRegistroREPSESchema = insertRegistroREPSESchema.partial();
+
+export type RegistroREPSE = typeof registrosREPSE.$inferSelect;
+export type InsertRegistroREPSE = z.infer<typeof insertRegistroREPSESchema>;
+
+// Contratos REPSE con Clientes
+export const estatusContratoREPSE = ["vigente", "finalizado", "suspendido", "cancelado"] as const;
+export type EstatusContratoREPSE = typeof estatusContratoREPSE[number];
+
+export const contratosREPSE = pgTable("contratos_repse", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  registroREPSEId: varchar("registro_repse_id").notNull().references(() => registrosREPSE.id, { onDelete: "cascade" }),
+  clienteId: varchar("cliente_id").notNull().references(() => clientesREPSE.id, { onDelete: "cascade" }),
+  numeroContrato: varchar("numero_contrato").notNull(),
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin"),
+  serviciosEspecializados: text("servicios_especializados").notNull(), // Descripción de servicios prestados
+  objetoContrato: text("objeto_contrato"),
+  montoContrato: decimal("monto_contrato", { precision: 12, scale: 2 }),
+  archivoUrl: text("archivo_url"), // URL del contrato PDF
+  archivoNombre: varchar("archivo_nombre"),
+  notificadoIMSS: boolean("notificado_imss").default(false),
+  numeroAvisoIMSS: varchar("numero_aviso_imss"),
+  fechaNotificacionIMSS: date("fecha_notificacion_imss"),
+  estatus: varchar("estatus").default("vigente"), // vigente, finalizado, suspendido, cancelado
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertContratoREPSESchema = createInsertSchema(contratosREPSE).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  estatus: z.enum(estatusContratoREPSE).default("vigente"),
+});
+
+export const updateContratoREPSESchema = insertContratoREPSESchema.partial();
+
+export type ContratoREPSE = typeof contratosREPSE.$inferSelect;
+export type InsertContratoREPSE = z.infer<typeof insertContratoREPSESchema>;
+
+// Asignación de Personal a Contratos REPSE
+export const asignacionesPersonalREPSE = pgTable("asignaciones_personal_repse", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contratoREPSEId: varchar("contrato_repse_id").notNull().references(() => contratosREPSE.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  fechaAsignacion: date("fecha_asignacion").notNull(),
+  fechaFinAsignacion: date("fecha_fin_asignacion"), // Null si es asignación actual
+  puestoFuncion: varchar("puesto_funcion").notNull(), // Puesto o función especializada
+  descripcionActividades: text("descripcion_actividades"),
+  salarioAsignado: decimal("salario_asignado", { precision: 10, scale: 2 }), // Salario para esta asignación
+  estatus: varchar("estatus").default("activo"), // activo, finalizado, suspendido
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertAsignacionPersonalREPSESchema = createInsertSchema(asignacionesPersonalREPSE).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateAsignacionPersonalREPSESchema = insertAsignacionPersonalREPSESchema.partial();
+
+export type AsignacionPersonalREPSE = typeof asignacionesPersonalREPSE.$inferSelect;
+export type InsertAsignacionPersonalREPSE = z.infer<typeof insertAsignacionPersonalREPSESchema>;
