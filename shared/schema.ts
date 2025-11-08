@@ -505,20 +505,15 @@ export const credencialesSistemas = pgTable("credenciales_sistemas", {
   registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "cascade" }),
   tipoSistema: varchar("tipo_sistema").notNull(), // imss_escritorio_virtual, sipare, infonavit, fonacot, etc.
   nombreSistema: text("nombre_sistema").notNull(), // Nombre descriptivo
-  // Credenciales (IMPORTANTE: Estos campos deben encriptarse o usar sistema de secrets)
-  usuario: text("usuario"), // Usuario, RFC, o identificador
-  // NOTA IMPORTANTE: Las contraseñas NO deben almacenarse en texto plano
-  // Opciones recomendadas:
-  // 1. Usar Replit Secrets con una convención de nombres
-  // 2. Encriptar con una clave maestra almacenada en secrets
-  // 3. Usar un servicio de gestión de secretos externo
-  passwordEncrypted: text("password_encrypted"), // Contraseña encriptada (NO guardar en texto plano)
-  passwordSecretKey: text("password_secret_key"), // Referencia a secret de Replit (ej: "EMPRESA_1_IMSS_PASSWORD")
+  // Credenciales - SEGURIDAD: NO almacenamos contraseñas directamente
+  // Solo guardamos referencias a Replit Secrets que el usuario debe crear manualmente
+  usuario: text("usuario"), // Usuario, RFC, o identificador del sistema
+  passwordSecretKey: text("password_secret_key"), // OBLIGATORIO: Nombre del secret en Replit (ej: "EMPRESA_ABC_IMSS_PASSWORD")
   // e.firma (FIEL) para sistemas que la requieren
   efirmaRfc: varchar("efirma_rfc", { length: 13 }),
   efirmaCertPath: text("efirma_cert_path"), // Ruta al archivo .cer en object storage
   efirmaKeyPath: text("efirma_key_path"), // Ruta al archivo .key en object storage
-  efirmaPasswordSecretKey: text("efirma_password_secret_key"), // Referencia a secret para contraseña de e.firma
+  efirmaPasswordSecretKey: text("efirma_password_secret_key"), // Nombre del secret para contraseña de e.firma
   // Información adicional
   url: text("url"), // URL del sistema
   descripcion: text("descripcion"),

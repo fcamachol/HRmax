@@ -15,6 +15,12 @@ import {
   type InsertBajaSpecialConcept,
   type HiringProcess,
   type InsertHiringProcess,
+  type Empresa,
+  type InsertEmpresa,
+  type RegistroPatronal,
+  type InsertRegistroPatronal,
+  type CredencialSistema,
+  type InsertCredencialSistema,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -22,7 +28,10 @@ import {
   bajaSpecialConcepts,
   hiringProcess,
   users,
-  employees
+  employees,
+  empresas,
+  registrosPatronales,
+  credencialesSistemas
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -79,6 +88,30 @@ export interface IStorage {
   deleteHiringProcess(id: string): Promise<void>;
   
   getLawsuitByLegalCaseId(legalCaseId: string): Promise<Lawsuit | undefined>;
+  
+  // Empresas
+  createEmpresa(empresa: InsertEmpresa): Promise<Empresa>;
+  getEmpresa(id: string): Promise<Empresa | undefined>;
+  getEmpresas(): Promise<Empresa[]>;
+  updateEmpresa(id: string, updates: Partial<InsertEmpresa>): Promise<Empresa>;
+  deleteEmpresa(id: string): Promise<void>;
+  
+  // Registros Patronales
+  createRegistroPatronal(registro: InsertRegistroPatronal): Promise<RegistroPatronal>;
+  getRegistroPatronal(id: string): Promise<RegistroPatronal | undefined>;
+  getRegistrosPatronales(): Promise<RegistroPatronal[]>;
+  getRegistrosPatronalesByEmpresa(empresaId: string): Promise<RegistroPatronal[]>;
+  updateRegistroPatronal(id: string, updates: Partial<InsertRegistroPatronal>): Promise<RegistroPatronal>;
+  deleteRegistroPatronal(id: string): Promise<void>;
+  
+  // Credenciales de Sistemas
+  createCredencialSistema(credencial: InsertCredencialSistema): Promise<CredencialSistema>;
+  getCredencialSistema(id: string): Promise<CredencialSistema | undefined>;
+  getCredencialesSistemas(): Promise<CredencialSistema[]>;
+  getCredencialesByEmpresa(empresaId: string): Promise<CredencialSistema[]>;
+  getCredencialesByRegistroPatronal(registroPatronalId: string): Promise<CredencialSistema[]>;
+  updateCredencialSistema(id: string, updates: Partial<InsertCredencialSistema>): Promise<CredencialSistema>;
+  deleteCredencialSistema(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -387,6 +420,147 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(hiringProcess)
       .where(eq(hiringProcess.id, id));
+  }
+
+  // Empresas
+  async createEmpresa(empresa: InsertEmpresa): Promise<Empresa> {
+    const [newEmpresa] = await db
+      .insert(empresas)
+      .values(empresa)
+      .returning();
+    return newEmpresa;
+  }
+
+  async getEmpresa(id: string): Promise<Empresa | undefined> {
+    const [empresa] = await db
+      .select()
+      .from(empresas)
+      .where(eq(empresas.id, id));
+    return empresa || undefined;
+  }
+
+  async getEmpresas(): Promise<Empresa[]> {
+    return await db
+      .select()
+      .from(empresas)
+      .orderBy(desc(empresas.createdAt));
+  }
+
+  async updateEmpresa(id: string, updates: Partial<InsertEmpresa>): Promise<Empresa> {
+    const [updated] = await db
+      .update(empresas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(empresas.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmpresa(id: string): Promise<void> {
+    await db
+      .delete(empresas)
+      .where(eq(empresas.id, id));
+  }
+
+  // Registros Patronales
+  async createRegistroPatronal(registro: InsertRegistroPatronal): Promise<RegistroPatronal> {
+    const [newRegistro] = await db
+      .insert(registrosPatronales)
+      .values(registro)
+      .returning();
+    return newRegistro;
+  }
+
+  async getRegistroPatronal(id: string): Promise<RegistroPatronal | undefined> {
+    const [registro] = await db
+      .select()
+      .from(registrosPatronales)
+      .where(eq(registrosPatronales.id, id));
+    return registro || undefined;
+  }
+
+  async getRegistrosPatronales(): Promise<RegistroPatronal[]> {
+    return await db
+      .select()
+      .from(registrosPatronales)
+      .orderBy(desc(registrosPatronales.createdAt));
+  }
+
+  async getRegistrosPatronalesByEmpresa(empresaId: string): Promise<RegistroPatronal[]> {
+    return await db
+      .select()
+      .from(registrosPatronales)
+      .where(eq(registrosPatronales.empresaId, empresaId))
+      .orderBy(desc(registrosPatronales.createdAt));
+  }
+
+  async updateRegistroPatronal(id: string, updates: Partial<InsertRegistroPatronal>): Promise<RegistroPatronal> {
+    const [updated] = await db
+      .update(registrosPatronales)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(registrosPatronales.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteRegistroPatronal(id: string): Promise<void> {
+    await db
+      .delete(registrosPatronales)
+      .where(eq(registrosPatronales.id, id));
+  }
+
+  // Credenciales de Sistemas
+  async createCredencialSistema(credencial: InsertCredencialSistema): Promise<CredencialSistema> {
+    const [newCredencial] = await db
+      .insert(credencialesSistemas)
+      .values(credencial)
+      .returning();
+    return newCredencial;
+  }
+
+  async getCredencialSistema(id: string): Promise<CredencialSistema | undefined> {
+    const [credencial] = await db
+      .select()
+      .from(credencialesSistemas)
+      .where(eq(credencialesSistemas.id, id));
+    return credencial || undefined;
+  }
+
+  async getCredencialesSistemas(): Promise<CredencialSistema[]> {
+    return await db
+      .select()
+      .from(credencialesSistemas)
+      .orderBy(desc(credencialesSistemas.createdAt));
+  }
+
+  async getCredencialesByEmpresa(empresaId: string): Promise<CredencialSistema[]> {
+    return await db
+      .select()
+      .from(credencialesSistemas)
+      .where(eq(credencialesSistemas.empresaId, empresaId))
+      .orderBy(desc(credencialesSistemas.createdAt));
+  }
+
+  async getCredencialesByRegistroPatronal(registroPatronalId: string): Promise<CredencialSistema[]> {
+    return await db
+      .select()
+      .from(credencialesSistemas)
+      .where(eq(credencialesSistemas.registroPatronalId, registroPatronalId))
+      .orderBy(desc(credencialesSistemas.createdAt));
+  }
+
+  async updateCredencialSistema(id: string, updates: Partial<InsertCredencialSistema>): Promise<CredencialSistema> {
+    const [updated] = await db
+      .update(credencialesSistemas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(credencialesSistemas.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCredencialSistema(id: string): Promise<void> {
+    await db
+      .delete(credencialesSistemas)
+      .where(eq(credencialesSistemas.id, id));
   }
 }
 
