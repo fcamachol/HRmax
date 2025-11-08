@@ -54,6 +54,7 @@ interface AsignacionEmpleadosProps {
 export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmpleadosProps) {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAsignacion, setEditingAsignacion] = useState<EmpleadoCentroTrabajo | null>(null);
+  const [filtroTurno, setFiltroTurno] = useState<string>("todos");
   const { toast } = useToast();
 
   const { data: asignaciones = [], isLoading } = useQuery<EmpleadoCentroTrabajo[]>({
@@ -66,6 +67,15 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
 
   const { data: empleados = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: turnos = [] } = useQuery<TurnoCentroTrabajo[]>({
+    queryKey: ["/api/turnos-centro-trabajo", centroTrabajoId],
+    queryFn: async () => {
+      const response = await fetch(`/api/turnos-centro-trabajo?centroTrabajoId=${centroTrabajoId}`);
+      if (!response.ok) throw new Error("Error al cargar turnos");
+      return response.json();
+    },
   });
 
   const deleteAsignacionMutation = useMutation({
@@ -106,6 +116,25 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
       : "Empleado no encontrado";
   };
 
+  const getTurnoName = (turnoId: string) => {
+    const turno = turnos.find((t) => t.id === turnoId);
+    return turno ? turno.nombre : "Sin turno";
+  };
+
+  const getTurnoInfo = (turnoId: string) => {
+    const turno = turnos.find((t) => t.id === turnoId);
+    if (!turno) return null;
+    return {
+      nombre: turno.nombre,
+      horario: `${turno.horaInicio} - ${turno.horaFin}`,
+    };
+  };
+
+  const asignacionesFiltradas = asignaciones.filter((asignacion) => {
+    if (filtroTurno === "todos") return true;
+    return asignacion.turnoId === filtroTurno;
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -116,10 +145,37 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          {asignaciones.length} empleado(s) asignado(s)
-        </p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <p className="text-sm text-muted-foreground whitespace-nowrap">
+            {asignacionesFiltradas.length} de {asignaciones.length} empleado(s)
+          </p>
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial">
+            <label htmlFor="filtro-turno" className="text-sm text-muted-foreground whitespace-nowrap">
+              Filtrar por turno:
+            </label>
+            <Select
+              value={filtroTurno}
+              onValueChange={setFiltroTurno}
+            >
+              <SelectTrigger 
+                id="filtro-turno" 
+                className="w-[200px]"
+                data-testid="select-filtro-turno"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos los turnos</SelectItem>
+                {turnos.map((turno) => (
+                  <SelectItem key={turno.id} value={turno.id!}>
+                    {turno.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <Dialog
           open={isFormOpen}
           onOpenChange={(open) => {
@@ -173,35 +229,57 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
             </Button>
           </CardContent>
         </Card>
+      ) : asignacionesFiltradas.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <p className="text-sm text-muted-foreground">
+              No hay empleados asignados a este turno
+            </p>
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-2">
-          {asignaciones.map((asignacion) => (
-            <Card key={asignacion.id} className="hover-elevate">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium">
-                      {getEmpleadoName(asignacion.empleadoId)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-muted-foreground">
-                        Desde: {new Date(asignacion.fechaInicio).toLocaleDateString()}
-                      </span>
-                      {asignacion.fechaFin && (
-                        <>
-                          <span className="text-xs text-muted-foreground">•</span>
+          {asignacionesFiltradas.map((asignacion) => {
+            const turnoInfo = getTurnoInfo(asignacion.turnoId);
+            return (
+              <Card key={asignacion.id} className="hover-elevate">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-medium">
+                          {getEmpleadoName(asignacion.empleadoId)}
+                        </p>
+                        {!asignacion.fechaFin && (
+                          <Badge variant="default" className="text-xs">
+                            Activo
+                          </Badge>
+                        )}
+                      </div>
+                      {turnoInfo && (
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            {turnoInfo.nombre}
+                          </Badge>
                           <span className="text-xs text-muted-foreground">
-                            Hasta: {new Date(asignacion.fechaFin).toLocaleDateString()}
+                            {turnoInfo.horario}
                           </span>
-                        </>
+                        </div>
                       )}
-                      {!asignacion.fechaFin && (
-                        <Badge variant="default" className="text-xs">
-                          Activo
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-muted-foreground">
+                          Desde: {new Date(asignacion.fechaInicio).toLocaleDateString()}
+                        </span>
+                        {asignacion.fechaFin && (
+                          <>
+                            <span className="text-xs text-muted-foreground">•</span>
+                            <span className="text-xs text-muted-foreground">
+                              Hasta: {new Date(asignacion.fechaFin).toLocaleDateString()}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
                   <div className="flex gap-1">
                     <Button
                       variant="ghost"
@@ -248,7 +326,8 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
