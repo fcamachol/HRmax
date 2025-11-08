@@ -31,6 +31,7 @@ import type {
   Employee,
   CentroTrabajo,
   IncidenciaAsistencia,
+  GrupoNomina,
 } from "@shared/schema";
 import { IncidenciasAsistenciaGrid } from "@/components/IncidenciasAsistenciaGrid";
 
@@ -46,11 +47,15 @@ export default function Attendance() {
     format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
   );
   const [selectedCentro, setSelectedCentro] = useState<string>("all");
+  const [selectedGrupoNomina, setSelectedGrupoNomina] = useState<string>("all");
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: [
       "/api/employees",
-      { centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined }
+      { 
+        centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined,
+        grupoNominaId: selectedGrupoNomina !== "all" ? selectedGrupoNomina : undefined
+      }
     ],
     queryFn: async ({ queryKey }) => {
       const [path, params] = queryKey as [string, Record<string, string | undefined>];
@@ -60,7 +65,11 @@ export default function Attendance() {
         searchParams.append("centroTrabajoId", params.centroTrabajoId);
       }
       
-      const url = params?.centroTrabajoId ? `${path}?${searchParams.toString()}` : path;
+      if (params?.grupoNominaId) {
+        searchParams.append("grupoNominaId", params.grupoNominaId);
+      }
+      
+      const url = searchParams.toString() ? `${path}?${searchParams.toString()}` : path;
       const res = await fetch(url, { credentials: "include" });
       
       if (!res.ok) {
@@ -73,6 +82,10 @@ export default function Attendance() {
 
   const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
     queryKey: ["/api/centros-trabajo"],
+  });
+
+  const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
+    queryKey: ["/api/grupos-nomina"],
   });
 
   // Query de incidencias con queryKey estructurado para correcta invalidación de caché
@@ -130,6 +143,89 @@ export default function Attendance() {
     setFechaFin(format(lastDay, 'yyyy-MM-dd'));
   };
 
+  // Funciones para calcular periodo según grupo de nómina
+  const setPeriodoActual = () => {
+    if (selectedGrupoNomina === "all") return;
+    
+    const grupo = gruposNomina.find(g => g.id === selectedGrupoNomina);
+    if (!grupo) return;
+    
+    const today = new Date();
+    let inicio: Date;
+    let fin: Date;
+    
+    switch (grupo.tipoPeriodo) {
+      case 'semanal':
+        inicio = startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 });
+        fin = addDays(inicio, 6);
+        break;
+      case 'catorcenal':
+        inicio = startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 });
+        fin = addDays(inicio, 13);
+        break;
+      case 'quincenal':
+        const day = today.getDate();
+        if (day <= 15) {
+          inicio = new Date(today.getFullYear(), today.getMonth(), 1);
+          fin = new Date(today.getFullYear(), today.getMonth(), 15);
+        } else {
+          inicio = new Date(today.getFullYear(), today.getMonth(), 16);
+          fin = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        }
+        break;
+      case 'mensual':
+        inicio = new Date(today.getFullYear(), today.getMonth(), 1);
+        fin = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        break;
+      default:
+        return;
+    }
+    
+    setFechaInicio(format(inicio, 'yyyy-MM-dd'));
+    setFechaFin(format(fin, 'yyyy-MM-dd'));
+  };
+
+  const setPeriodoAnterior = () => {
+    if (selectedGrupoNomina === "all") return;
+    
+    const grupo = gruposNomina.find(g => g.id === selectedGrupoNomina);
+    if (!grupo) return;
+    
+    const today = new Date();
+    let inicio: Date;
+    let fin: Date;
+    
+    switch (grupo.tipoPeriodo) {
+      case 'semanal':
+        fin = addDays(startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 }), -1);
+        inicio = addDays(fin, -6);
+        break;
+      case 'catorcenal':
+        fin = addDays(startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 }), -1);
+        inicio = addDays(fin, -13);
+        break;
+      case 'quincenal':
+        const day = today.getDate();
+        if (day <= 15) {
+          inicio = new Date(today.getFullYear(), today.getMonth() - 1, 16);
+          fin = new Date(today.getFullYear(), today.getMonth(), 0);
+        } else {
+          inicio = new Date(today.getFullYear(), today.getMonth(), 1);
+          fin = new Date(today.getFullYear(), today.getMonth(), 15);
+        }
+        break;
+      case 'mensual':
+        inicio = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        fin = new Date(today.getFullYear(), today.getMonth(), 0);
+        break;
+      default:
+        return;
+    }
+    
+    setFechaInicio(format(inicio, 'yyyy-MM-dd'));
+    setFechaFin(format(fin, 'yyyy-MM-dd'));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -160,7 +256,7 @@ export default function Attendance() {
               <CardTitle>Selección de Periodo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
                 <div className="space-y-2">
                   <Label htmlFor="fecha-inicio">Fecha Inicio</Label>
                   <Input
@@ -198,24 +294,67 @@ export default function Attendance() {
                   </Select>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="grupo-nomina">Grupo de Nómina</Label>
+                  <Select value={selectedGrupoNomina} onValueChange={setSelectedGrupoNomina}>
+                    <SelectTrigger id="grupo-nomina" data-testid="select-grupo-nomina">
+                      <SelectValue placeholder="Selecciona grupo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los grupos</SelectItem>
+                      {gruposNomina.filter(g => g.activo).map((grupo) => (
+                        <SelectItem key={grupo.id} value={grupo.id!}>
+                          {grupo.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label>Accesos Rápidos</Label>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={setCurrentWeek}
-                      data-testid="button-semana-actual"
-                    >
-                      Semana Actual
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={setCurrentMonth}
-                      data-testid="button-mes-actual"
-                    >
-                      Mes Actual
-                    </Button>
+                  <div className="flex flex-col gap-1">
+                    {selectedGrupoNomina !== "all" ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={setPeriodoActual}
+                          data-testid="button-periodo-actual"
+                          className="w-full"
+                        >
+                          Periodo Actual
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={setPeriodoAnterior}
+                          data-testid="button-periodo-anterior"
+                          className="w-full"
+                        >
+                          Periodo Anterior
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={setCurrentWeek}
+                          data-testid="button-semana-actual"
+                          className="w-full"
+                        >
+                          Semana Actual
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={setCurrentMonth}
+                          data-testid="button-mes-actual"
+                          className="w-full"
+                        >
+                          Mes Actual
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
