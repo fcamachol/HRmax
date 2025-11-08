@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Employee, Attendance, CentroTrabajo, InsertAttendance } from "@shared/schema";
+import type { Employee, Attendance, CentroTrabajo, InsertAttendance, EmpleadoCentroTrabajo } from "@shared/schema";
 
 export default function RelojChecador() {
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -18,12 +18,12 @@ export default function RelojChecador() {
   const { toast } = useToast();
 
   // Update current time every second
-  useState(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(interval);
-  });
+  }, []);
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -33,6 +33,10 @@ export default function RelojChecador() {
     queryKey: ["/api/centros-trabajo"],
   });
 
+  const { data: empleadosCentros = [] } = useQuery<EmpleadoCentroTrabajo[]>({
+    queryKey: ["/api/empleados-centros-trabajo"],
+  });
+
   const { data: todayAttendance = [] } = useQuery<Attendance[]>({
     queryKey: ["/api/attendance"],
     select: (data) => {
@@ -40,6 +44,22 @@ export default function RelojChecador() {
       return data.filter((record) => record.date === today);
     },
   });
+
+  const getEmployeeActiveCentro = (employeeId: string): string | null => {
+    const today = new Date();
+    const activeAssignment = empleadosCentros.find((ec) => {
+      const startDate = new Date(ec.fechaInicio);
+      const endDate = ec.fechaFin ? new Date(ec.fechaFin) : null;
+      
+      return (
+        ec.empleadoId === employeeId &&
+        startDate <= today &&
+        (!endDate || endDate >= today)
+      );
+    });
+
+    return activeAssignment?.centroTrabajoId || null;
+  };
 
   const filteredEmployees = employees.filter(
     (emp) =>
@@ -55,14 +75,18 @@ export default function RelojChecador() {
       const now = new Date();
       const timeString = format(now, "HH:mm");
       
-      const assignedCentro = centrosTrabajo[0]; // Default to first work center for now
+      const centroId = getEmployeeActiveCentro(employeeId);
+
+      if (!centroId) {
+        throw new Error("El empleado no tiene un centro de trabajo asignado activo");
+      }
 
       const data: InsertAttendance = {
         employeeId,
         date: format(now, "yyyy-MM-dd"),
         status: "presente",
         clockIn: timeString,
-        centroTrabajoId: assignedCentro?.id || null,
+        centroTrabajoId: centroId,
         tipoJornada: "ordinaria",
       };
 
