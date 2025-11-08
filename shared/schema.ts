@@ -133,16 +133,21 @@ export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
 };
 
 // Incidencias de asistencia por periodo (estilo layout de nómina)
+// Una fila por empleado por periodo con columnas para cada tipo de incidencia
 export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
-  centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo
-  tipoIncidencia: varchar("tipo_incidencia").notNull(), // falta, retardo, horas_extra, horas_descontadas, incapacidad, permiso
+  centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo (opcional)
   fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio del periodo
   fechaFin: date("fecha_fin").notNull(), // Fecha de fin del periodo
-  cantidad: decimal("cantidad", { precision: 10, scale: 2 }).notNull(), // Cantidad (días, horas, etc.)
-  monto: decimal("monto", { precision: 10, scale: 2 }), // Monto a descontar o pagar (opcional)
-  notas: text("notas"), // Observaciones
+  // Columnas individuales por tipo de incidencia
+  faltas: integer("faltas").notNull().default(0), // Número de faltas
+  retardos: integer("retardos").notNull().default(0), // Número de retardos
+  horasExtra: decimal("horas_extra", { precision: 10, scale: 2 }).notNull().default("0"), // Horas extra trabajadas
+  horasDescontadas: decimal("horas_descontadas", { precision: 10, scale: 2 }).notNull().default("0"), // Horas a descontar
+  incapacidades: integer("incapacidades").notNull().default(0), // Días de incapacidad
+  permisos: integer("permisos").notNull().default(0), // Días de permiso
+  notas: text("notas"), // Observaciones generales
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });

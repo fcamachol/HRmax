@@ -1,15 +1,18 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { useQuery } from "@tanstack/react-query";
+import { format, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { es } from "date-fns/locale";
 import {
   Calendar,
   Filter,
-  Plus,
-  Clock,
-  MapPin,
-  UserCheck,
+  Users,
   AlertCircle,
+  XCircle,
+  Clock,
+  Timer,
+  FileText,
+  HeartPulse,
+  MinusCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,57 +24,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
-  Attendance,
   Employee,
   CentroTrabajo,
-  InsertAttendance,
-  TurnoCentroTrabajo,
+  IncidenciaAsistencia,
 } from "@shared/schema";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAttendanceSchema } from "@shared/schema";
-import { Loader2 } from "lucide-react";
+import { IncidenciasAsistenciaLayout } from "@/components/IncidenciasAsistenciaLayout";
 
 export default function Attendance() {
-  const [selectedCentro, setSelectedCentro] = useState<string>("all");
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
+  const [activeTab, setActiveTab] = useState<"registro" | "historial">("registro");
+  
+  // Periodo selection - default to current week
+  const today = new Date();
+  const [fechaInicio, setFechaInicio] = useState<string>(
+    format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
   );
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const { toast } = useToast();
-
-  const { data: attendanceRecords = [], isLoading } = useQuery<Attendance[]>({
-    queryKey: ["/api/attendance"],
-  });
+  const [fechaFin, setFechaFin] = useState<string>(
+    format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd')
+  );
+  const [selectedCentro, setSelectedCentro] = useState<string>("all");
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -81,52 +55,39 @@ export default function Attendance() {
     queryKey: ["/api/centros-trabajo"],
   });
 
-  const { data: turnos = [] } = useQuery<TurnoCentroTrabajo[]>({
-    queryKey: ["/api/turnos-centro-trabajo"],
+  const { data: incidenciasAsistencia = [], isLoading } = useQuery<IncidenciaAsistencia[]>({
+    queryKey: ["/api/incidencias-asistencia", { fechaInicio, fechaFin, centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined }],
   });
 
-  const filteredRecords = attendanceRecords.filter((record) => {
-    const recordDate = new Date(record.date).toISOString().split("T")[0];
-    const matchesDate = recordDate === selectedDate;
-    const matchesCentro =
-      selectedCentro === "all" || record.centroTrabajoId === selectedCentro;
-    return matchesDate && matchesCentro;
+  // Filtrar empleados por centro de trabajo
+  const filteredEmployees = employees.filter(emp => {
+    if (selectedCentro === "all") return true;
+    // Aquí podríamos filtrar por centro si tuviéramos esa relación
+    return true;
   });
 
-  const getEmployeeName = (employeeId: string) => {
-    const employee = employees.find((e) => e.id === employeeId);
-    return employee
-      ? `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno || ""}`.trim()
-      : "Empleado no encontrado";
+  // Estadísticas calculadas de las incidencias del periodo
+  const stats = {
+    totalIncidencias: incidenciasAsistencia.length,
+    faltas: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.faltas || 0), 0),
+    retardos: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.retardos || 0), 0),
+    horasExtra: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.horasExtra || 0), 0),
+    incapacidades: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0),
+    permisos: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.permisos || 0), 0),
   };
 
-  const getCentroName = (centroId: string | null) => {
-    if (!centroId) return "Sin asignar";
-    const centro = centrosTrabajo.find((c) => c.id === centroId);
-    return centro ? centro.nombre : "Sin asignar";
+  const setCurrentWeek = () => {
+    const today = new Date();
+    setFechaInicio(format(startOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
+    setFechaFin(format(endOfWeek(today, { weekStartsOn: 1 }), 'yyyy-MM-dd'));
   };
 
-  const getTurnoInfo = (turnoId: string | null) => {
-    if (!turnoId) return null;
-    const turno = turnos.find((t) => t.id === turnoId);
-    return turno;
-  };
-
-  const getStatusBadge = (status: string) => {
-    const config = {
-      presente: { label: "Presente", variant: "default" as const },
-      ausente: { label: "Ausente", variant: "destructive" as const },
-      retardo: { label: "Retardo", variant: "secondary" as const },
-      justificado: { label: "Justificado", variant: "outline" as const },
-    };
-    return config[status as keyof typeof config] || config.presente;
-  };
-
-  const statsToday = {
-    total: filteredRecords.length,
-    presente: filteredRecords.filter((r) => r.status === "presente").length,
-    ausente: filteredRecords.filter((r) => r.status === "ausente").length,
-    retardo: filteredRecords.filter((r) => r.status === "retardo").length,
+  const setCurrentMonth = () => {
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    setFechaInicio(format(firstDay, 'yyyy-MM-dd'));
+    setFechaFin(format(lastDay, 'yyyy-MM-dd'));
   };
 
   return (
@@ -135,459 +96,215 @@ export default function Attendance() {
         <div>
           <h1 className="text-3xl font-semibold">Asistencia</h1>
           <p className="text-muted-foreground mt-2">
-            Registra y monitorea la asistencia de empleados
+            Gestiona incidencias de asistencia por periodo
           </p>
         </div>
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-registrar-asistencia">
-              <Plus className="mr-2 h-4 w-4" />
-              Registrar Asistencia
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Registrar Asistencia</DialogTitle>
-              <DialogDescription>
-                Registra la entrada/salida de un empleado
-              </DialogDescription>
-            </DialogHeader>
-            <AttendanceForm onSuccess={() => setIsFormOpen(false)} />
-          </DialogContent>
-        </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Registros
-            </CardTitle>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{statsToday.total}</div>
-            <p className="text-xs text-muted-foreground">
-              {selectedDate === new Date().toISOString().split("T")[0]
-                ? "Hoy"
-                : format(new Date(selectedDate), "d MMM", { locale: es })}
-            </p>
-          </CardContent>
-        </Card>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="registro" data-testid="tab-registro">
+            <Calendar className="h-4 w-4 mr-2" />
+            Registro por Periodo
+          </TabsTrigger>
+          <TabsTrigger value="historial" data-testid="tab-historial">
+            <FileText className="h-4 w-4 mr-2" />
+            Historial
+          </TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Presentes</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-              {statsToday.presente}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {statsToday.total > 0
-                ? `${Math.round((statsToday.presente / statsToday.total) * 100)}%`
-                : "0%"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Retardos</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-              {statsToday.retardo}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {statsToday.total > 0
-                ? `${Math.round((statsToday.retardo / statsToday.total) * 100)}%`
-                : "0%"}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ausencias</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600 dark:text-red-400">
-              {statsToday.ausente}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {statsToday.total > 0
-                ? `${Math.round((statsToday.ausente / statsToday.total) * 100)}%`
-                : "0%"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between gap-4">
-            <CardTitle>Registros de Asistencia</CardTitle>
-            <div className="flex gap-2">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-auto"
-                  data-testid="input-filter-date"
-                />
-              </div>
-              <Select value={selectedCentro} onValueChange={setSelectedCentro}>
-                <SelectTrigger className="w-[200px]" data-testid="select-filter-centro">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue placeholder="Centro de Trabajo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los centros</SelectItem>
-                  {centrosTrabajo.map((centro) => (
-                    <SelectItem key={centro.id} value={centro.id!}>
-                      {centro.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : filteredRecords.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <UserCheck className="h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">
-                No hay registros de asistencia
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                No se encontraron registros para la fecha y filtros seleccionados
-              </p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Empleado</TableHead>
-                  <TableHead>Centro de Trabajo</TableHead>
-                  <TableHead>Turno</TableHead>
-                  <TableHead>Entrada</TableHead>
-                  <TableHead>Salida</TableHead>
-                  <TableHead>Horas Trabajadas</TableHead>
-                  <TableHead>Estado</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredRecords.map((record) => (
-                  <TableRow
-                    key={record.id}
-                    data-testid={`row-attendance-${record.id}`}
-                  >
-                    <TableCell>
-                      <p className="font-medium">
-                        {getEmployeeName(record.employeeId)}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">
-                          {getCentroName(record.centroTrabajoId)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const turno = getTurnoInfo(record.turnoId);
-                        if (!turno) return <span className="text-muted-foreground text-sm">Sin turno</span>;
-                        return (
-                          <div className="flex flex-col">
-                            <span className="text-sm font-medium">{turno.nombre}</span>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {turno.horaInicio} - {turno.horaFin}
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {record.clockIn || "-"}
-                    </TableCell>
-                    <TableCell className="font-mono">
-                      {record.clockOut || "-"}
-                    </TableCell>
-                    <TableCell>
-                      {record.horasTrabajadas
-                        ? `${record.horasTrabajadas} hrs`
-                        : "-"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadge(record.status).variant}>
-                        {getStatusBadge(record.status).label}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
-  const { toast } = useToast();
-
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
-  });
-
-  const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
-    queryKey: ["/api/centros-trabajo"],
-  });
-
-  const form = useForm<InsertAttendance>({
-    resolver: zodResolver(insertAttendanceSchema),
-    defaultValues: {
-      employeeId: "",
-      date: new Date().toISOString().split("T")[0],
-      status: "presente",
-      clockIn: "",
-      clockOut: "",
-      centroTrabajoId: "",
-      horasTrabajadas: "",
-      tipoJornada: "ordinaria",
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: async (data: InsertAttendance) => {
-      return await apiRequest("POST", "/api/attendance", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
-      toast({
-        title: "Asistencia registrada",
-        description: "El registro de asistencia ha sido creado correctamente",
-      });
-      onSuccess();
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "No se pudo registrar la asistencia",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: InsertAttendance) => {
-    mutation.mutate(data);
-  };
-
-  return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="employeeId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Empleado</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger data-testid="select-empleado">
-                    <SelectValue placeholder="Selecciona un empleado" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id!}>
-                      {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="centroTrabajoId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Centro de Trabajo</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                defaultValue={field.value || ""}
-              >
-                <FormControl>
-                  <SelectTrigger data-testid="select-centro-trabajo">
-                    <SelectValue placeholder="Selecciona un centro" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {centrosTrabajo.map((centro) => (
-                    <SelectItem key={centro.id} value={centro.id!}>
-                      {centro.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Fecha</FormLabel>
-                <FormControl>
-                  <Input {...field} type="date" data-testid="input-fecha" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Estado</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger data-testid="select-status">
-                      <SelectValue placeholder="Selecciona un estado" />
+        <TabsContent value="registro" className="space-y-6">
+          {/* Filtros de Periodo y Centro */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Selección de Periodo</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <div className="space-y-2">
+                  <Label htmlFor="fecha-inicio">Fecha Inicio</Label>
+                  <Input
+                    id="fecha-inicio"
+                    type="date"
+                    value={fechaInicio}
+                    onChange={(e) => setFechaInicio(e.target.value)}
+                    data-testid="input-fecha-inicio"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="fecha-fin">Fecha Fin</Label>
+                  <Input
+                    id="fecha-fin"
+                    type="date"
+                    value={fechaFin}
+                    onChange={(e) => setFechaFin(e.target.value)}
+                    data-testid="input-fecha-fin"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="centro-trabajo">Centro de Trabajo</Label>
+                  <Select value={selectedCentro} onValueChange={setSelectedCentro}>
+                    <SelectTrigger id="centro-trabajo" data-testid="select-centro-trabajo">
+                      <SelectValue placeholder="Selecciona centro" />
                     </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="presente">Presente</SelectItem>
-                    <SelectItem value="ausente">Ausente</SelectItem>
-                    <SelectItem value="retardo">Retardo</SelectItem>
-                    <SelectItem value="justificado">Justificado</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
+                    <SelectContent>
+                      <SelectItem value="all">Todos los centros</SelectItem>
+                      {centrosTrabajo.map((centro) => (
+                        <SelectItem key={centro.id} value={centro.id!}>
+                          {centro.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Accesos Rápidos</Label>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={setCurrentWeek}
+                      data-testid="button-semana-actual"
+                    >
+                      Semana Actual
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={setCurrentMonth}
+                      data-testid="button-mes-actual"
+                    >
+                      Mes Actual
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Estadísticas del Periodo */}
+          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Faltas</CardTitle>
+                <XCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-red-600 dark:text-red-400">
+                  {stats.faltas}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total del periodo
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Retardos</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                  {stats.retardos}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total del periodo
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Horas Extra</CardTitle>
+                <Timer className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {stats.horasExtra}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total de horas
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">H. Descontadas</CardTitle>
+                <MinusCircle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                  {incidenciasAsistencia.reduce((sum, inc) => sum + (inc.horasDescontadas || 0), 0)}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total de horas
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Incapacidades</CardTitle>
+                <HeartPulse className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {stats.incapacidades}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total del periodo
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Permisos</CardTitle>
+                <FileText className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                  {stats.permisos}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total del periodo
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Grid de Incidencias */}
+          <IncidenciasAsistenciaLayout
+            fechaInicio={fechaInicio}
+            fechaFin={fechaFin}
+            centroTrabajoId={selectedCentro !== "all" ? selectedCentro : undefined}
+            employees={filteredEmployees}
+            incidenciasAsistencia={incidenciasAsistencia}
+            isLoading={isLoading}
           />
-        </div>
+        </TabsContent>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="clockIn"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Hora de Entrada</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value || ""}
-                    type="time"
-                    data-testid="input-check-in"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="clockOut"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Hora de Salida (Opcional)</FormLabel>
-                <FormControl>
-                  <Input
-                    {...field}
-                    value={field.value || ""}
-                    type="time"
-                    data-testid="input-check-out"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-
-        <FormField
-          control={form.control}
-          name="horasTrabajadas"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Horas Trabajadas (Opcional)</FormLabel>
-              <FormControl>
-                <Input
-                  {...field}
-                  value={field.value || ""}
-                  type="text"
-                  placeholder="8.5"
-                  data-testid="input-horas-trabajadas"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="notas"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Notas (Opcional)</FormLabel>
-              <FormControl>
-                <Textarea
-                  {...field}
-                  value={field.value || ""}
-                  placeholder="Notas adicionales sobre la asistencia"
-                  data-testid="textarea-notes"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <div className="flex justify-end gap-2">
-          <Button
-            type="submit"
-            disabled={mutation.isPending}
-            data-testid="button-guardar-asistencia"
-          >
-            {mutation.isPending && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Registrar
-          </Button>
-        </div>
-      </form>
-    </Form>
+        <TabsContent value="historial" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Historial de Incidencias</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">
+                  Próximamente
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Visualiza el historial de incidencias de asistencia
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
