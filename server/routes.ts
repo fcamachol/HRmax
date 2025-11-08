@@ -115,6 +115,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employees", async (req, res) => {
     try {
+      const { centroTrabajoId } = req.query;
+      
+      if (centroTrabajoId) {
+        const employees = await storage.getEmployeesByCentroTrabajo(centroTrabajoId as string);
+        return res.json(employees);
+      }
+      
       const employees = await storage.getEmployees();
       res.json(employees);
     } catch (error: any) {
