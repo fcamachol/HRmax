@@ -14,7 +14,6 @@ import Bajas from "@/pages/employees/Bajas";
 import Reingresos from "@/pages/employees/Reingresos";
 import Cambios from "@/pages/employees/Cambios";
 import Payroll from "@/pages/Payroll";
-import PayrollGroups from "@/pages/PayrollGroups";
 import Attendance from "@/pages/Attendance";
 import CentrosTrabajo from "@/pages/CentrosTrabajo";
 import Reports from "@/pages/Reports";
@@ -36,7 +35,6 @@ function Router() {
       <Route path="/employees/reingresos" component={Reingresos} />
       <Route path="/employees/cambios" component={Cambios} />
       <Route path="/payroll" component={Payroll} />
-      <Route path="/payroll-groups" component={PayrollGroups} />
       <Route path="/attendance" component={Attendance} />
       <Route path="/reloj-checador" component={RelojChecador} />
       <Route path="/centros-trabajo" component={CentrosTrabajo} />
