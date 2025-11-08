@@ -21,6 +21,7 @@ import Configuration from "@/pages/Configuration";
 import Empresas from "@/pages/Empresas";
 import Settings from "@/pages/Settings";
 import Legal from "@/pages/Legal";
+import RelojChecador from "@/components/RelojChecador";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -34,6 +35,7 @@ function Router() {
       <Route path="/employees/cambios" component={Cambios} />
       <Route path="/payroll" component={Payroll} />
       <Route path="/attendance" component={Attendance} />
+      <Route path="/reloj-checador" component={RelojChecador} />
       <Route path="/centros-trabajo" component={CentrosTrabajo} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
