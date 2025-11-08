@@ -1091,6 +1091,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertContratoREPSESchema.parse(req.body);
       const contrato = await storage.createContratoREPSE(validatedData);
+      
+      // Crear aviso automático para nuevo contrato (30 días de plazo)
+      const fechaEvento = new Date(contrato.fechaInicio);
+      const fechaLimite = new Date(fechaEvento);
+      fechaLimite.setDate(fechaLimite.getDate() + 30);
+      
+      // Obtener información del cliente para la descripción
+      const cliente = await storage.getClienteREPSE(contrato.clienteId);
+      const descripcion = cliente 
+        ? `Aviso de nuevo contrato con ${cliente.razonSocial} - Contrato ${contrato.numeroContrato}`
+        : `Aviso de nuevo contrato - Contrato ${contrato.numeroContrato}`;
+      
+      await storage.createAvisoREPSE({
+        tipo: "NUEVO_CONTRATO",
+        empresaId: contrato.empresaId,
+        contratoREPSEId: contrato.id,
+        descripcion,
+        fechaEvento: contrato.fechaInicio,
+        fechaLimite: fechaLimite.toISOString().split('T')[0],
+        estatus: "PENDIENTE",
+      });
+      
       res.json(contrato);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1134,7 +1156,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/contratos-repse/:id", async (req, res) => {
     try {
       const validatedData = updateContratoREPSESchema.parse(req.body);
+      const contratoAnterior = await storage.getContratoREPSE(req.params.id);
       const contrato = await storage.updateContratoREPSE(req.params.id, validatedData);
+      
+      // Verificar si el estatus cambió a finalizado o cancelado (terminación de contrato)
+      if (contratoAnterior && 
+          contratoAnterior.estatus !== contrato.estatus &&
+          (contrato.estatus === "finalizado" || contrato.estatus === "cancelado")) {
+        
+        const fechaEvento = new Date();
+        const fechaLimite = new Date();
+        fechaLimite.setDate(fechaLimite.getDate() + 30);
+        
+        const cliente = await storage.getClienteREPSE(contrato.clienteId);
+        const descripcion = cliente 
+          ? `Aviso de terminación de contrato con ${cliente.razonSocial} - Contrato ${contrato.numeroContrato}`
+          : `Aviso de terminación de contrato - Contrato ${contrato.numeroContrato}`;
+        
+        await storage.createAvisoREPSE({
+          tipo: "TERMINACION_CONTRATO",
+          empresaId: contrato.empresaId,
+          contratoREPSEId: contrato.id,
+          descripcion,
+          fechaEvento: fechaEvento.toISOString().split('T')[0],
+          fechaLimite: fechaLimite.toISOString().split('T')[0],
+          estatus: "PENDIENTE",
+        });
+      } 
+      // Si no es terminación pero hubo cambios significativos, crear aviso de modificación
+      else if (contratoAnterior && 
+               (validatedData.serviciosEspecializados || 
+                validatedData.fechaFin || 
+                validatedData.montoContrato)) {
+        
+        const fechaEvento = new Date();
+        const fechaLimite = new Date();
+        fechaLimite.setDate(fechaLimite.getDate() + 30);
+        
+        const cliente = await storage.getClienteREPSE(contrato.clienteId);
+        const descripcion = cliente 
+          ? `Aviso de modificación de contrato con ${cliente.razonSocial} - Contrato ${contrato.numeroContrato}`
+          : `Aviso de modificación de contrato - Contrato ${contrato.numeroContrato}`;
+        
+        await storage.createAvisoREPSE({
+          tipo: "MODIFICACION_CONTRATO",
+          empresaId: contrato.empresaId,
+          contratoREPSEId: contrato.id,
+          descripcion,
+          fechaEvento: fechaEvento.toISOString().split('T')[0],
+          fechaLimite: fechaLimite.toISOString().split('T')[0],
+          estatus: "PENDIENTE",
+        });
+      }
+      
       res.json(contrato);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
