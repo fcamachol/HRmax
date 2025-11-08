@@ -16,6 +16,7 @@ import {
   LayoutList,
   MapPin,
   ClipboardCheck,
+  Clock,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -76,6 +77,11 @@ const mainMenuItems = [
     title: "Nómina",
     url: "/payroll",
     icon: DollarSign,
+  },
+  {
+    title: "Grupos de Nómina",
+    url: "/payroll-groups",
+    icon: Clock,
   },
   {
     title: "Asistencia",
