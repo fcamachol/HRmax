@@ -66,16 +66,24 @@ const employeeSubItems = [
   },
 ];
 
+const payrollSubItems = [
+  {
+    title: "Crear Nómina",
+    url: "/payroll",
+    icon: Calculator,
+  },
+  {
+    title: "Grupos de Nómina",
+    url: "/payroll/grupos",
+    icon: Users,
+  },
+];
+
 const mainMenuItems = [
   {
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Nómina",
-    url: "/payroll",
-    icon: DollarSign,
   },
   {
     title: "Asistencia",
@@ -122,6 +130,7 @@ const mainMenuItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const isEmployeesActive = location.startsWith("/employees");
+  const isPayrollActive = location.startsWith("/payroll");
 
   return (
     <Sidebar>
@@ -172,6 +181,39 @@ export function AppSidebar() {
                             asChild
                             isActive={location === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isPayrollActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isPayrollActive}
+                      data-testid="link-nomina"
+                    >
+                      <DollarSign className="h-4 w-4" />
+                      <span>Nómina</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {payrollSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
                             <Link href={subItem.url}>
                               <subItem.icon className="h-4 w-4" />
