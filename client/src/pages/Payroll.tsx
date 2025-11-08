@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 interface NominaGroup {
   id: string;
@@ -98,6 +99,12 @@ export default function Payroll() {
   const [newGroupName, setNewGroupName] = useState("");
   const [selectedGroup, setSelectedGroup] = useState<string>("");
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  
+  // New group form - Payroll period configuration
+  const [newGroupTipoPeriodo, setNewGroupTipoPeriodo] = useState<"semanal" | "catorcenal" | "quincenal" | "mensual">("quincenal");
+  const [newGroupDiaInicioSemana, setNewGroupDiaInicioSemana] = useState<number>(1); // 1 = Lunes
+  const [newGroupDiaCorte, setNewGroupDiaCorte] = useState<number>(15);
+  const [newGroupDescripcion, setNewGroupDescripcion] = useState("");
   
   // New concept form
   const [newConceptName, setNewConceptName] = useState("");
@@ -366,7 +373,7 @@ export default function Payroll() {
     }
   };
 
-  const createGroup = () => {
+  const createGroup = async () => {
     if (!newGroupName.trim()) {
       toast({
         title: "Error",
@@ -376,30 +383,48 @@ export default function Payroll() {
       return;
     }
 
-    if (selectedEmployees.size === 0) {
+    try {
+      const grupoData = {
+        nombre: newGroupName,
+        tipoPeriodo: newGroupTipoPeriodo,
+        diaInicioSemana: (newGroupTipoPeriodo === "semanal" || newGroupTipoPeriodo === "catorcenal") 
+          ? newGroupDiaInicioSemana 
+          : undefined,
+        diaCorte: (newGroupTipoPeriodo === "quincenal" || newGroupTipoPeriodo === "mensual") 
+          ? newGroupDiaCorte 
+          : undefined,
+        descripcion: newGroupDescripcion || undefined,
+        activo: true,
+      };
+
+      await apiRequest("/api/grupos-nomina", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(grupoData),
+      });
+
+      // Reset form
+      setNewGroupName("");
+      setNewGroupTipoPeriodo("quincenal");
+      setNewGroupDiaInicioSemana(1);
+      setNewGroupDiaCorte(15);
+      setNewGroupDescripcion("");
+      setIsCreateGroupOpen(false);
+      
+      // Invalidate cache to refresh groups list
+      queryClient.invalidateQueries({ queryKey: ["/api/grupos-nomina"] });
+      
       toast({
-        title: "Error",
-        description: "Selecciona al menos un empleado para el grupo",
+        title: "Grupo creado exitosamente",
+        description: `"${newGroupName}" con periodicidad ${newGroupTipoPeriodo}. Los periodos de pago se generaron automáticamente.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error al crear grupo",
+        description: error.message || "No se pudo crear el grupo de nómina",
         variant: "destructive",
       });
-      return;
     }
-
-    const newGroup: NominaGroup = {
-      id: Date.now().toString(),
-      name: newGroupName,
-      employeeIds: Array.from(selectedEmployees),
-      createdAt: new Date(),
-    };
-
-    setNominaGroups([...nominaGroups, newGroup]);
-    setNewGroupName("");
-    setIsCreateGroupOpen(false);
-    
-    toast({
-      title: "Grupo creado",
-      description: `"${newGroup.name}" con ${newGroup.employeeIds.length} empleados`,
-    });
   };
 
   const deleteGroup = (groupId: string) => {
