@@ -98,6 +98,15 @@ Preferred communication style: Simple, everyday language.
 - **Smart Period Selection**: When a payroll group is selected, quick access buttons automatically calculate "Periodo Actual" and "Periodo Anterior" based on the group's payment frequency and current date.
 - **Combined Filtering**: Attendance tracking supports filtering by both work center (centroTrabajoId) and payroll group (grupoNominaId) simultaneously for precise reporting.
 
+**Payroll Module (Nómina)**:
+- **Real-time API Integration**: Uses `useQuery` to fetch payroll groups from `/api/grupos-nomina`, ensuring consistency with Attendance and other modules.
+- **Dynamic Group Selection**: Displays active payroll groups in dropdown, showing group name and period type (e.g., "Ventas (quincenal)").
+- **Group Management**: 
+  - Create new groups via dialog with automatic period generation
+  - Delete groups with API confirmation
+  - Load group configuration to filter/manage payroll for specific employee groups
+- **Data Consistency**: All payroll group data sourced from single API endpoint, eliminating hardcoded/mock data.
+
 **Attendance Module (Asistencia) - Redesigned**:
 - **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
 - **Incident Types**: Separate columns for each type:

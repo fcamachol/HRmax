@@ -823,14 +823,14 @@ export default function Payroll() {
                         <Plus className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
                       <DialogHeader>
                         <DialogTitle>Crear Grupo de Nómina</DialogTitle>
                         <DialogDescription>
                           Define la periodicidad y configuración del grupo de nómina
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="space-y-4 py-4">
+                      <div className="space-y-4 py-4 overflow-y-auto flex-1">
                         <div className="space-y-2">
                           <Label htmlFor="group-name">Nombre del Grupo</Label>
                           <Input
