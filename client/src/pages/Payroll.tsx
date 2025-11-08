@@ -901,6 +901,66 @@ export default function Payroll() {
                           </div>
                         )}
 
+                        {(newGroupTipoPeriodo === "semanal" || newGroupTipoPeriodo === "catorcenal") && (
+                          <div className="space-y-2">
+                            <Label htmlFor="dia-pago">Día de Pago</Label>
+                            <Select 
+                              value={newGroupDiaPago.toString()} 
+                              onValueChange={(v) => setNewGroupDiaPago(parseInt(v))}
+                            >
+                              <SelectTrigger id="dia-pago" data-testid="select-dia-pago">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">Domingo</SelectItem>
+                                <SelectItem value="1">Lunes</SelectItem>
+                                <SelectItem value="2">Martes</SelectItem>
+                                <SelectItem value="3">Miércoles</SelectItem>
+                                <SelectItem value="4">Jueves</SelectItem>
+                                <SelectItem value="5">Viernes</SelectItem>
+                                <SelectItem value="6">Sábado</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Día de la semana en que se realiza el pago
+                            </p>
+                          </div>
+                        )}
+
+                        {(newGroupTipoPeriodo === "quincenal" || newGroupTipoPeriodo === "mensual") && (
+                          <div className="space-y-2">
+                            <Label htmlFor="dia-pago-mes">Día de Pago</Label>
+                            <Input
+                              id="dia-pago-mes"
+                              type="number"
+                              min="1"
+                              max="31"
+                              value={newGroupDiaPagoMes}
+                              onChange={(e) => setNewGroupDiaPagoMes(parseInt(e.target.value) || 15)}
+                              data-testid="input-dia-pago-mes"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Día del mes en que se realiza el pago
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label htmlFor="dias-calculo">Días de Cálculo (opcional)</Label>
+                          <Input
+                            id="dias-calculo"
+                            type="number"
+                            min="0"
+                            max="30"
+                            value={newGroupDiasCalculo}
+                            onChange={(e) => setNewGroupDiasCalculo(parseInt(e.target.value) || 0)}
+                            data-testid="input-dias-calculo"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Días de anticipación para hacer los cálculos de pre-nómina (ej. 2 días)
+                          </p>
+                        </div>
+
                         <div className="space-y-2">
                           <Label htmlFor="descripcion">Descripción (opcional)</Label>
                           <Input
