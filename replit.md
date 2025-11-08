@@ -78,9 +78,12 @@ Preferred communication style: Simple, everyday language.
   - Tipo de Periodo: semanal (weekly), catorcenal (biweekly), quincenal (twice monthly), mensual (monthly)
   - Día de inicio de semana (configurable starting day for weekly/biweekly periods)
   - Día de corte (optional cutoff day for monthly/quincenal periods)
+  - Día de pago: For weekly/biweekly (day of week 0-6), for bimonthly/monthly (day of month 1-31)
+  - Días de cálculo: Optional field for all period types - number of days in advance for pre-payroll calculations
 - **Interactive Creation Dialog**: Enhanced "Crear Grupo de Nómina" dialog features:
   - Period Type selector with period count indicators (e.g., "Semanal (~52 periodos/año)")
-  - Conditional field display: Shows diaInicioSemana for weekly/biweekly, diaCorte for bimonthly/monthly
+  - Conditional field display: Shows diaInicioSemana and diaPago for weekly/biweekly, diaCorte and diaPago for bimonthly/monthly
+  - Días de cálculo field (optional, for all period types) - allows specifying advance calculation days (e.g., 2 days before payday)
   - Real-time field validation and helpful tooltips
   - Information panel explaining automatic period generation and key features
 - **Automatic Period Generation**: When a payroll group is created, the system automatically generates payroll periods for the current year and next year:
