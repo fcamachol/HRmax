@@ -1103,6 +1103,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async generatePayrollPeriodsForYear(grupoNominaId: string, year: number): Promise<PayrollPeriod[]> {
+    // Verificar si ya existen periodos para este grupo y año
+    const existingPeriods = await this.getPayrollPeriodsByGrupo(grupoNominaId, year);
+    if (existingPeriods.length > 0) {
+      return existingPeriods;
+    }
+    
     // Obtener el grupo para saber el tipo de periodo
     const grupo = await this.getGrupoNomina(grupoNominaId);
     if (!grupo) {
@@ -1118,17 +1124,36 @@ export class DatabaseStorage implements IStorage {
 
     switch (grupo.tipoPeriodo) {
       case 'semanal': {
-        // Periodos semanales - aproximadamente 52 periodos al año
-        while (currentDate <= endOfYear) {
-          // Ajustar al día de inicio de semana configurado
-          const dayOfWeek = currentDate.getDay();
-          const targetDay = grupo.diaInicioSemana || 1; // Default: lunes
-          
-          if (dayOfWeek !== targetDay) {
-            const diff = (targetDay - dayOfWeek + 7) % 7;
-            currentDate.setDate(currentDate.getDate() + (diff === 0 ? 7 : diff));
+        // Periodos semanales - aproximadamente 52-53 periodos al año
+        const targetDay = grupo.diaInicioSemana || 1; // Default: lunes
+        const firstDayOfWeek = currentDate.getDay();
+        
+        // Ajustar al primer día de semana configurado
+        if (firstDayOfWeek !== targetDay) {
+          const diff = (targetDay - firstDayOfWeek + 7) % 7;
+          if (diff > 0) {
+            currentDate.setDate(currentDate.getDate() + diff);
           }
+        }
+        
+        // Si el primer día de semana no es el 1 de enero, crear periodo parcial
+        if (currentDate.getDate() > 1) {
+          const partialEnd = new Date(currentDate);
+          partialEnd.setDate(partialEnd.getDate() - 1);
           
+          periods.push({
+            grupoNominaId,
+            startDate: startOfYear.toISOString().split('T')[0],
+            endDate: partialEnd.toISOString().split('T')[0],
+            frequency: 'semanal',
+            year,
+            periodNumber: periodNumber++,
+            status: 'pending'
+          });
+        }
+        
+        // Generar periodos semanales completos
+        while (currentDate <= endOfYear) {
           const periodStart = new Date(currentDate);
           const periodEnd = new Date(currentDate);
           periodEnd.setDate(periodEnd.getDate() + 6);
@@ -1152,16 +1177,36 @@ export class DatabaseStorage implements IStorage {
       }
       
       case 'catorcenal': {
-        // Periodos catorcenales - aproximadamente 26 periodos al año
-        while (currentDate <= endOfYear) {
-          const dayOfWeek = currentDate.getDay();
-          const targetDay = grupo.diaInicioSemana || 1;
-          
-          if (dayOfWeek !== targetDay) {
-            const diff = (targetDay - dayOfWeek + 7) % 7;
-            currentDate.setDate(currentDate.getDate() + (diff === 0 ? 7 : diff));
+        // Periodos catorcenales - aproximadamente 26-27 periodos al año
+        const targetDay = grupo.diaInicioSemana || 1;
+        const firstDayOfWeek = currentDate.getDay();
+        
+        // Ajustar al primer día de semana configurado
+        if (firstDayOfWeek !== targetDay) {
+          const diff = (targetDay - firstDayOfWeek + 7) % 7;
+          if (diff > 0) {
+            currentDate.setDate(currentDate.getDate() + diff);
           }
+        }
+        
+        // Si el primer día de semana no es el 1 de enero, crear periodo parcial
+        if (currentDate.getDate() > 1) {
+          const partialEnd = new Date(currentDate);
+          partialEnd.setDate(partialEnd.getDate() - 1);
           
+          periods.push({
+            grupoNominaId,
+            startDate: startOfYear.toISOString().split('T')[0],
+            endDate: partialEnd.toISOString().split('T')[0],
+            frequency: 'catorcenal',
+            year,
+            periodNumber: periodNumber++,
+            status: 'pending'
+          });
+        }
+        
+        // Generar periodos catorcenales completos
+        while (currentDate <= endOfYear) {
           const periodStart = new Date(currentDate);
           const periodEnd = new Date(currentDate);
           periodEnd.setDate(periodEnd.getDate() + 13);

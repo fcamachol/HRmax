@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -117,7 +117,9 @@ export const payrollPeriods = pgTable("payroll_periods", {
   periodNumber: integer("period_number").notNull(), // 1, 2, 3... número del periodo en el año
   status: text("status").notNull().default("pending"), // pending, processing, completed
   createdAt: timestamp("created_at").default(sql`now()`),
-});
+}, (table) => ({
+  uniquePeriod: unique().on(table.grupoNominaId, table.year, table.periodNumber),
+}));
 
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
