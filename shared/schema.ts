@@ -561,19 +561,6 @@ export const centrosTrabajo = pgTable("centros_trabajo", {
   municipio: text("municipio"),
   estado: text("estado"),
   codigoPostal: varchar("codigo_postal", { length: 5 }),
-  // Configuración de horarios
-  horaEntrada: varchar("hora_entrada"), // Formato HH:MM (ej: "09:00")
-  horaSalida: varchar("hora_salida"), // Formato HH:MM (ej: "18:00")
-  minutosToleranciaEntrada: integer("minutos_tolerancia_entrada").default(10), // Minutos de tolerancia para entrada
-  minutosToleranciaComida: integer("minutos_tolerancia_comida").default(60), // Minutos para comida
-  // Días laborales (lunes a viernes por defecto)
-  trabajaLunes: boolean("trabaja_lunes").default(true),
-  trabajaMartes: boolean("trabaja_martes").default(true),
-  trabajaMiercoles: boolean("trabaja_miercoles").default(true),
-  trabajaJueves: boolean("trabaja_jueves").default(true),
-  trabajaViernes: boolean("trabaja_viernes").default(true),
-  trabajaSabado: boolean("trabaja_sabado").default(false),
-  trabajaDomingo: boolean("trabaja_domingo").default(false),
   // Información adicional
   capacidadEmpleados: integer("capacidad_empleados"), // Capacidad máxima de empleados
   telefono: varchar("telefono"),
@@ -596,16 +583,54 @@ export const updateCentroTrabajoSchema = insertCentroTrabajoSchema.partial();
 export type CentroTrabajo = typeof centrosTrabajo.$inferSelect;
 export type InsertCentroTrabajo = z.infer<typeof insertCentroTrabajoSchema>;
 
-// Asignación de Empleados a Centros de Trabajo
+// Turnos de Centro de Trabajo
+// Un centro de trabajo puede tener múltiples turnos (matutino, vespertino, nocturno, etc.)
+export const turnosCentroTrabajo = pgTable("turnos_centro_trabajo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  centroTrabajoId: varchar("centro_trabajo_id").notNull().references(() => centrosTrabajo.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre").notNull(), // "Matutino", "Vespertino", "Nocturno", "Turno A", etc.
+  descripcion: text("descripcion"),
+  // Horarios
+  horaInicio: varchar("hora_inicio").notNull(), // Formato HH:MM (ej: "09:00")
+  horaFin: varchar("hora_fin").notNull(), // Formato HH:MM (ej: "18:00")
+  minutosToleranciaEntrada: integer("minutos_tolerancia_entrada").default(10),
+  minutosToleranciaComida: integer("minutos_tolerancia_comida").default(60),
+  // Días laborales
+  trabajaLunes: boolean("trabaja_lunes").default(true),
+  trabajaMartes: boolean("trabaja_martes").default(true),
+  trabajaMiercoles: boolean("trabaja_miercoles").default(true),
+  trabajaJueves: boolean("trabaja_jueves").default(true),
+  trabajaViernes: boolean("trabaja_viernes").default(true),
+  trabajaSabado: boolean("trabaja_sabado").default(false),
+  trabajaDomingo: boolean("trabaja_domingo").default(false),
+  // Estado
+  estatus: varchar("estatus").default("activo"), // activo, inactivo
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertTurnoCentroTrabajoSchema = createInsertSchema(turnosCentroTrabajo).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateTurnoCentroTrabajoSchema = insertTurnoCentroTrabajoSchema.partial();
+
+export type TurnoCentroTrabajo = typeof turnosCentroTrabajo.$inferSelect;
+export type InsertTurnoCentroTrabajo = z.infer<typeof insertTurnoCentroTrabajoSchema>;
+
+// Asignación de Empleados a Turnos de Centros de Trabajo
 export const empleadosCentrosTrabajo = pgTable("empleados_centros_trabajo", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   centroTrabajoId: varchar("centro_trabajo_id").notNull().references(() => centrosTrabajo.id, { onDelete: "cascade" }),
-  fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio en este centro
+  turnoId: varchar("turno_id").notNull().references(() => turnosCentroTrabajo.id, { onDelete: "cascade" }), // Turno asignado
+  fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio en este turno
   fechaFin: date("fecha_fin"), // Fecha de fin (null si es asignación actual)
-  esPrincipal: boolean("es_principal").default(true), // Si es el centro principal del empleado
-  turno: varchar("turno").default("matutino"), // matutino, vespertino, nocturno, mixto
-  // Horario específico para este empleado en este centro (puede sobrescribir el horario general)
+  esPrincipal: boolean("es_principal").default(true), // Si es el turno principal del empleado
+  // Horario específico para este empleado (puede sobrescribir el horario del turno)
   horaEntradaEspecifica: varchar("hora_entrada_especifica"), // Si tiene horario especial
   horaSalidaEspecifica: varchar("hora_salida_especifica"),
   notas: text("notas"),
