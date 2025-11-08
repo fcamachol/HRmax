@@ -102,7 +102,7 @@ export default function AsignacionEmpleados({ centroTrabajoId }: AsignacionEmple
   const getEmpleadoName = (empleadoId: string) => {
     const empleado = empleados.find((e) => e.id === empleadoId);
     return empleado
-      ? `${empleado.firstName} ${empleado.lastName}`
+      ? `${empleado.nombre} ${empleado.apellidoPaterno} ${empleado.apellidoMaterno || ""}`.trim()
       : "Empleado no encontrado";
   };
 
@@ -345,7 +345,7 @@ function AsignacionForm({
                 <SelectContent>
                   {empleados.map((empleado) => (
                     <SelectItem key={empleado.id} value={empleado.id!}>
-                      {empleado.firstName} {empleado.lastName}
+                      {empleado.nombre} {empleado.apellidoPaterno} {empleado.apellidoMaterno || ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
