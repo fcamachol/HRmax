@@ -21,6 +21,14 @@ import {
   type InsertRegistroPatronal,
   type CredencialSistema,
   type InsertCredencialSistema,
+  type CentroTrabajo,
+  type InsertCentroTrabajo,
+  type EmpleadoCentroTrabajo,
+  type InsertEmpleadoCentroTrabajo,
+  type HoraExtra,
+  type InsertHoraExtra,
+  type Attendance,
+  type InsertAttendance,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -31,7 +39,11 @@ import {
   employees,
   empresas,
   registrosPatronales,
-  credencialesSistemas
+  credencialesSistemas,
+  centrosTrabajo,
+  empleadosCentrosTrabajo,
+  horasExtras,
+  attendance
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -112,6 +124,43 @@ export interface IStorage {
   getCredencialesByRegistroPatronal(registroPatronalId: string): Promise<CredencialSistema[]>;
   updateCredencialSistema(id: string, updates: Partial<InsertCredencialSistema>): Promise<CredencialSistema>;
   deleteCredencialSistema(id: string): Promise<void>;
+  
+  // Centros de Trabajo
+  createCentroTrabajo(centro: InsertCentroTrabajo): Promise<CentroTrabajo>;
+  getCentroTrabajo(id: string): Promise<CentroTrabajo | undefined>;
+  getCentrosTrabajo(): Promise<CentroTrabajo[]>;
+  getCentrosTrabajoByEmpresa(empresaId: string): Promise<CentroTrabajo[]>;
+  updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo>;
+  deleteCentroTrabajo(id: string): Promise<void>;
+  
+  // Empleados Centros de Trabajo (Asignaciones)
+  createEmpleadoCentroTrabajo(asignacion: InsertEmpleadoCentroTrabajo): Promise<EmpleadoCentroTrabajo>;
+  getEmpleadoCentroTrabajo(id: string): Promise<EmpleadoCentroTrabajo | undefined>;
+  getEmpleadosCentrosTrabajo(): Promise<EmpleadoCentroTrabajo[]>;
+  getEmpleadosCentrosTrabajoByEmpleado(empleadoId: string): Promise<EmpleadoCentroTrabajo[]>;
+  getEmpleadosCentrosTabajoByCentro(centroTrabajoId: string): Promise<EmpleadoCentroTrabajo[]>;
+  updateEmpleadoCentroTrabajo(id: string, updates: Partial<InsertEmpleadoCentroTrabajo>): Promise<EmpleadoCentroTrabajo>;
+  deleteEmpleadoCentroTrabajo(id: string): Promise<void>;
+  
+  // Attendance (Asistencias)
+  createAttendance(attendance: InsertAttendance): Promise<Attendance>;
+  getAttendance(id: string): Promise<Attendance | undefined>;
+  getAttendances(): Promise<Attendance[]>;
+  getAttendancesByEmpleado(empleadoId: string): Promise<Attendance[]>;
+  getAttendancesByCentro(centroTrabajoId: string): Promise<Attendance[]>;
+  getAttendancesByDate(date: string): Promise<Attendance[]>;
+  updateAttendance(id: string, updates: Partial<InsertAttendance>): Promise<Attendance>;
+  deleteAttendance(id: string): Promise<void>;
+  
+  // Horas Extras
+  createHoraExtra(horaExtra: InsertHoraExtra): Promise<HoraExtra>;
+  getHoraExtra(id: string): Promise<HoraExtra | undefined>;
+  getHorasExtras(): Promise<HoraExtra[]>;
+  getHorasExtrasByEmpleado(empleadoId: string): Promise<HoraExtra[]>;
+  getHorasExtrasByCentro(centroTrabajoId: string): Promise<HoraExtra[]>;
+  getHorasExtrasByEstatus(estatus: string): Promise<HoraExtra[]>;
+  updateHoraExtra(id: string, updates: Partial<InsertHoraExtra>): Promise<HoraExtra>;
+  deleteHoraExtra(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -561,6 +610,234 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(credencialesSistemas)
       .where(eq(credencialesSistemas.id, id));
+  }
+
+  // Centros de Trabajo
+  async createCentroTrabajo(centro: InsertCentroTrabajo): Promise<CentroTrabajo> {
+    const [newCentro] = await db
+      .insert(centrosTrabajo)
+      .values(centro)
+      .returning();
+    return newCentro;
+  }
+
+  async getCentroTrabajo(id: string): Promise<CentroTrabajo | undefined> {
+    const [centro] = await db
+      .select()
+      .from(centrosTrabajo)
+      .where(eq(centrosTrabajo.id, id));
+    return centro || undefined;
+  }
+
+  async getCentrosTrabajo(): Promise<CentroTrabajo[]> {
+    return await db
+      .select()
+      .from(centrosTrabajo)
+      .orderBy(desc(centrosTrabajo.createdAt));
+  }
+
+  async getCentrosTrabajoByEmpresa(empresaId: string): Promise<CentroTrabajo[]> {
+    return await db
+      .select()
+      .from(centrosTrabajo)
+      .where(eq(centrosTrabajo.empresaId, empresaId))
+      .orderBy(desc(centrosTrabajo.createdAt));
+  }
+
+  async updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo> {
+    const [updated] = await db
+      .update(centrosTrabajo)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(centrosTrabajo.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCentroTrabajo(id: string): Promise<void> {
+    await db
+      .delete(centrosTrabajo)
+      .where(eq(centrosTrabajo.id, id));
+  }
+
+  // Empleados Centros de Trabajo (Asignaciones)
+  async createEmpleadoCentroTrabajo(asignacion: InsertEmpleadoCentroTrabajo): Promise<EmpleadoCentroTrabajo> {
+    const [newAsignacion] = await db
+      .insert(empleadosCentrosTrabajo)
+      .values(asignacion)
+      .returning();
+    return newAsignacion;
+  }
+
+  async getEmpleadoCentroTrabajo(id: string): Promise<EmpleadoCentroTrabajo | undefined> {
+    const [asignacion] = await db
+      .select()
+      .from(empleadosCentrosTrabajo)
+      .where(eq(empleadosCentrosTrabajo.id, id));
+    return asignacion || undefined;
+  }
+
+  async getEmpleadosCentrosTrabajo(): Promise<EmpleadoCentroTrabajo[]> {
+    return await db
+      .select()
+      .from(empleadosCentrosTrabajo)
+      .orderBy(desc(empleadosCentrosTrabajo.createdAt));
+  }
+
+  async getEmpleadosCentrosTrabajoByEmpleado(empleadoId: string): Promise<EmpleadoCentroTrabajo[]> {
+    return await db
+      .select()
+      .from(empleadosCentrosTrabajo)
+      .where(eq(empleadosCentrosTrabajo.empleadoId, empleadoId))
+      .orderBy(desc(empleadosCentrosTrabajo.createdAt));
+  }
+
+  async getEmpleadosCentrosTabajoByCentro(centroTrabajoId: string): Promise<EmpleadoCentroTrabajo[]> {
+    return await db
+      .select()
+      .from(empleadosCentrosTrabajo)
+      .where(eq(empleadosCentrosTrabajo.centroTrabajoId, centroTrabajoId))
+      .orderBy(desc(empleadosCentrosTrabajo.createdAt));
+  }
+
+  async updateEmpleadoCentroTrabajo(id: string, updates: Partial<InsertEmpleadoCentroTrabajo>): Promise<EmpleadoCentroTrabajo> {
+    const [updated] = await db
+      .update(empleadosCentrosTrabajo)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(empleadosCentrosTrabajo.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmpleadoCentroTrabajo(id: string): Promise<void> {
+    await db
+      .delete(empleadosCentrosTrabajo)
+      .where(eq(empleadosCentrosTrabajo.id, id));
+  }
+
+  // Attendance (Asistencias)
+  async createAttendance(attendanceData: InsertAttendance): Promise<Attendance> {
+    const [newAttendance] = await db
+      .insert(attendance)
+      .values(attendanceData)
+      .returning();
+    return newAttendance;
+  }
+
+  async getAttendance(id: string): Promise<Attendance | undefined> {
+    const [attendanceRecord] = await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.id, id));
+    return attendanceRecord || undefined;
+  }
+
+  async getAttendances(): Promise<Attendance[]> {
+    return await db
+      .select()
+      .from(attendance)
+      .orderBy(desc(attendance.date));
+  }
+
+  async getAttendancesByEmpleado(empleadoId: string): Promise<Attendance[]> {
+    return await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.employeeId, empleadoId))
+      .orderBy(desc(attendance.date));
+  }
+
+  async getAttendancesByCentro(centroTrabajoId: string): Promise<Attendance[]> {
+    return await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.centroTrabajoId, centroTrabajoId))
+      .orderBy(desc(attendance.date));
+  }
+
+  async getAttendancesByDate(date: string): Promise<Attendance[]> {
+    return await db
+      .select()
+      .from(attendance)
+      .where(eq(attendance.date, date))
+      .orderBy(desc(attendance.createdAt));
+  }
+
+  async updateAttendance(id: string, updates: Partial<InsertAttendance>): Promise<Attendance> {
+    const [updated] = await db
+      .update(attendance)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(attendance.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAttendance(id: string): Promise<void> {
+    await db
+      .delete(attendance)
+      .where(eq(attendance.id, id));
+  }
+
+  // Horas Extras
+  async createHoraExtra(horaExtra: InsertHoraExtra): Promise<HoraExtra> {
+    const [newHoraExtra] = await db
+      .insert(horasExtras)
+      .values(horaExtra)
+      .returning();
+    return newHoraExtra;
+  }
+
+  async getHoraExtra(id: string): Promise<HoraExtra | undefined> {
+    const [horaExtra] = await db
+      .select()
+      .from(horasExtras)
+      .where(eq(horasExtras.id, id));
+    return horaExtra || undefined;
+  }
+
+  async getHorasExtras(): Promise<HoraExtra[]> {
+    return await db
+      .select()
+      .from(horasExtras)
+      .orderBy(desc(horasExtras.fecha));
+  }
+
+  async getHorasExtrasByEmpleado(empleadoId: string): Promise<HoraExtra[]> {
+    return await db
+      .select()
+      .from(horasExtras)
+      .where(eq(horasExtras.empleadoId, empleadoId))
+      .orderBy(desc(horasExtras.fecha));
+  }
+
+  async getHorasExtrasByCentro(centroTrabajoId: string): Promise<HoraExtra[]> {
+    return await db
+      .select()
+      .from(horasExtras)
+      .where(eq(horasExtras.centroTrabajoId, centroTrabajoId))
+      .orderBy(desc(horasExtras.fecha));
+  }
+
+  async getHorasExtrasByEstatus(estatus: string): Promise<HoraExtra[]> {
+    return await db
+      .select()
+      .from(horasExtras)
+      .where(eq(horasExtras.estatus, estatus))
+      .orderBy(desc(horasExtras.fecha));
+  }
+
+  async updateHoraExtra(id: string, updates: Partial<InsertHoraExtra>): Promise<HoraExtra> {
+    const [updated] = await db
+      .update(horasExtras)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(horasExtras.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteHoraExtra(id: string): Promise<void> {
+    await db
+      .delete(horasExtras)
+      .where(eq(horasExtras.id, id));
   }
 }
 
