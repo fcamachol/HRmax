@@ -101,6 +101,8 @@ export const gruposNomina = pgTable("grupos_nomina", {
   tipoPeriodo: varchar("tipo_periodo").notNull(), // semanal, catorcenal, quincenal, mensual
   diaInicioSemana: integer("dia_inicio_semana").default(1), // 0=domingo, 1=lunes, ..., 6=sábado
   diaCorte: integer("dia_corte"), // Día del mes para corte mensual/quincenal
+  diaPago: integer("dia_pago"), // Día de pago: para semanal/catorcenal es día de semana (0-6), para quincenal/mensual es día del mes (1-31)
+  diasCalculo: integer("dias_calculo"), // Días de anticipación para cálculos de pre-nómina (opcional)
   descripcion: text("descripcion"),
   activo: boolean("activo").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
