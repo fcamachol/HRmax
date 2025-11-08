@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Plus, 
   Trash2, 
+  Pencil,
   Users,
   CheckCircle2,
   XCircle
@@ -39,6 +40,8 @@ import { CreateGrupoNominaDialog } from "@/components/CreateGrupoNominaDialog";
 export default function GruposNomina() {
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [groupToEdit, setGroupToEdit] = useState<GrupoNomina | null>(null);
   const [groupToDelete, setGroupToDelete] = useState<string | null>(null);
 
   const { data: gruposNomina = [], isLoading } = useQuery<GrupoNomina[]>({
@@ -177,14 +180,27 @@ export default function GruposNomina() {
                       {grupo.descripcion || <span className="text-muted-foreground">-</span>}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setGroupToDelete(grupo.id!)}
-                        data-testid={`button-delete-grupo-${grupo.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setGroupToEdit(grupo);
+                            setIsEditDialogOpen(true);
+                          }}
+                          data-testid={`button-edit-grupo-${grupo.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setGroupToDelete(grupo.id!)}
+                          data-testid={`button-delete-grupo-${grupo.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -193,6 +209,13 @@ export default function GruposNomina() {
           </CardContent>
         </Card>
       )}
+
+      <CreateGrupoNominaDialog
+        open={isEditDialogOpen}
+        onOpenChange={setIsEditDialogOpen}
+        grupoToEdit={groupToEdit as any}
+        mode="edit"
+      />
 
       <AlertDialog open={!!groupToDelete} onOpenChange={(open) => !open && setGroupToDelete(null)}>
         <AlertDialogContent>

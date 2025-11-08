@@ -73,7 +73,7 @@ import {
   avisosREPSE
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte } from "drizzle-orm";
+import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -203,6 +203,7 @@ export interface IStorage {
   getGruposNomina(): Promise<GrupoNomina[]>;
   updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina>;
   deleteGrupoNomina(id: string): Promise<void>;
+  assignEmployeesToGrupoNomina(grupoNominaId: string, employeeIds: string[]): Promise<void>;
   
   // Payroll Periods
   createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
@@ -1075,6 +1076,28 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(gruposNomina)
       .where(eq(gruposNomina.id, id));
+  }
+
+  async assignEmployeesToGrupoNomina(grupoNominaId: string, employeeIds: string[]): Promise<void> {
+    // Primero, desasignar todos los empleados que estaban en este grupo
+    // pero que no están en la nueva lista
+    await db
+      .update(employees)
+      .set({ grupoNominaId: null })
+      .where(
+        and(
+          eq(employees.grupoNominaId, grupoNominaId),
+          not(inArray(employees.id, employeeIds.length > 0 ? employeeIds : ['']))
+        )
+      );
+
+    // Luego, asignar los nuevos empleados al grupo
+    if (employeeIds.length > 0) {
+      await db
+        .update(employees)
+        .set({ grupoNominaId })
+        .where(inArray(employees.id, employeeIds));
+    }
   }
 
   // Payroll Periods

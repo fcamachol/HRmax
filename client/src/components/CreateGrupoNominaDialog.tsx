@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,19 +19,49 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+
+type GrupoNomina = {
+  id: string;
+  nombre: string;
+  tipoPeriodo: "semanal" | "catorcenal" | "quincenal" | "mensual";
+  diaInicioSemana?: number;
+  diaCorte?: number;
+  diaPago?: number;
+  diasCalculo?: number;
+  descripcion?: string;
+  activo: boolean;
+};
+
+type Employee = {
+  id: string;
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno?: string;
+  numeroEmpleado: string;
+  grupoNominaId?: string;
+};
 
 interface CreateGrupoNominaDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   trigger?: React.ReactNode;
+  grupoToEdit?: GrupoNomina | null;
+  mode?: "create" | "edit";
 }
 
 export function CreateGrupoNominaDialog({
   open,
   onOpenChange,
   trigger,
+  grupoToEdit = null,
+  mode = "create",
 }: CreateGrupoNominaDialogProps) {
   const { toast } = useToast();
+  const isEditMode = mode === "edit" || !!grupoToEdit;
   
   const [newGroupName, setNewGroupName] = useState("");
   const [newGroupTipoPeriodo, setNewGroupTipoPeriodo] = useState<"semanal" | "catorcenal" | "quincenal" | "mensual">("quincenal");
@@ -41,6 +71,13 @@ export function CreateGrupoNominaDialog({
   const [newGroupDiaPagoMes, setNewGroupDiaPagoMes] = useState<number>(15);
   const [newGroupDiasCalculo, setNewGroupDiasCalculo] = useState<number>(2);
   const [newGroupDescripcion, setNewGroupDescripcion] = useState("");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+
+  // Cargar empleados
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+    enabled: open,
+  });
 
   const resetForm = () => {
     setNewGroupName("");
@@ -51,16 +88,37 @@ export function CreateGrupoNominaDialog({
     setNewGroupDiaPagoMes(15);
     setNewGroupDiasCalculo(2);
     setNewGroupDescripcion("");
+    setSelectedEmployeeIds([]);
   };
 
+  // Cargar datos del grupo cuando está en modo edición
+  useEffect(() => {
+    if (open && grupoToEdit) {
+      setNewGroupName(grupoToEdit.nombre);
+      setNewGroupTipoPeriodo(grupoToEdit.tipoPeriodo);
+      setNewGroupDiaInicioSemana(grupoToEdit.diaInicioSemana ?? 1);
+      setNewGroupDiaCorte(grupoToEdit.diaCorte ?? 15);
+      setNewGroupDiaPago(grupoToEdit.diaPago ?? 5);
+      setNewGroupDiaPagoMes(grupoToEdit.diaPago ?? 15);
+      setNewGroupDiasCalculo(grupoToEdit.diasCalculo ?? 2);
+      setNewGroupDescripcion(grupoToEdit.descripcion ?? "");
+      
+      // Cargar empleados del grupo
+      const employeesInGroup = employees.filter(emp => emp.grupoNominaId === grupoToEdit.id);
+      setSelectedEmployeeIds(employeesInGroup.map(emp => emp.id));
+    } else if (open && !grupoToEdit) {
+      resetForm();
+    }
+  }, [open, grupoToEdit, employees]);
+
   const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen) {
+    if (!newOpen) {
       resetForm();
     }
     onOpenChange(newOpen);
   };
 
-  const createGroup = async () => {
+  const saveGroup = async () => {
     if (!newGroupName.trim()) {
       toast({
         title: "Error",
@@ -90,23 +148,34 @@ export function CreateGrupoNominaDialog({
             : undefined,
         diasCalculo: newGroupDiasCalculo || undefined,
         descripcion: newGroupDescripcion || undefined,
-        activo: true,
+        activo: isEditMode ? grupoToEdit?.activo ?? true : true,
+        employeeIds: selectedEmployeeIds,
       };
 
-      await apiRequest("POST", "/api/grupos-nomina", grupoData);
+      if (isEditMode && grupoToEdit) {
+        // Modo edición
+        await apiRequest("PATCH", `/api/grupos-nomina/${grupoToEdit.id}`, grupoData);
+        toast({
+          title: "Grupo actualizado exitosamente",
+          description: `"${groupNameForToast}" ha sido actualizado.`,
+        });
+      } else {
+        // Modo creación
+        await apiRequest("POST", "/api/grupos-nomina", grupoData);
+        toast({
+          title: "Grupo creado exitosamente",
+          description: `"${groupNameForToast}" con periodicidad ${tipoPeriodoForToast}. Los periodos de pago se generaron automáticamente.`,
+        });
+      }
 
       onOpenChange(false);
       
       queryClient.invalidateQueries({ queryKey: ["/api/grupos-nomina"] });
-      
-      toast({
-        title: "Grupo creado exitosamente",
-        description: `"${groupNameForToast}" con periodicidad ${tipoPeriodoForToast}. Los periodos de pago se generaron automáticamente.`,
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
     } catch (error: any) {
       toast({
-        title: "Error al crear grupo",
-        description: error.message || "No se pudo crear el grupo de nómina",
+        title: isEditMode ? "Error al actualizar grupo" : "Error al crear grupo",
+        description: error.message || "No se pudo procesar la solicitud",
         variant: "destructive",
       });
     }
@@ -117,9 +186,9 @@ export function CreateGrupoNominaDialog({
       {trigger}
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Crear Grupo de Nómina</DialogTitle>
+          <DialogTitle>{isEditMode ? "Editar Grupo de Nómina" : "Crear Grupo de Nómina"}</DialogTitle>
           <DialogDescription>
-            Define la periodicidad y configuración del grupo de nómina
+            {isEditMode ? "Modifica la configuración del grupo de nómina" : "Define la periodicidad y configuración del grupo de nómina"}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4 overflow-y-auto flex-1">
@@ -268,13 +337,55 @@ export function CreateGrupoNominaDialog({
               data-testid="input-descripcion"
             />
           </div>
+
+          <div className="space-y-2">
+            <Label>Empleados del Grupo</Label>
+            <div className="rounded-md border p-4 max-h-60 overflow-y-auto">
+              {employees.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay empleados disponibles</p>
+              ) : (
+                <div className="space-y-2">
+                  {employees.map((employee) => (
+                    <div key={employee.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`employee-${employee.id}`}
+                        checked={selectedEmployeeIds.includes(employee.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setSelectedEmployeeIds([...selectedEmployeeIds, employee.id]);
+                          } else {
+                            setSelectedEmployeeIds(selectedEmployeeIds.filter(id => id !== employee.id));
+                          }
+                        }}
+                        data-testid={`checkbox-employee-${employee.id}`}
+                      />
+                      <Label
+                        htmlFor={`employee-${employee.id}`}
+                        className="text-sm font-normal cursor-pointer flex-1"
+                      >
+                        {employee.numeroEmpleado} - {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ""}
+                        {employee.grupoNominaId && employee.grupoNominaId !== grupoToEdit?.id && (
+                          <Badge variant="secondary" className="ml-2 text-xs">
+                            Asignado a otro grupo
+                          </Badge>
+                        )}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Selecciona los empleados que pertenecen a este grupo de nómina ({selectedEmployeeIds.length} seleccionados)
+            </p>
+          </div>
           
           <div className="rounded-md border p-4 bg-muted/30">
             <p className="text-sm font-medium mb-1">Información Importante</p>
             <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-              <li>Los periodos de pago se generarán automáticamente para el año actual y próximo</li>
-              <li>Los empleados deben ser asignados al grupo desde su perfil individual</li>
-              <li>La configuración de periodicidad no puede modificarse después de crear el grupo</li>
+              {!isEditMode && <li>Los periodos de pago se generarán automáticamente para el año actual y próximo</li>}
+              <li>Puedes asignar o reasignar empleados a este grupo seleccionándolos en la lista</li>
+              <li>La configuración de periodicidad {isEditMode ? "no puede modificarse" : "no podrá modificarse después de crear el grupo"}</li>
             </ul>
           </div>
         </div>
@@ -282,8 +393,8 @@ export function CreateGrupoNominaDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Cancelar
           </Button>
-          <Button onClick={createGroup} data-testid="button-save-group">
-            Guardar Grupo
+          <Button onClick={saveGroup} data-testid="button-save-group">
+            {isEditMode ? "Actualizar Grupo" : "Guardar Grupo"}
           </Button>
         </DialogFooter>
       </DialogContent>

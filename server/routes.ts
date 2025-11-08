@@ -1004,12 +1004,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/grupos-nomina", async (req, res) => {
     try {
       const validatedData = insertGrupoNominaSchema.parse(req.body);
-      const grupo = await storage.createGrupoNomina(validatedData);
+      const { employeeIds, ...grupoData } = validatedData;
+      
+      const grupo = await storage.createGrupoNomina(grupoData);
       
       // Generar automáticamente periodos de pago para año actual y próximo
       const currentYear = new Date().getFullYear();
       await storage.generatePayrollPeriodsForYear(grupo.id!, currentYear);
       await storage.generatePayrollPeriodsForYear(grupo.id!, currentYear + 1);
+      
+      // Asignar empleados al grupo si se proporcionaron
+      if (employeeIds && employeeIds.length > 0) {
+        await storage.assignEmployeesToGrupoNomina(grupo.id!, employeeIds);
+      }
       
       res.json(grupo);
     } catch (error: any) {
@@ -1041,7 +1048,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/grupos-nomina/:id", async (req, res) => {
     try {
       const validatedData = updateGrupoNominaSchema.parse(req.body);
-      const grupo = await storage.updateGrupoNomina(req.params.id, validatedData);
+      const { employeeIds, ...grupoData } = validatedData;
+      
+      const grupo = await storage.updateGrupoNomina(req.params.id, grupoData);
+      
+      // Reasignar empleados al grupo si se proporcionaron
+      if (employeeIds !== undefined) {
+        await storage.assignEmployeesToGrupoNomina(req.params.id, employeeIds);
+      }
+      
       res.json(grupo);
     } catch (error: any) {
       res.status(400).json({ message: error.message });

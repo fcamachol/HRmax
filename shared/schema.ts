@@ -332,6 +332,7 @@ export const insertGrupoNominaSchema = createInsertSchema(gruposNomina).omit({
   updatedAt: true,
 }).extend({
   tipoPeriodo: z.enum(tiposPeriodoNomina),
+  employeeIds: z.array(z.string()).optional(), // Array de IDs de empleados a asignar al grupo
 });
 
 export const updateGrupoNominaSchema = insertGrupoNominaSchema.partial();

@@ -116,19 +116,41 @@ Preferred communication style: Simple, everyday language.
   - Estado (Active/Inactive status with badges)
   - Descripción (Optional description)
 - **Group Operations**:
-  - Create: Via shared CreateGrupoNominaDialog component with automatic period generation
+  - Create: Via shared CreateGrupoNominaDialog component with:
+    - Automatic period generation for current and next year
+    - Multi-select employee assignment during creation
+    - Validation and period type configuration
+  - Edit: Via same dialog component in edit mode with:
+    - Load existing group configuration and assigned employees
+    - Reassign employees (add/remove from group)
+    - Preserve active/inactive status
+    - Handle edge cases (domingo=0, valores nulos correctamente)
   - Delete: With confirmation dialog and cascade deletion of associated periods
   - View: Complete group configuration display in table format
+- **Employee Assignment**: 
+  - Checkbox-based multi-select interface showing all employees
+  - Visual indicator for employees already assigned to other groups
+  - Automatic update of employee.grupoNominaId when assigned
+  - Batch assignment/reassignment on save
 - **Empty State Handling**: User-friendly empty state with call-to-action when no groups exist.
 
 **Shared Components**:
-- **CreateGrupoNominaDialog**: Reusable component used by both Payroll (for quick group creation during payroll setup) and Grupos de Nómina (for dedicated group management). Ensures:
-  - Consistent group creation experience across modules
-  - Single source of truth for form validation and API logic
-  - Proper toast notifications with captured values (not blank)
-  - Automatic form reset when dialog opens (ensures fresh defaults every time)
-  - Automatic dialog close after successful group creation
-  - Clean separation: form reset happens on open, not on close or submit
+- **CreateGrupoNominaDialog**: Reusable dual-mode component supporting both creation and editing of payroll groups. Used by both Payroll (quick access) and Grupos de Nómina (dedicated management). Features:
+  - **Dual Mode Operation**: Accepts `mode` prop ("create" or "edit") and `grupoToEdit` to populate form
+  - **Employee Multi-Select**: Checkbox-based interface to assign/reassign employees with:
+    - Real-time employee list from /api/employees
+    - Visual badges for employees already in other groups
+    - Counter showing selected employee count
+  - **Smart Form Management**:
+    - Uses nullish coalescing (`??`) to preserve numeric zeros (domingo=0, etc.)
+    - Preserves active/inactive status in edit mode
+    - Automatic form reset with defaults on dialog open
+    - Proper toast notifications with captured values
+  - **Backend Integration**:
+    - POST /api/grupos-nomina with employeeIds array for creation
+    - PATCH /api/grupos-nomina/:id with employeeIds for updates
+    - Invalidates both grupos-nomina and employees cache after save
+  - **Conditional UI**: Titles, descriptions, buttons adapt based on create/edit mode
 
 **Attendance Module (Asistencia) - Redesigned**:
 - **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
