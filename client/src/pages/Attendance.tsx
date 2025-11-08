@@ -50,14 +50,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type {
-  AttendanceRecord,
+  Attendance,
   Employee,
   CentroTrabajo,
-  InsertAttendanceRecord,
+  InsertAttendance,
 } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertAttendanceRecordSchema } from "@shared/schema";
+import { insertAttendanceSchema } from "@shared/schema";
 import { Loader2 } from "lucide-react";
 
 export default function Attendance() {
@@ -68,7 +68,7 @@ export default function Attendance() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: attendanceRecords = [], isLoading } = useQuery<AttendanceRecord[]>({
+  const { data: attendanceRecords = [], isLoading } = useQuery<Attendance[]>({
     queryKey: ["/api/attendance"],
   });
 
@@ -91,7 +91,7 @@ export default function Attendance() {
   const getEmployeeName = (employeeId: string) => {
     const employee = employees.find((e) => e.id === employeeId);
     return employee
-      ? `${employee.firstName} ${employee.lastName}`
+      ? `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno || ""}`.trim()
       : "Empleado no encontrado";
   };
 
@@ -295,10 +295,10 @@ export default function Attendance() {
                       </div>
                     </TableCell>
                     <TableCell className="font-mono">
-                      {record.checkInTime || "-"}
+                      {record.clockIn || "-"}
                     </TableCell>
                     <TableCell className="font-mono">
-                      {record.checkOutTime || "-"}
+                      {record.clockOut || "-"}
                     </TableCell>
                     <TableCell>
                       {record.horasTrabajadas
@@ -332,14 +332,14 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
     queryKey: ["/api/centros-trabajo"],
   });
 
-  const form = useForm<InsertAttendanceRecord>({
-    resolver: zodResolver(insertAttendanceRecordSchema),
+  const form = useForm<InsertAttendance>({
+    resolver: zodResolver(insertAttendanceSchema),
     defaultValues: {
       employeeId: "",
       date: new Date().toISOString().split("T")[0],
       status: "presente",
-      checkInTime: "",
-      checkOutTime: "",
+      clockIn: "",
+      clockOut: "",
       centroTrabajoId: "",
       horasTrabajadas: "",
       tipoJornada: "ordinaria",
@@ -347,7 +347,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
   });
 
   const mutation = useMutation({
-    mutationFn: async (data: InsertAttendanceRecord) => {
+    mutationFn: async (data: InsertAttendance) => {
       return await apiRequest("POST", "/api/attendance", data);
     },
     onSuccess: () => {
@@ -367,7 +367,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
     },
   });
 
-  const onSubmit = (data: InsertAttendanceRecord) => {
+  const onSubmit = (data: InsertAttendance) => {
     mutation.mutate(data);
   };
 
@@ -389,7 +389,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
                 <SelectContent>
                   {employees.map((employee) => (
                     <SelectItem key={employee.id} value={employee.id!}>
-                      {employee.firstName} {employee.lastName}
+                      {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -473,7 +473,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
         <div className="grid gap-4 md:grid-cols-2">
           <FormField
             control={form.control}
-            name="checkInTime"
+            name="clockIn"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Hora de Entrada</FormLabel>
@@ -492,7 +492,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
 
           <FormField
             control={form.control}
-            name="checkOutTime"
+            name="clockOut"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Hora de Salida (Opcional)</FormLabel>
@@ -532,7 +532,7 @@ function AttendanceForm({ onSuccess }: { onSuccess: () => void }) {
 
         <FormField
           control={form.control}
-          name="notes"
+          name="notas"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Notas (Opcional)</FormLabel>
