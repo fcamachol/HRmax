@@ -16,7 +16,14 @@ import {
   insertRegistroPatronalSchema,
   updateRegistroPatronalSchema,
   insertCredencialSistemaSchema,
-  updateCredencialSistemaSchema
+  updateCredencialSistemaSchema,
+  insertCentroTrabajoSchema,
+  updateCentroTrabajoSchema,
+  insertEmpleadoCentroTrabajoSchema,
+  updateEmpleadoCentroTrabajoSchema,
+  insertAttendanceSchema,
+  insertHoraExtraSchema,
+  updateHoraExtraSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -645,6 +652,250 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/credenciales/:id", async (req, res) => {
     try {
       await storage.deleteCredencialSistema(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Centros de Trabajo
+  app.post("/api/centros-trabajo", async (req, res) => {
+    try {
+      const validatedData = insertCentroTrabajoSchema.parse(req.body);
+      const centro = await storage.createCentroTrabajo(validatedData);
+      res.json(centro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/centros-trabajo", async (req, res) => {
+    try {
+      const { empresaId } = req.query;
+      if (empresaId) {
+        const centros = await storage.getCentrosTrabajoByEmpresa(empresaId as string);
+        return res.json(centros);
+      }
+      const centros = await storage.getCentrosTrabajo();
+      res.json(centros);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/centros-trabajo/:id", async (req, res) => {
+    try {
+      const centro = await storage.getCentroTrabajo(req.params.id);
+      if (!centro) {
+        return res.status(404).json({ message: "Centro de trabajo no encontrado" });
+      }
+      res.json(centro);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/centros-trabajo/:id", async (req, res) => {
+    try {
+      const validatedData = updateCentroTrabajoSchema.parse(req.body);
+      const centro = await storage.updateCentroTrabajo(req.params.id, validatedData);
+      res.json(centro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/centros-trabajo/:id", async (req, res) => {
+    try {
+      await storage.deleteCentroTrabajo(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Empleados Centros de Trabajo (Asignaciones)
+  app.post("/api/empleados-centros-trabajo", async (req, res) => {
+    try {
+      const validatedData = insertEmpleadoCentroTrabajoSchema.parse(req.body);
+      const asignacion = await storage.createEmpleadoCentroTrabajo(validatedData);
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/empleados-centros-trabajo", async (req, res) => {
+    try {
+      const { empleadoId, centroTrabajoId } = req.query;
+      if (empleadoId) {
+        const asignaciones = await storage.getEmpleadosCentrosTrabajoByEmpleado(empleadoId as string);
+        return res.json(asignaciones);
+      }
+      if (centroTrabajoId) {
+        const asignaciones = await storage.getEmpleadosCentrosTabajoByCentro(centroTrabajoId as string);
+        return res.json(asignaciones);
+      }
+      const asignaciones = await storage.getEmpleadosCentrosTrabajo();
+      res.json(asignaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/empleados-centros-trabajo/:id", async (req, res) => {
+    try {
+      const asignacion = await storage.getEmpleadoCentroTrabajo(req.params.id);
+      if (!asignacion) {
+        return res.status(404).json({ message: "Asignación no encontrada" });
+      }
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/empleados-centros-trabajo/:id", async (req, res) => {
+    try {
+      const validatedData = updateEmpleadoCentroTrabajoSchema.parse(req.body);
+      const asignacion = await storage.updateEmpleadoCentroTrabajo(req.params.id, validatedData);
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/empleados-centros-trabajo/:id", async (req, res) => {
+    try {
+      await storage.deleteEmpleadoCentroTrabajo(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Attendance (Asistencias)
+  app.post("/api/attendance", async (req, res) => {
+    try {
+      const validatedData = insertAttendanceSchema.parse(req.body);
+      const attendance = await storage.createAttendance(validatedData);
+      res.json(attendance);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/attendance", async (req, res) => {
+    try {
+      const { empleadoId, centroTrabajoId, date } = req.query;
+      if (empleadoId) {
+        const attendances = await storage.getAttendancesByEmpleado(empleadoId as string);
+        return res.json(attendances);
+      }
+      if (centroTrabajoId) {
+        const attendances = await storage.getAttendancesByCentro(centroTrabajoId as string);
+        return res.json(attendances);
+      }
+      if (date) {
+        const attendances = await storage.getAttendancesByDate(date as string);
+        return res.json(attendances);
+      }
+      const attendances = await storage.getAttendances();
+      res.json(attendances);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/attendance/:id", async (req, res) => {
+    try {
+      const attendance = await storage.getAttendance(req.params.id);
+      if (!attendance) {
+        return res.status(404).json({ message: "Registro de asistencia no encontrado" });
+      }
+      res.json(attendance);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/attendance/:id", async (req, res) => {
+    try {
+      const validatedData = insertAttendanceSchema.partial().parse(req.body);
+      const attendance = await storage.updateAttendance(req.params.id, validatedData);
+      res.json(attendance);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/attendance/:id", async (req, res) => {
+    try {
+      await storage.deleteAttendance(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Horas Extras
+  app.post("/api/horas-extras", async (req, res) => {
+    try {
+      const validatedData = insertHoraExtraSchema.parse(req.body);
+      const horaExtra = await storage.createHoraExtra(validatedData);
+      res.json(horaExtra);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/horas-extras", async (req, res) => {
+    try {
+      const { empleadoId, centroTrabajoId, estatus } = req.query;
+      if (empleadoId) {
+        const horasExtras = await storage.getHorasExtrasByEmpleado(empleadoId as string);
+        return res.json(horasExtras);
+      }
+      if (centroTrabajoId) {
+        const horasExtras = await storage.getHorasExtrasByCentro(centroTrabajoId as string);
+        return res.json(horasExtras);
+      }
+      if (estatus) {
+        const horasExtras = await storage.getHorasExtrasByEstatus(estatus as string);
+        return res.json(horasExtras);
+      }
+      const horasExtras = await storage.getHorasExtras();
+      res.json(horasExtras);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/horas-extras/:id", async (req, res) => {
+    try {
+      const horaExtra = await storage.getHoraExtra(req.params.id);
+      if (!horaExtra) {
+        return res.status(404).json({ message: "Hora extra no encontrada" });
+      }
+      res.json(horaExtra);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/horas-extras/:id", async (req, res) => {
+    try {
+      const validatedData = updateHoraExtraSchema.parse(req.body);
+      const horaExtra = await storage.updateHoraExtra(req.params.id, validatedData);
+      res.json(horaExtra);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/horas-extras/:id", async (req, res) => {
+    try {
+      await storage.deleteHoraExtra(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
