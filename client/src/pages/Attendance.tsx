@@ -55,16 +55,36 @@ export default function Attendance() {
     queryKey: ["/api/centros-trabajo"],
   });
 
+  // Query de incidencias con queryKey estructurado para correcta invalidación de caché
   const { data: incidenciasAsistencia = [], isLoading } = useQuery<IncidenciaAsistencia[]>({
-    queryKey: ["/api/incidencias-asistencia", { fechaInicio, fechaFin, centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined }],
+    queryKey: [
+      "/api/incidencias-asistencia",
+      { fechaInicio, fechaFin, centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined }
+    ],
+    queryFn: async ({ queryKey }) => {
+      const [path, params] = queryKey as [string, Record<string, string | undefined>];
+      const searchParams = new URLSearchParams();
+      
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          searchParams.append(key, value);
+        }
+      });
+      
+      const url = `${path}?${searchParams.toString()}`;
+      const res = await fetch(url, { credentials: "include" });
+      
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${res.statusText}`);
+      }
+      
+      return res.json();
+    },
   });
 
-  // Filtrar empleados por centro de trabajo
-  const filteredEmployees = employees.filter(emp => {
-    if (selectedCentro === "all") return true;
-    // Aquí podríamos filtrar por centro si tuviéramos esa relación
-    return true;
-  });
+  // Mostrar todos los empleados siempre para permitir registrar incidencias en cualquier centro
+  // Las incidencias ya están filtradas por centro en la query, y al crear nuevas se usa el centro seleccionado
+  const filteredEmployees = employees;
 
   // Estadísticas calculadas de las incidencias del periodo
   const stats = {
@@ -274,6 +294,25 @@ export default function Attendance() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Mensaje informativo sobre el filtro */}
+          {selectedCentro !== "all" && (
+            <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+              <CardContent className="pt-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                      Filtrado por Centro de Trabajo
+                    </p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      Mostrando incidencias del centro seleccionado. Las nuevas incidencias se registrarán para este centro.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Grid de Incidencias */}
           <IncidenciasAsistenciaLayout
