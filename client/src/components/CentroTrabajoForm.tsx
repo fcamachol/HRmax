@@ -54,9 +54,6 @@ export default function CentroTrabajoForm({ centro, onSuccess, onCancel }: Centr
       municipio: centro?.municipio || "",
       estado: centro?.estado || "",
       codigoPostal: centro?.codigoPostal || "",
-      horaEntrada: centro?.horaEntrada || "09:00",
-      horaSalida: centro?.horaSalida || "18:00",
-      turno: centro?.turno || "matutino",
       empresaId: centro?.empresaId || "",
       registroPatronalId: centro?.registroPatronalId || undefined,
       descripcion: centro?.descripcion || "",
@@ -246,74 +243,6 @@ export default function CentroTrabajoForm({ centro, onSuccess, onCancel }: Centr
                   <FormControl>
                     <Input {...field} value={field.value || ""} data-testid="input-estado" />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium">Horarios y Turnos</h3>
-          <div className="grid gap-4 md:grid-cols-3">
-            <FormField
-              control={form.control}
-              name="horaEntrada"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hora de Entrada</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="time"
-                      data-testid="input-hora-entrada"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="horaSalida"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hora de Salida</FormLabel>
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="time"
-                      data-testid="input-hora-salida"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="turno"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Tipo de Turno</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value || "matutino"}
-                  >
-                    <FormControl>
-                      <SelectTrigger data-testid="select-turno">
-                        <SelectValue placeholder="Selecciona un turno" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="matutino">Matutino</SelectItem>
-                      <SelectItem value="vespertino">Vespertino</SelectItem>
-                      <SelectItem value="nocturno">Nocturno</SelectItem>
-                      <SelectItem value="mixto">Mixto</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
