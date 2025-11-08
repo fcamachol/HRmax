@@ -67,7 +67,7 @@ import {
   avisosREPSE
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -79,6 +79,7 @@ export interface IStorage {
   createBulkEmployees(employees: InsertEmployee[]): Promise<Employee[]>;
   getEmployee(id: string): Promise<Employee | undefined>;
   getEmployees(): Promise<Employee[]>;
+  getEmployeesByCentroTrabajo(centroTrabajoId: string): Promise<Employee[]>;
   updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee>;
   deleteEmployee(id: string): Promise<void>;
   
@@ -301,6 +302,23 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(employees)
       .where(eq(employees.estatus, 'activo'));
+  }
+
+  async getEmployeesByCentroTrabajo(centroTrabajoId: string): Promise<Employee[]> {
+    // JOIN con empleados_centros_trabajo para obtener solo empleados asignados al centro
+    const empleadosDelCentro = await db
+      .select({ employee: employees })
+      .from(employees)
+      .innerJoin(empleadosCentrosTrabajo, eq(employees.id, empleadosCentrosTrabajo.empleadoId))
+      .where(
+        and(
+          eq(empleadosCentrosTrabajo.centroTrabajoId, centroTrabajoId),
+          eq(empleadosCentrosTrabajo.estatus, 'activo'),
+          eq(employees.estatus, 'activo')
+        )
+      );
+    
+    return empleadosDelCentro.map(row => row.employee);
   }
 
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
@@ -930,13 +948,13 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(incidenciasAsistencia)
-      .orderBy(desc(incidenciasAsistencia.fechaInicio));
+      .orderBy(desc(incidenciasAsistencia.fecha));
   }
 
   async getIncidenciasAsistenciaByPeriodo(fechaInicio: string, fechaFin: string, centroTrabajoId?: string): Promise<IncidenciaAsistencia[]> {
     const conditions = [
-      eq(incidenciasAsistencia.fechaInicio, fechaInicio),
-      eq(incidenciasAsistencia.fechaFin, fechaFin)
+      gte(incidenciasAsistencia.fecha, fechaInicio), // fecha >= fechaInicio
+      lte(incidenciasAsistencia.fecha, fechaFin)     // fecha <= fechaFin
     ];
 
     if (centroTrabajoId) {
@@ -947,7 +965,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(incidenciasAsistencia)
       .where(and(...conditions))
-      .orderBy(incidenciasAsistencia.employeeId);
+      .orderBy(incidenciasAsistencia.employeeId, incidenciasAsistencia.fecha);
   }
 
   async getIncidenciasAsistenciaByEmpleado(empleadoId: string): Promise<IncidenciaAsistencia[]> {
@@ -955,7 +973,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(incidenciasAsistencia)
       .where(eq(incidenciasAsistencia.employeeId, empleadoId))
-      .orderBy(desc(incidenciasAsistencia.fechaInicio));
+      .orderBy(desc(incidenciasAsistencia.fecha));
   }
 
   async updateIncidenciaAsistencia(id: string, updates: Partial<InsertIncidenciaAsistencia>): Promise<IncidenciaAsistencia> {
