@@ -23,6 +23,8 @@ import {
   type InsertCredencialSistema,
   type CentroTrabajo,
   type InsertCentroTrabajo,
+  type TurnoCentroTrabajo,
+  type InsertTurnoCentroTrabajo,
   type EmpleadoCentroTrabajo,
   type InsertEmpleadoCentroTrabajo,
   type HoraExtra,
@@ -41,6 +43,7 @@ import {
   registrosPatronales,
   credencialesSistemas,
   centrosTrabajo,
+  turnosCentroTrabajo,
   empleadosCentrosTrabajo,
   horasExtras,
   attendance
@@ -132,6 +135,14 @@ export interface IStorage {
   getCentrosTrabajoByEmpresa(empresaId: string): Promise<CentroTrabajo[]>;
   updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo>;
   deleteCentroTrabajo(id: string): Promise<void>;
+  
+  // Turnos de Centro de Trabajo
+  createTurnoCentroTrabajo(turno: InsertTurnoCentroTrabajo): Promise<TurnoCentroTrabajo>;
+  getTurnoCentroTrabajo(id: string): Promise<TurnoCentroTrabajo | undefined>;
+  getTurnosCentroTrabajo(): Promise<TurnoCentroTrabajo[]>;
+  getTurnosCentroTrabajoByCentro(centroTrabajoId: string): Promise<TurnoCentroTrabajo[]>;
+  updateTurnoCentroTrabajo(id: string, updates: Partial<InsertTurnoCentroTrabajo>): Promise<TurnoCentroTrabajo>;
+  deleteTurnoCentroTrabajo(id: string): Promise<void>;
   
   // Empleados Centros de Trabajo (Asignaciones)
   createEmpleadoCentroTrabajo(asignacion: InsertEmpleadoCentroTrabajo): Promise<EmpleadoCentroTrabajo>;
@@ -657,6 +668,53 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(centrosTrabajo)
       .where(eq(centrosTrabajo.id, id));
+  }
+
+  // Turnos de Centro de Trabajo
+  async createTurnoCentroTrabajo(turno: InsertTurnoCentroTrabajo): Promise<TurnoCentroTrabajo> {
+    const [newTurno] = await db
+      .insert(turnosCentroTrabajo)
+      .values(turno)
+      .returning();
+    return newTurno;
+  }
+
+  async getTurnoCentroTrabajo(id: string): Promise<TurnoCentroTrabajo | undefined> {
+    const [turno] = await db
+      .select()
+      .from(turnosCentroTrabajo)
+      .where(eq(turnosCentroTrabajo.id, id));
+    return turno || undefined;
+  }
+
+  async getTurnosCentroTrabajo(): Promise<TurnoCentroTrabajo[]> {
+    return await db
+      .select()
+      .from(turnosCentroTrabajo)
+      .orderBy(desc(turnosCentroTrabajo.createdAt));
+  }
+
+  async getTurnosCentroTrabajoByCentro(centroTrabajoId: string): Promise<TurnoCentroTrabajo[]> {
+    return await db
+      .select()
+      .from(turnosCentroTrabajo)
+      .where(eq(turnosCentroTrabajo.centroTrabajoId, centroTrabajoId))
+      .orderBy(desc(turnosCentroTrabajo.createdAt));
+  }
+
+  async updateTurnoCentroTrabajo(id: string, updates: Partial<InsertTurnoCentroTrabajo>): Promise<TurnoCentroTrabajo> {
+    const [updated] = await db
+      .update(turnosCentroTrabajo)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(turnosCentroTrabajo.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTurnoCentroTrabajo(id: string): Promise<void> {
+    await db
+      .delete(turnosCentroTrabajo)
+      .where(eq(turnosCentroTrabajo.id, id));
   }
 
   // Empleados Centros de Trabajo (Asignaciones)
