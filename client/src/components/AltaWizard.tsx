@@ -503,7 +503,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="proposedSalary" data-testid="label-proposed-salary">Salario Mensual Bruto *</Label>
+                <Label htmlFor="proposedSalary" data-testid="label-proposed-salary">Salario Mensual Neto *</Label>
                 <Input
                   id="proposedSalary"
                   data-testid="input-proposed-salary"
