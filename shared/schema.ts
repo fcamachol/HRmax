@@ -105,10 +105,17 @@ export const payrollPeriods = pgTable("payroll_periods", {
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
+  centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo donde se registró la asistencia
   date: date("date").notNull(),
-  status: text("status").notNull(),
+  status: text("status").notNull(), // presente, ausente, retardo, vacaciones, permiso, incapacidad
   clockIn: text("clock_in"),
   clockOut: text("clock_out"),
+  horasTrabajadas: decimal("horas_trabajadas", { precision: 4, scale: 2 }), // Horas trabajadas calculadas
+  motivoAusencia: text("motivo_ausencia"), // Si status es ausencia/permiso, el motivo
+  tipoJornada: varchar("tipo_jornada").default("normal"), // normal, festivo, descanso
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
 export const users = pgTable("users", {
@@ -537,3 +544,124 @@ export const updateCredencialSistemaSchema = insertCredencialSistemaSchema.parti
 
 export type CredencialSistema = typeof credencialesSistemas.$inferSelect;
 export type InsertCredencialSistema = z.infer<typeof insertCredencialSistemaSchema>;
+
+// Centros de Trabajo (Work Centers)
+// Centros de trabajo independientes de registros patronales
+export const centrosTrabajo = pgTable("centros_trabajo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "set null" }), // Opcional
+  nombre: text("nombre").notNull(),
+  descripcion: text("descripcion"),
+  // Domicilio
+  calle: text("calle"),
+  numeroExterior: varchar("numero_exterior"),
+  numeroInterior: varchar("numero_interior"),
+  colonia: text("colonia"),
+  municipio: text("municipio"),
+  estado: text("estado"),
+  codigoPostal: varchar("codigo_postal", { length: 5 }),
+  // Configuración de horarios
+  horaEntrada: varchar("hora_entrada"), // Formato HH:MM (ej: "09:00")
+  horaSalida: varchar("hora_salida"), // Formato HH:MM (ej: "18:00")
+  minutosToleranciaEntrada: integer("minutos_tolerancia_entrada").default(10), // Minutos de tolerancia para entrada
+  minutosToleranciaComida: integer("minutos_tolerancia_comida").default(60), // Minutos para comida
+  // Días laborales (lunes a viernes por defecto)
+  trabajaLunes: boolean("trabaja_lunes").default(true),
+  trabajaMartes: boolean("trabaja_martes").default(true),
+  trabajaMiercoles: boolean("trabaja_miercoles").default(true),
+  trabajaJueves: boolean("trabaja_jueves").default(true),
+  trabajaViernes: boolean("trabaja_viernes").default(true),
+  trabajaSabado: boolean("trabaja_sabado").default(false),
+  trabajaDomingo: boolean("trabaja_domingo").default(false),
+  // Información adicional
+  capacidadEmpleados: integer("capacidad_empleados"), // Capacidad máxima de empleados
+  telefono: varchar("telefono"),
+  email: varchar("email"),
+  responsable: text("responsable"), // Nombre del responsable del centro
+  estatus: varchar("estatus").default("activo"), // activo, inactivo
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertCentroTrabajoSchema = createInsertSchema(centrosTrabajo).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateCentroTrabajoSchema = insertCentroTrabajoSchema.partial();
+
+export type CentroTrabajo = typeof centrosTrabajo.$inferSelect;
+export type InsertCentroTrabajo = z.infer<typeof insertCentroTrabajoSchema>;
+
+// Asignación de Empleados a Centros de Trabajo
+export const empleadosCentrosTrabajo = pgTable("empleados_centros_trabajo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  centroTrabajoId: varchar("centro_trabajo_id").notNull().references(() => centrosTrabajo.id, { onDelete: "cascade" }),
+  fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio en este centro
+  fechaFin: date("fecha_fin"), // Fecha de fin (null si es asignación actual)
+  esPrincipal: boolean("es_principal").default(true), // Si es el centro principal del empleado
+  turno: varchar("turno").default("matutino"), // matutino, vespertino, nocturno, mixto
+  // Horario específico para este empleado en este centro (puede sobrescribir el horario general)
+  horaEntradaEspecifica: varchar("hora_entrada_especifica"), // Si tiene horario especial
+  horaSalidaEspecifica: varchar("hora_salida_especifica"),
+  notas: text("notas"),
+  estatus: varchar("estatus").default("activo"), // activo, temporal, inactivo
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertEmpleadoCentroTrabajoSchema = createInsertSchema(empleadosCentrosTrabajo).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateEmpleadoCentroTrabajoSchema = insertEmpleadoCentroTrabajoSchema.partial();
+
+export type EmpleadoCentroTrabajo = typeof empleadosCentrosTrabajo.$inferSelect;
+export type InsertEmpleadoCentroTrabajo = z.infer<typeof insertEmpleadoCentroTrabajoSchema>;
+
+// Horas Extras
+export const tiposHoraExtra = ["dobles", "triples"] as const;
+export type TipoHoraExtra = typeof tiposHoraExtra[number];
+
+export const estatusHoraExtra = ["pendiente", "autorizada", "rechazada", "pagada"] as const;
+export type EstatusHoraExtra = typeof estatusHoraExtra[number];
+
+export const horasExtras = pgTable("horas_extras", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }),
+  attendanceId: varchar("attendance_id").references(() => attendance.id, { onDelete: "set null" }), // Vinculado a asistencia
+  fecha: date("fecha").notNull(),
+  tipoHoraExtra: varchar("tipo_hora_extra").notNull().default("dobles"), // dobles (200%), triples (300%)
+  cantidadHoras: decimal("cantidad_horas", { precision: 4, scale: 2 }).notNull(), // Horas trabajadas extra
+  horaInicio: varchar("hora_inicio"), // Hora de inicio de horas extras
+  horaFin: varchar("hora_fin"), // Hora de fin de horas extras
+  motivo: text("motivo"), // Motivo de las horas extras
+  autorizadoPor: varchar("autorizado_por"), // ID del supervisor que autorizó
+  fechaAutorizacion: timestamp("fecha_autorizacion"),
+  estatus: varchar("estatus").default("pendiente"), // pendiente, autorizada, rechazada, pagada
+  montoCalculado: decimal("monto_calculado", { precision: 10, scale: 2 }), // Monto calculado a pagar
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertHoraExtraSchema = createInsertSchema(horasExtras).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoHoraExtra: z.enum(tiposHoraExtra).default("dobles"),
+  estatus: z.enum(estatusHoraExtra).default("pendiente"),
+});
+
+export const updateHoraExtraSchema = insertHoraExtraSchema.partial();
+
+export type HoraExtra = typeof horasExtras.$inferSelect;
+export type InsertHoraExtra = z.infer<typeof insertHoraExtraSchema>;
