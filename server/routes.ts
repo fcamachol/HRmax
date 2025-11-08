@@ -19,6 +19,8 @@ import {
   updateCredencialSistemaSchema,
   insertCentroTrabajoSchema,
   updateCentroTrabajoSchema,
+  insertTurnoCentroTrabajoSchema,
+  updateTurnoCentroTrabajoSchema,
   insertEmpleadoCentroTrabajoSchema,
   updateEmpleadoCentroTrabajoSchema,
   insertAttendanceSchema,
@@ -708,6 +710,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/centros-trabajo/:id", async (req, res) => {
     try {
       await storage.deleteCentroTrabajo(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Turnos de Centro de Trabajo
+  app.post("/api/turnos-centro-trabajo", async (req, res) => {
+    try {
+      const validatedData = insertTurnoCentroTrabajoSchema.parse(req.body);
+      const turno = await storage.createTurnoCentroTrabajo(validatedData);
+      res.json(turno);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/turnos-centro-trabajo", async (req, res) => {
+    try {
+      const { centroTrabajoId } = req.query;
+      if (centroTrabajoId) {
+        const turnos = await storage.getTurnosCentroTrabajoByCentro(centroTrabajoId as string);
+        return res.json(turnos);
+      }
+      const turnos = await storage.getTurnosCentroTrabajo();
+      res.json(turnos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/turnos-centro-trabajo/:id", async (req, res) => {
+    try {
+      const turno = await storage.getTurnoCentroTrabajo(req.params.id);
+      if (!turno) {
+        return res.status(404).json({ message: "Turno no encontrado" });
+      }
+      res.json(turno);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/turnos-centro-trabajo/:id", async (req, res) => {
+    try {
+      const validatedData = updateTurnoCentroTrabajoSchema.parse(req.body);
+      const turno = await storage.updateTurnoCentroTrabajo(req.params.id, validatedData);
+      res.json(turno);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/turnos-centro-trabajo/:id", async (req, res) => {
+    try {
+      await storage.deleteTurnoCentroTrabajo(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
