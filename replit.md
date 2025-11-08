@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 
 **Database**: PostgreSQL (Neon serverless).
 **ORM**: Drizzle ORM with type-safe schemas, Zod integration, and migration support.
-**Schema Design**: Tables for `employees`, `departments`, `payroll_periods`, `attendance`, `users`, `configurationChangeLogs`, `hiring_process`, `bajas` (terminations), `empresas` (companies), `registrosPatronales` (IMSS employer registrations), and `credencialesSistemas` (government system credentials). UUID primary keys and audit logging are standard. Spanish column names are used throughout to match Mexican business requirements.
+**Schema Design**: Tables for `employees`, `departments`, `payroll_periods`, `attendance`, `users`, `configurationChangeLogs`, `hiring_process`, `bajas` (terminations), `empresas` (companies), `registrosPatronales` (IMSS employer registrations), `credencialesSistemas` (government system credentials), `centros_trabajo` (work centers), `turnos_centro_trabajo` (shifts per work center), and `empleados_centros_trabajo` (employee-shift assignments). UUID primary keys and audit logging are standard. Spanish column names are used throughout to match Mexican business requirements.
 
 ### Payroll Calculation Engine
 
@@ -59,6 +59,18 @@ Preferred communication style: Simple, everyday language.
 - **Sistema de Credenciales**: Secure credential management for government systems (IMSS Escritorio Virtual, SIPARE, Infonavit Portal Empresarial, Fonacot, IDSE, SUA).
 - **Replit Secrets Integration**: Passwords are NEVER stored in the database. Only secret key references are stored, with clear UI warnings and documentation links about creating Replit Secrets.
 - **e.firma Support**: Optional e.firma (FIEL) configuration for systems requiring digital signatures, with secure storage of certificate paths and password references.
+
+**Centros de Trabajo & Multi-Shift System**:
+- **Work Centers (Centros de Trabajo)**: Manage multiple work centers per company with general information (nombre, empresa, domicilio).
+- **Multiple Shifts per Center (Turnos)**: Each work center supports multiple shifts with individual configurations:
+  - Schedule definition (horaInicio, horaFin) in HH:MM format
+  - Working days per shift (trabajaLunes, trabajaMartes, etc.)
+  - Tolerance settings (minutosToleranciaEntrada, minutosToleranciaComida)
+  - Active/inactive status tracking
+- **Employee-Shift Assignments**: Employees are assigned to specific shifts (not just centers), enabling precise attendance tracking with shift context.
+- **Attendance Integration**: Clock-in/out system (Reloj Checador) automatically captures employee's active shift, storing turnoId in attendance records for accurate reporting.
+- **Shift Display**: Attendance records show complete shift information (nombre, horaInicio-horaFin) for context and reporting.
+- **CRUD Operations**: Full create, read, update, delete operations for shifts via TurnosManager.tsx component with real-time updates.
 
 ## External Dependencies
 
