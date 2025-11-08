@@ -1,209 +1,52 @@
 # NominaHub - Sistema de Recursos Humanos y Nómina para México
 
 ## Overview
-
-NominaHub is a comprehensive HR and payroll management system specifically designed for Mexican businesses. It manages employee data, calculates payroll compliant with Mexican tax regulations (ISR, IMSS, Infonavit), tracks attendance, and generates reports. The system supports complex payroll scenarios including various payment frequencies and legal requirements (RFC, CURP, NSS), offering a modern SaaS-style interface. Key modules include Bajas (employee termination with severance calculation) and Altas (employee hiring with onboarding and document management).
+NominaHub is a comprehensive HR and payroll management system designed for Mexican businesses. It centralizes employee data, handles payroll compliant with Mexican tax regulations (ISR, IMSS, Infonavit), tracks attendance, and generates essential reports. The system supports complex payroll scenarios, offering a modern SaaS-style interface. Key modules include Altas (hiring with onboarding and document management) and Bajas (employee termination with severance calculation). NominaHub aims to streamline HR processes, reduce compliance risks, and provide a user-friendly experience for managing human capital in Mexico.
 
 ## User Preferences
-
 Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
+### UI/UX Decisions
+The frontend is built with React 18 and TypeScript, using Vite for development. It features a modern SaaS aesthetic inspired by platforms like Linear and Notion, implemented with shadcn/ui components, Tailwind CSS, and custom design tokens, supporting both dark and light modes. Routing is handled by `wouter`.
 
-**Framework**: React 18 with TypeScript using Vite.
-**Design System**: Modern SaaS aesthetic inspired by Linear, Notion, and Gusto, utilizing shadcn/ui components, Tailwind CSS, custom design tokens, and dark/light mode.
-**Routing**: wouter.
-**State Management**: @tanstack/react-query for server state; React Context for themes; React Hook Form with Zod for validation.
-**Key Design Decisions**: Component-based, type-safe forms, separation of logic from UI, custom typography.
-
-### Backend Architecture
-
-**Framework**: Express.js with TypeScript on Node.js.
-**API Design**: RESTful API with JSON responses, modular endpoint management, middleware for logging and parsing.
-**Server Configuration**: tsx for development, esbuild for production, Vite for HMR.
-
-### Data Storage
-
-**Database**: PostgreSQL (Neon serverless).
-**ORM**: Drizzle ORM with type-safe schemas, Zod integration, and migration support.
-**Schema Design**: Tables for `employees`, `departments`, `payroll_periods`, `attendance`, `users`, `configurationChangeLogs`, `hiring_process`, `bajas` (terminations), `empresas` (companies), `registrosPatronales` (IMSS employer registrations), `credencialesSistemas` (government system credentials), `centros_trabajo` (work centers), `turnos_centro_trabajo` (shifts per work center), and `empleados_centros_trabajo` (employee-shift assignments). UUID primary keys and audit logging are standard. Spanish column names are used throughout to match Mexican business requirements.
-
-### Payroll Calculation Engine
-
-**Functionality**: Located in `shared/calculations.ts`, it handles ISR, IMSS, and Subsidy calculations using 2025 tax tables. Supports exempt vs. taxable income separation and configurable deduction formulas for various payment frequencies.
-**Key Design Decisions**: Shared client/server logic, pure functions, configuration-driven tables.
-
-### Authentication & Authorization
-
-**Current State**: Basic user schema and session storage infrastructure are in place, ready for full session-based authentication implementation.
+### Technical Implementations
+**Frontend**: Uses @tanstack/react-query for server state management and React Hook Form with Zod for robust form validation.
+**Backend**: Utilizes Express.js with TypeScript on Node.js, providing a RESTful API with JSON responses and modular endpoint management. `tsx` is used for development and `esbuild` for production.
+**Database**: PostgreSQL (Neon serverless) is the chosen database, managed with Drizzle ORM for type-safe schemas and migrations. Spanish column names are used for compliance.
+**Payroll Engine**: A core payroll calculation engine handles ISR, IMSS, and Subsidy calculations based on 2025 tax tables, supporting various payment frequencies and income types.
+**Authentication**: Basic user schema and session storage infrastructure are in place, awaiting full session-based authentication.
 
 ### Feature Specifications
-
-**Bajas Module (Employee Termination)**:
-- **Automatic Calculation Engine**: Calculates severance (finiquito/liquidación) per Mexican labor law, including Aguinaldo, Vacaciones, Prima vacacional, Prima de antigüedad, and indemnización.
-- **Multi-Step Wizard**: Guides through basic info, calculation display, documentation, and final authorization.
-- **Termination Letter Generation**: Produces legally compliant letters with detailed breakdowns.
-- **Kanban Board**: Visual workflow management for legal cases (Cálculo, Documentación, Firma, etc.).
-
-**Altas Module (Employee Hiring)**:
-- **Multi-Step Hiring Wizard**: Manages candidate info, offer details, and a document checklist.
-- **Kanban Board Workflow**: Tracks hiring processes through stages: Carta Oferta, Documentos, Contrato, Alta IMSS, Onboarding, Completado, No Completado.
-- **Offer Letter Generation**: Creates professional job offer letters.
-- **Document Upload & Management**: Uses Replit Object Storage for file uploads, tracking document status and URLs. Special handling for NSS (National Social Security number). Supports various contract types (Planta, Temporal, Por Obra Determinada, Honorarios, Practicante).
-
-**Empresas Module (Company Management)**:
-- **Multi-Company Support**: Manage multiple companies with full fiscal and legal data (RFC, razón social, domicilio fiscal, representante legal).
-- **Registros Patronales (IMSS)**: Track multiple IMSS employer registrations per company with risk classes (I-V), premium rates, and activity classifications.
-- **Sistema de Credenciales**: Secure credential management for government systems (IMSS Escritorio Virtual, SIPARE, Infonavit Portal Empresarial, Fonacot, IDSE, SUA).
-- **Replit Secrets Integration**: Passwords are NEVER stored in the database. Only secret key references are stored, with clear UI warnings and documentation links about creating Replit Secrets.
-- **e.firma Support**: Optional e.firma (FIEL) configuration for systems requiring digital signatures, with secure storage of certificate paths and password references.
-
-**Centros de Trabajo & Multi-Shift System**:
-- **Work Centers (Centros de Trabajo)**: Manage multiple work centers per company with general information (nombre, empresa, domicilio).
-- **Multiple Shifts per Center (Turnos)**: Each work center supports multiple shifts with individual configurations:
-  - Schedule definition (horaInicio, horaFin) in HH:MM format
-  - Working days per shift (trabajaLunes, trabajaMartes, etc.)
-  - Tolerance settings (minutosToleranciaEntrada, minutosToleranciaComida)
-  - Active/inactive status tracking
-- **Employee-Shift Assignments**: Employees are assigned to specific shifts (not just centers), enabling precise attendance tracking with shift context.
-- **Attendance Integration**: Clock-in/out system (Reloj Checador) automatically captures employee's active shift, storing turnoId in attendance records for accurate reporting.
-- **Shift Display**: Attendance records show complete shift information (nombre, horaInicio-horaFin) for context and reporting.
-- **CRUD Operations**: Full create, read, update, delete operations for shifts via TurnosManager.tsx component with real-time updates.
-
-**Grupos de Nómina (Payroll Groups)**:
-- **Configurable Pay Periods**: Define payroll groups with different payment frequencies (semanal, catorcenal, quincenal, mensual).
-- **Period Configuration**: Each group specifies:
-  - Tipo de Periodo: semanal (weekly), catorcenal (biweekly), quincenal (twice monthly), mensual (monthly)
-  - Día de inicio de semana (configurable starting day for weekly/biweekly periods)
-  - Día de corte (optional cutoff day for monthly/quincenal periods)
-  - Día de pago: For weekly/biweekly (day of week 0-6), for bimonthly/monthly (day of month 1-31)
-  - Días de cálculo: Optional field for all period types - number of days in advance for pre-payroll calculations
-- **Interactive Creation Dialog**: Enhanced "Crear Grupo de Nómina" dialog features:
-  - Period Type selector with period count indicators (e.g., "Semanal (~52 periodos/año)")
-  - Conditional field display: Shows diaInicioSemana and diaPago for weekly/biweekly, diaCorte and diaPago for bimonthly/monthly
-  - Días de cálculo field (optional, for all period types) - allows specifying advance calculation days (e.g., 2 days before payday)
-  - Real-time field validation and helpful tooltips
-  - Information panel explaining automatic period generation and key features
-- **Automatic Period Generation**: When a payroll group is created, the system automatically generates payroll periods for the current year and next year:
-  - Semanal: ~52-53 periods per year, aligned to configured start day (includes partial first period if needed)
-  - Catorcenal: ~26-27 periods per year, aligned to configured start day (includes partial first period if needed)
-  - Quincenal: 24 periods per year (1-15 and 16-end of month for each month)
-  - Mensual: 12 periods per year (full months)
-- **Full Year Coverage**: Period generation ensures complete coverage from January 1st through December 31st, creating partial periods when needed to avoid coverage gaps.
-- **Duplicate Prevention**: Built-in checks prevent regenerating periods for the same group and year. Unique constraint on (grupoNominaId, year, periodNumber) enforces data integrity.
-- **Employee Assignment**: Employees are assigned to specific payroll groups via grupoNominaId field.
-- **Attendance Integration**: Attendance module supports filtering by payroll group, with automatic period calculation based on group configuration.
-- **Smart Period Selection**: When a payroll group is selected, quick access buttons automatically calculate "Periodo Actual" and "Periodo Anterior" based on the group's payment frequency and current date.
-- **Combined Filtering**: Attendance tracking supports filtering by both work center (centroTrabajoId) and payroll group (grupoNominaId) simultaneously for precise reporting.
-
-**Payroll Module (Nómina)**:
-- **Real-time API Integration**: Uses `useQuery` to fetch payroll groups from `/api/grupos-nomina`, ensuring consistency across all modules.
-- **Modular Navigation**: Dropdown menu with two sub-modules:
-  - "Crear Nómina" (/payroll): Main payroll creation and management interface
-  - "Grupos de Nómina" (/payroll/grupos): Dedicated module for managing payroll groups
-- **Dynamic Group Selection**: Displays active payroll groups in dropdown, showing group name and period type (e.g., "Ventas (quincenal)").
-- **Data Consistency**: All payroll group data sourced from single API endpoint, eliminating hardcoded/mock data.
-
-**Grupos de Nómina Module** (Payroll Groups):
-- **Dedicated Management Interface**: Standalone module at /payroll/grupos for full CRUD operations on payroll groups.
-- **Comprehensive Listing**: Table view showing all configured groups with details:
-  - Nombre (Name)
-  - Periodicidad (Frequency with period count indicator)
-  - Día de Pago (Payment day - weekday or day of month depending on period type)
-  - Días Cálculo (Optional calculation advance days)
-  - Estado (Active/Inactive status with badges)
-  - Descripción (Optional description)
-- **Group Operations**:
-  - Create: Via shared CreateGrupoNominaDialog component with:
-    - Automatic period generation for current and next year
-    - Multi-select employee assignment during creation
-    - Validation and period type configuration
-  - Edit: Via same dialog component in edit mode with:
-    - Load existing group configuration and assigned employees
-    - Reassign employees (add/remove from group)
-    - Preserve active/inactive status
-    - Handle edge cases (domingo=0, valores nulos correctamente)
-  - Delete: With confirmation dialog and cascade deletion of associated periods
-  - View: Complete group configuration display in table format
-- **Employee Assignment**: 
-  - Checkbox-based multi-select interface showing all employees
-  - Visual indicator for employees already assigned to other groups
-  - Automatic update of employee.grupoNominaId when assigned
-  - Batch assignment/reassignment on save
-- **Empty State Handling**: User-friendly empty state with call-to-action when no groups exist.
-
-**Shared Components**:
-- **CreateGrupoNominaDialog**: Reusable dual-mode component supporting both creation and editing of payroll groups. Used by both Payroll (quick access) and Grupos de Nómina (dedicated management). Features:
-  - **Dual Mode Operation**: Accepts `mode` prop ("create" or "edit") and `grupoToEdit` to populate form
-  - **Employee Multi-Select**: Checkbox-based interface to assign/reassign employees with:
-    - Real-time employee list from /api/employees
-    - Visual badges for employees already in other groups
-    - Counter showing selected employee count
-  - **Smart Form Management**:
-    - Uses nullish coalescing (`??`) to preserve numeric zeros (domingo=0, etc.)
-    - Preserves active/inactive status in edit mode
-    - Automatic form reset with defaults on dialog open
-    - Proper toast notifications with captured values
-  - **Backend Integration**:
-    - POST /api/grupos-nomina with employeeIds array for creation
-    - PATCH /api/grupos-nomina/:id with employeeIds for updates
-    - Invalidates both grupos-nomina and employees cache after save
-  - **Conditional UI**: Titles, descriptions, buttons adapt based on create/edit mode
-
-**Attendance Module (Asistencia) - Redesigned**:
-- **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
-- **Incident Types**: Separate columns for each type:
-  - Faltas (absences) - integer count
-  - Retardos (tardiness) - integer count  
-  - Horas Extra (overtime) - decimal hours
-  - Horas Descontadas (discounted hours) - decimal hours
-  - Incapacidades (medical leave) - integer count
-  - Permisos (permissions) - integer count
-- **Dual Filtering System**: 
-  - Work Center Filter: Filter incidents by work center
-  - Payroll Group Filter: Filter incidents by payroll group (grupos de nómina)
-  - Combined Filtering: Both filters work together for precise employee and incident selection
-- **Grid Layout**: Employees in rows, incident types in columns (similar to Payroll module pattern).
-- **Real-time Stats**: Dashboard cards showing totals for each incident type across the selected period.
-- **Query Optimization**: Structured queryKey with custom queryFn for proper cache invalidation and URL parameter handling.
-- **Smart Period Selection**: 
-  - Manual date range selection
-  - Quick access buttons for current week/month (when no payroll group selected)
-  - Automatic period calculation based on payroll group's payment frequency (when group selected)
+*   **Bajas (Terminations)**: Multi-step wizard for severance calculation (finiquito/liquidación) compliant with Mexican labor law, termination letter generation, and a Kanban board for workflow management.
+*   **Altas (Hiring)**: Multi-step hiring wizard, offer letter generation, document upload and management (using Replit Object Storage), and a Kanban board to track hiring stages. Supports various contract types.
+*   **Empresas (Company Management)**: Supports multi-company management with full fiscal data, `Registros Patronales` (IMSS employer registrations), and secure credential management for government systems (integrating with Replit Secrets for sensitive data). E.firma support is also included.
+*   **Centros de Trabajo & Multi-Shift System**: Manages multiple work centers and configurable shifts per center, including schedules, working days, and tolerance settings. Employees are assigned to specific shifts for precise attendance tracking.
+*   **Grupos de Nómina (Payroll Groups)**: Allows defining configurable payroll groups with different payment frequencies (weekly, biweekly, twice monthly, monthly). It features automatic generation of payroll periods for the current and next year, ensuring full year coverage. Employees can be assigned to specific payroll groups.
+*   **Payroll Module (Nómina)**: Provides interfaces for creating and managing payroll, dynamically selecting payroll groups, and ensuring data consistency via API integration.
+*   **Attendance Module (Asistencia)**: Redesigned for period-based tracking, allowing mass incident capture (absences, tardiness, overtime, medical leave, etc.) in an Excel-like grid. Features dual filtering by work center and payroll group, and smart period selection.
 
 ## External Dependencies
 
 ### Database & Infrastructure
-- **@neondatabase/serverless**: PostgreSQL hosting.
-- **drizzle-orm**, **drizzle-kit**: ORM and migration tools.
-- **ws**: WebSocket support for Neon.
+*   **@neondatabase/serverless**: PostgreSQL hosting.
+*   **drizzle-orm**, **drizzle-kit**: ORM and migration tools.
 
 ### UI Framework & Components
-- **@radix-ui/**: Accessible UI primitives.
-- **tailwindcss**: Utility-first CSS.
-- **class-variance-authority**: Variant-based styling.
-- **lucide-react**: Icon library.
+*   **@radix-ui/**: Accessible UI primitives.
+*   **tailwindcss**: Utility-first CSS framework.
+*   **lucide-react**: Icon library.
 
 ### Form Management
-- **react-hook-form**, **@hookform/resolvers**: Form state and validation.
-- **zod**, **drizzle-zod**: Schema validation and Drizzle integration.
+*   **react-hook-form**, **@hookform/resolvers**: Form state and validation.
+*   **zod**, **drizzle-zod**: Schema validation.
 
 ### Data Fetching
-- **@tanstack/react-query**: Server state management and caching.
+*   **@tanstack/react-query**: Server state management.
 
 ### Date Handling
-- **date-fns**: Date utility functions.
-
-### Development Tools
-- **vite**, **@vitejs/plugin-react**: Build tool and React integration.
-- **tsx**: TypeScript execution.
-- **esbuild**: Production bundling.
-- **@replit/** plugins: Replit-specific enhancements.
-
-### Fonts
-- **Google Fonts CDN**: Inter, JetBrains Mono.
+*   **date-fns**: Date utility library.
 
 ### Object Storage
-- **Replit Object Storage**: For document uploads (requires configuration).
+*   **Replit Object Storage**: For document and file uploads.
