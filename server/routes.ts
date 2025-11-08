@@ -1005,6 +1005,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertGrupoNominaSchema.parse(req.body);
       const grupo = await storage.createGrupoNomina(validatedData);
+      
+      // Generar automáticamente periodos de pago para año actual y próximo
+      const currentYear = new Date().getFullYear();
+      await storage.generatePayrollPeriodsForYear(grupo.id!, currentYear);
+      await storage.generatePayrollPeriodsForYear(grupo.id!, currentYear + 1);
+      
       res.json(grupo);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1048,6 +1054,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Payroll Periods
+  app.get("/api/payroll-periods/:grupoNominaId", async (req, res) => {
+    try {
+      const { grupoNominaId } = req.params;
+      const { year } = req.query;
+      
+      const periods = await storage.getPayrollPeriodsByGrupo(
+        grupoNominaId,
+        year ? parseInt(year as string) : undefined
+      );
+      res.json(periods);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/payroll-periods/generate/:grupoNominaId/:year", async (req, res) => {
+    try {
+      const { grupoNominaId, year } = req.params;
+      const periods = await storage.generatePayrollPeriodsForYear(
+        grupoNominaId,
+        parseInt(year)
+      );
+      res.json({ success: true, count: periods.length, periods });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   });
 
