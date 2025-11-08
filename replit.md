@@ -72,6 +72,21 @@ Preferred communication style: Simple, everyday language.
 - **Shift Display**: Attendance records show complete shift information (nombre, horaInicio-horaFin) for context and reporting.
 - **CRUD Operations**: Full create, read, update, delete operations for shifts via TurnosManager.tsx component with real-time updates.
 
+**Attendance Module (Asistencia) - Redesigned**:
+- **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
+- **Incident Types**: Separate columns for each type:
+  - Faltas (absences) - integer count
+  - Retardos (tardiness) - integer count  
+  - Horas Extra (overtime) - decimal hours
+  - Horas Descontadas (discounted hours) - decimal hours
+  - Incapacidades (medical leave) - integer count
+  - Permisos (permissions) - integer count
+- **Work Center Filtering**: Filter incidents by work center with clear UI messaging. Shows all employees in grid but filters displayed incidents by selected center.
+- **Grid Layout**: Employees in rows, incident types in columns (similar to Payroll module pattern).
+- **Real-time Stats**: Dashboard cards showing totals for each incident type across the selected period.
+- **Query Optimization**: Structured queryKey with custom queryFn for proper cache invalidation and URL parameter handling.
+- **Period Selection**: Quick access buttons for current week/month, plus manual date range selection.
+
 ## External Dependencies
 
 ### Database & Infrastructure
