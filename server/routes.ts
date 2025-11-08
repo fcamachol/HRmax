@@ -10,7 +10,13 @@ import {
   insertEmployeeSchema,
   insertBajaSpecialConceptSchema,
   insertHiringProcessSchema,
-  updateHiringProcessSchema
+  updateHiringProcessSchema,
+  insertEmpresaSchema,
+  updateEmpresaSchema,
+  insertRegistroPatronalSchema,
+  updateRegistroPatronalSchema,
+  insertCredencialSistemaSchema,
+  updateCredencialSistemaSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -475,6 +481,173 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(resultado);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Empresas
+  app.post("/api/empresas", async (req, res) => {
+    try {
+      const validatedData = insertEmpresaSchema.parse(req.body);
+      const empresa = await storage.createEmpresa(validatedData);
+      res.json(empresa);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/empresas", async (req, res) => {
+    try {
+      const empresas = await storage.getEmpresas();
+      res.json(empresas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/empresas/:id", async (req, res) => {
+    try {
+      const empresa = await storage.getEmpresa(req.params.id);
+      if (!empresa) {
+        return res.status(404).json({ message: "Empresa no encontrada" });
+      }
+      res.json(empresa);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/empresas/:id", async (req, res) => {
+    try {
+      const validatedData = updateEmpresaSchema.parse(req.body);
+      const empresa = await storage.updateEmpresa(req.params.id, validatedData);
+      res.json(empresa);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/empresas/:id", async (req, res) => {
+    try {
+      await storage.deleteEmpresa(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Registros Patronales
+  app.post("/api/registros-patronales", async (req, res) => {
+    try {
+      const validatedData = insertRegistroPatronalSchema.parse(req.body);
+      const registro = await storage.createRegistroPatronal(validatedData);
+      res.json(registro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/registros-patronales", async (req, res) => {
+    try {
+      const { empresaId } = req.query;
+      if (empresaId) {
+        const registros = await storage.getRegistrosPatronalesByEmpresa(empresaId as string);
+        return res.json(registros);
+      }
+      const registros = await storage.getRegistrosPatronales();
+      res.json(registros);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/registros-patronales/:id", async (req, res) => {
+    try {
+      const registro = await storage.getRegistroPatronal(req.params.id);
+      if (!registro) {
+        return res.status(404).json({ message: "Registro patronal no encontrado" });
+      }
+      res.json(registro);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/registros-patronales/:id", async (req, res) => {
+    try {
+      const validatedData = updateRegistroPatronalSchema.parse(req.body);
+      const registro = await storage.updateRegistroPatronal(req.params.id, validatedData);
+      res.json(registro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/registros-patronales/:id", async (req, res) => {
+    try {
+      await storage.deleteRegistroPatronal(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Credenciales de Sistemas
+  app.post("/api/credenciales", async (req, res) => {
+    try {
+      const validatedData = insertCredencialSistemaSchema.parse(req.body);
+      const credencial = await storage.createCredencialSistema(validatedData);
+      res.json(credencial);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/credenciales", async (req, res) => {
+    try {
+      const { empresaId, registroPatronalId } = req.query;
+      if (empresaId) {
+        const credenciales = await storage.getCredencialesByEmpresa(empresaId as string);
+        return res.json(credenciales);
+      }
+      if (registroPatronalId) {
+        const credenciales = await storage.getCredencialesByRegistroPatronal(registroPatronalId as string);
+        return res.json(credenciales);
+      }
+      const credenciales = await storage.getCredencialesSistemas();
+      res.json(credenciales);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/credenciales/:id", async (req, res) => {
+    try {
+      const credencial = await storage.getCredencialSistema(req.params.id);
+      if (!credencial) {
+        return res.status(404).json({ message: "Credencial no encontrada" });
+      }
+      res.json(credencial);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/credenciales/:id", async (req, res) => {
+    try {
+      const validatedData = updateCredencialSistemaSchema.parse(req.body);
+      const credencial = await storage.updateCredencialSistema(req.params.id, validatedData);
+      res.json(credencial);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/credenciales/:id", async (req, res) => {
+    try {
+      await storage.deleteCredencialSistema(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
