@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, Users, ChevronDown, ChevronRight, Trash2, Search } from "lucide-react";
+import { Loader2, Save, Users, ChevronDown, ChevronRight, Trash2, Search, Maximize2, Minimize2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type {
@@ -76,6 +76,7 @@ export function IncidenciasAsistenciaGrid({
   const [expandedColumns, setExpandedColumns] = useState<Set<IncidenciaTipo>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const dateRange = useMemo(() => {
     try {
@@ -384,7 +385,7 @@ export function IncidenciasAsistenciaGrid({
   ];
 
   return (
-    <Card>
+    <Card className={isFullscreen ? "fixed inset-0 z-50 flex flex-col" : ""}>
       <CardHeader>
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -398,6 +399,15 @@ export function IncidenciasAsistenciaGrid({
             {hasAnyChanges && (
               <Badge variant="secondary">{changesCount} cambios sin guardar</Badge>
             )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsFullscreen(!isFullscreen)}
+              data-testid="button-toggle-fullscreen"
+              title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </Button>
             <Button
               variant="outline"
               size="icon"
@@ -420,8 +430,8 @@ export function IncidenciasAsistenciaGrid({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
+      <CardContent className={isFullscreen ? "flex-1 overflow-auto" : ""}>
+        <div className={isFullscreen ? "h-full overflow-auto" : "overflow-x-auto"}>
           <Table>
             <TableHeader>
               <TableRow>
