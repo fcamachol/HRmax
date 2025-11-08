@@ -119,6 +119,34 @@ export const attendance = pgTable("attendance", {
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
 
+// Tipos de incidencias de asistencia
+export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso"] as const;
+export type TipoIncidenciaAsistencia = typeof tiposIncidenciaAsistencia[number];
+
+export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
+  falta: "Falta",
+  retardo: "Retardo",
+  horas_extra: "Horas Extra",
+  horas_descontadas: "Horas Descontadas",
+  incapacidad: "Incapacidad",
+  permiso: "Permiso",
+};
+
+// Incidencias de asistencia por periodo (estilo layout de nómina)
+export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  employeeId: varchar("employee_id").notNull(),
+  centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo
+  tipoIncidencia: varchar("tipo_incidencia").notNull(), // falta, retardo, horas_extra, horas_descontadas, incapacidad, permiso
+  fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio del periodo
+  fechaFin: date("fecha_fin").notNull(), // Fecha de fin del periodo
+  cantidad: decimal("cantidad", { precision: 10, scale: 2 }).notNull(), // Cantidad (días, horas, etc.)
+  monto: decimal("monto", { precision: 10, scale: 2 }), // Monto a descontar o pagar (opcional)
+  notas: text("notas"), // Observaciones
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
@@ -275,6 +303,12 @@ export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
 });
 
+export const insertIncidenciaAsistenciaSchema = createInsertSchema(incidenciasAsistencia).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
 });
@@ -388,6 +422,8 @@ export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
+export type IncidenciaAsistencia = typeof incidenciasAsistencia.$inferSelect;
+export type InsertIncidenciaAsistencia = z.infer<typeof insertIncidenciaAsistenciaSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type ConfigurationChangeLog = typeof configurationChangeLogs.$inferSelect;
