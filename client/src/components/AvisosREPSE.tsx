@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, CheckCircle, AlertTriangle, Clock, FileText, Trash2 } from "lucide-react";
+import { Plus, CheckCircle, AlertTriangle, Clock, FileText, Trash2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,9 +25,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { AvisoREPSE, ContratoREPSE } from "@shared/schema";
+import type { AvisoREPSE, ContratoREPSE, Empresa } from "@shared/schema";
 import { format, differenceInDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -37,13 +38,24 @@ interface AvisosREPSEProps {
 
 export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
   const [isPresentarDialogOpen, setIsPresentarDialogOpen] = useState(false);
+  const [isGenerarTrimestralesOpen, setIsGenerarTrimestralesOpen] = useState(false);
   const [selectedAviso, setSelectedAviso] = useState<AvisoREPSE | null>(null);
   const [fechaPresentacion, setFechaPresentacion] = useState("");
   const [numeroFolio, setNumeroFolio] = useState("");
+  const [empresaId, setEmpresaId] = useState("");
+  const [año, setAño] = useState(new Date().getFullYear().toString());
   const { toast } = useToast();
 
-  const { data: avisos = [], isLoading } = useQuery<AvisoREPSE[]>({
+  const { data: avisosPendientes = [], isLoading: isLoadingPendientes } = useQuery<AvisoREPSE[]>({
     queryKey: ["/api/avisos-repse/pendientes"],
+  });
+
+  const { data: avisosPresentados = [], isLoading: isLoadingPresentados } = useQuery<AvisoREPSE[]>({
+    queryKey: ["/api/avisos-repse-presentados"],
+  });
+
+  const { data: empresas = [] } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas"],
   });
 
   const presentarMutation = useMutation({
@@ -56,6 +68,7 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
     onSuccess: (data) => {
       console.log("[AvisosREPSE] onSuccess ejecutado, cerrando diálogo");
       queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse/pendientes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse-presentados"] });
       toast({
         title: "Aviso presentado",
         description: "El aviso ha sido marcado como presentado exitosamente",
@@ -70,6 +83,29 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
       toast({
         title: "Error",
         description: error.message || "No se pudo marcar el aviso como presentado",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const generarTrimestralesMutation = useMutation({
+    mutationFn: async (data: { empresaId: string; año: number }) => {
+      return await apiRequest("POST", "/api/avisos-repse/generar-trimestrales", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse/pendientes"] });
+      toast({
+        title: "Avisos generados",
+        description: "Los avisos trimestrales han sido generados exitosamente",
+      });
+      setIsGenerarTrimestralesOpen(false);
+      setEmpresaId("");
+      setAño(new Date().getFullYear().toString());
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudieron generar los avisos trimestrales",
         variant: "destructive",
       });
     },
@@ -200,13 +236,126 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
     return contrato?.numeroContrato || "N/A";
   };
 
-  if (isLoading) {
+  const handleGenerarTrimestrales = () => {
+    if (!empresaId || !año) {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar una empresa y un año",
+        variant: "destructive",
+      });
+      return;
+    }
+    generarTrimestralesMutation.mutate({
+      empresaId,
+      año: parseInt(año),
+    });
+  };
+
+  if (isLoadingPendientes || isLoadingPresentados) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-muted-foreground">Cargando avisos...</div>
       </div>
     );
   }
+
+  const renderAvisoCard = (aviso: AvisoREPSE, showPresentarButton: boolean = true) => {
+    const urgencia = getUrgenciaStatus(aviso.fechaLimite);
+    const UrgenciaIcon = urgencia.icon;
+
+    return (
+      <Card key={aviso.id} data-testid={`card-aviso-${aviso.id}`}>
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-2">
+                <Badge variant={getTipoAvisoVariant(aviso.tipo)} data-testid={`badge-tipo-${aviso.id}`}>
+                  {getTipoAvisoText(aviso.tipo)}
+                </Badge>
+                {aviso.estatus === "PENDIENTE" && (
+                  <Badge className={urgencia.className} data-testid={`badge-urgencia-${aviso.id}`}>
+                    <UrgenciaIcon className="h-3 w-3 mr-1" />
+                    {urgencia.text}
+                  </Badge>
+                )}
+                {aviso.estatus === "PRESENTADO" && (
+                  <Badge variant="outline" className="bg-green-100 text-green-800">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Presentado
+                  </Badge>
+                )}
+              </div>
+              <CardTitle className="text-lg">{aviso.descripcion}</CardTitle>
+              <CardDescription className="mt-1">
+                {aviso.contratoREPSEId && (
+                  <span>Contrato: {getContratoNumero(aviso.contratoREPSEId)} • </span>
+                )}
+                {aviso.tipo === "REPORTE_TRIMESTRAL" && aviso.trimestre && (
+                  <span>Q{aviso.trimestre} {aviso.año} • </span>
+                )}
+                Fecha límite: {format(new Date(aviso.fechaLimite), "dd 'de' MMMM, yyyy", { locale: es })}
+                {aviso.fechaPresentacion && (
+                  <span> • Presentado: {format(new Date(aviso.fechaPresentacion), "dd 'de' MMMM, yyyy", { locale: es })}</span>
+                )}
+                {aviso.numeroFolioSTPS && (
+                  <span> • Folio: {aviso.numeroFolioSTPS}</span>
+                )}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              {showPresentarButton && (
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => handlePresentar(aviso)}
+                  data-testid={`button-presentar-${aviso.id}`}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Marcar como Presentado
+                </Button>
+              )}
+              {!showPresentarButton && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      data-testid={`button-delete-aviso-${aviso.id}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Eliminar aviso?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará el aviso permanentemente. Esta acción no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteAvisoMutation.mutate(aviso.id)}
+                      >
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        {aviso.notas && (
+          <CardContent>
+            <div className="text-sm text-muted-foreground">
+              <strong>Notas:</strong> {aviso.notas}
+            </div>
+          </CardContent>
+        )}
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -217,101 +366,119 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
             Gestión de avisos y reportes obligatorios ante STPS e IMSS
           </p>
         </div>
+        <Dialog open={isGenerarTrimestralesOpen} onOpenChange={setIsGenerarTrimestralesOpen}>
+          <DialogTrigger asChild>
+            <Button data-testid="button-generar-trimestrales">
+              <Calendar className="h-4 w-4 mr-2" />
+              Generar Avisos Trimestrales
+            </Button>
+          </DialogTrigger>
+          <DialogContent data-testid="dialog-generar-trimestrales">
+            <DialogHeader>
+              <DialogTitle>Generar Avisos Trimestrales</DialogTitle>
+              <DialogDescription>
+                Genere los 4 avisos trimestrales de REPSE para una empresa específica.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="empresa">Empresa *</Label>
+                <Select value={empresaId} onValueChange={setEmpresaId}>
+                  <SelectTrigger data-testid="select-empresa-trimestral">
+                    <SelectValue placeholder="Seleccione una empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((empresa) => (
+                      <SelectItem key={empresa.id} value={empresa.id}>
+                        {empresa.razonSocial}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="año">Año *</Label>
+                <Input
+                  id="año"
+                  type="number"
+                  value={año}
+                  onChange={(e) => setAño(e.target.value)}
+                  data-testid="input-año-trimestral"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsGenerarTrimestralesOpen(false);
+                  setEmpresaId("");
+                  setAño(new Date().getFullYear().toString());
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleGenerarTrimestrales}
+                disabled={!empresaId || !año || generarTrimestralesMutation.isPending}
+                data-testid="button-confirmar-generar"
+              >
+                {generarTrimestralesMutation.isPending ? "Generando..." : "Generar"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {avisos.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center p-12">
-            <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No hay avisos pendientes</h3>
-            <p className="text-muted-foreground text-center">
-              Todos los avisos están al corriente
+      <div className="space-y-8">
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-xl font-semibold mb-2">Avisos Pendientes</h3>
+            <p className="text-sm text-muted-foreground">
+              Avisos que aún no han sido presentados ante la autoridad
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-4">
-          {avisos.map((aviso) => {
-            const urgencia = getUrgenciaStatus(aviso.fechaLimite);
-            const UrgenciaIcon = urgencia.icon;
-
-            return (
-              <Card key={aviso.id} data-testid={`card-aviso-${aviso.id}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant={getTipoAvisoVariant(aviso.tipo)} data-testid={`badge-tipo-${aviso.id}`}>
-                          {getTipoAvisoText(aviso.tipo)}
-                        </Badge>
-                        <Badge className={urgencia.className} data-testid={`badge-urgencia-${aviso.id}`}>
-                          <UrgenciaIcon className="h-3 w-3 mr-1" />
-                          {urgencia.text}
-                        </Badge>
-                      </div>
-                      <CardTitle className="text-lg">{aviso.descripcion}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {aviso.contratoREPSEId && (
-                          <span>Contrato: {getContratoNumero(aviso.contratoREPSEId)} • </span>
-                        )}
-                        {aviso.tipo === "REPORTE_TRIMESTRAL" && aviso.trimestre && (
-                          <span>Q{aviso.trimestre} {aviso.año} • </span>
-                        )}
-                        Fecha límite: {format(new Date(aviso.fechaLimite), "dd 'de' MMMM, yyyy", { locale: es })}
-                      </CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="default"
-                        onClick={() => handlePresentar(aviso)}
-                        data-testid={`button-presentar-${aviso.id}`}
-                      >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        Marcar como Presentado
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            data-testid={`button-delete-aviso-${aviso.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>¿Eliminar aviso?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta acción eliminará el aviso permanentemente. Esta acción no se puede deshacer.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteAvisoMutation.mutate(aviso.id)}
-                            >
-                              Eliminar
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </div>
-                </CardHeader>
-                {aviso.notas && (
-                  <CardContent>
-                    <div className="text-sm text-muted-foreground">
-                      <strong>Notas:</strong> {aviso.notas}
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
+          </div>
+          {avisosPendientes.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center p-12">
+                <CheckCircle className="h-12 w-12 text-green-500 mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No hay avisos pendientes</h3>
+                <p className="text-muted-foreground text-center">
+                  Todos los avisos están al corriente
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {avisosPendientes.map((aviso) => renderAvisoCard(aviso, true))}
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-xl font-semibold mb-2">Avisos Presentados</h3>
+            <p className="text-sm text-muted-foreground">
+              Avisos que ya han sido presentados ante la autoridad
+            </p>
+          </div>
+          {avisosPresentados.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center p-12">
+                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No hay avisos presentados</h3>
+                <p className="text-muted-foreground text-center">
+                  Los avisos presentados aparecerán aquí
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
+              {avisosPresentados.map((aviso) => renderAvisoCard(aviso, false))}
+            </div>
+          )}
+        </div>
+      </div>
 
       <Dialog open={isPresentarDialogOpen} onOpenChange={setIsPresentarDialogOpen}>
         <DialogContent data-testid="dialog-presentar-aviso">

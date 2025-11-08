@@ -229,9 +229,11 @@ export interface IStorage {
   getAvisosREPSEByEmpresa(empresaId: string): Promise<AvisoREPSE[]>;
   getAvisosREPSEByContrato(contratoREPSEId: string): Promise<AvisoREPSE[]>;
   getAvisosREPSEPendientes(): Promise<AvisoREPSE[]>; // Solo avisos pendientes
+  getAvisosREPSEPresentados(): Promise<AvisoREPSE[]>; // Solo avisos presentados
   updateAvisoREPSE(id: string, updates: Partial<InsertAvisoREPSE>): Promise<AvisoREPSE>;
   deleteAvisoREPSE(id: string): Promise<void>;
   marcarAvisoPresentado(id: string, fechaPresentacion: string, numeroFolioSTPS?: string): Promise<AvisoREPSE>; // Helper para marcar como presentado
+  generarAvisosTrimestrales(empresaId: string, año: number): Promise<AvisoREPSE[]>; // Generar avisos trimestrales para un año
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1249,6 +1251,60 @@ export class DatabaseStorage implements IStorage {
       updates.numeroFolioSTPS = numeroFolioSTPS;
     }
     return this.updateAvisoREPSE(id, updates);
+  }
+
+  async getAvisosREPSEPresentados(): Promise<AvisoREPSE[]> {
+    return await db
+      .select()
+      .from(avisosREPSE)
+      .where(eq(avisosREPSE.estatus, "PRESENTADO"))
+      .orderBy(desc(avisosREPSE.fechaPresentacion));
+  }
+
+  async generarAvisosTrimestrales(empresaId: string, año: number): Promise<AvisoREPSE[]> {
+    const avisos: AvisoREPSE[] = [];
+    
+    const trimestresFechasLimite = [
+      { trimestre: 1, mes: 4, dia: 17 },
+      { trimestre: 2, mes: 7, dia: 17 },
+      { trimestre: 3, mes: 10, dia: 17 },
+      { trimestre: 4, mes: 1, dia: 17, añoLimite: año + 1 },
+    ];
+
+    for (const { trimestre, mes, dia, añoLimite } of trimestresFechasLimite) {
+      const añoParaFechaLimite = añoLimite || año;
+      const fechaLimite = new Date(añoParaFechaLimite, mes - 1, dia);
+      const fechaLimiteStr = fechaLimite.toISOString().split('T')[0];
+
+      const avisosExistentes = await db
+        .select()
+        .from(avisosREPSE)
+        .where(
+          and(
+            eq(avisosREPSE.empresaId, empresaId),
+            eq(avisosREPSE.tipo, "REPORTE_TRIMESTRAL"),
+            eq(avisosREPSE.trimestre, trimestre),
+            eq(avisosREPSE.año, año)
+          )
+        );
+
+      if (avisosExistentes.length === 0) {
+        const nuevoAviso = await this.createAvisoREPSE({
+          tipo: "REPORTE_TRIMESTRAL",
+          empresaId,
+          descripcion: `Reporte Trimestral Q${trimestre} ${año} - REPSE`,
+          fechaLimite: fechaLimiteStr,
+          trimestre,
+          año,
+          estatus: "PENDIENTE",
+        });
+        avisos.push(nuevoAviso);
+      } else {
+        avisos.push(avisosExistentes[0]);
+      }
+    }
+
+    return avisos;
   }
 }
 

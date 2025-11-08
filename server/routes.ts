@@ -1395,6 +1395,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/avisos-repse-presentados", async (req, res) => {
+    try {
+      const avisos = await storage.getAvisosREPSEPresentados();
+      res.json(avisos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/avisos-repse/generar-trimestrales", async (req, res) => {
+    try {
+      const { empresaId, año } = req.body;
+      if (!empresaId || !año) {
+        return res.status(400).json({ message: "empresaId y año son requeridos" });
+      }
+      const avisos = await storage.generarAvisosTrimestrales(empresaId, año);
+      res.json(avisos);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
