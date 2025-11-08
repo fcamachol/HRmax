@@ -31,6 +31,8 @@ import {
   type InsertHoraExtra,
   type Attendance,
   type InsertAttendance,
+  type IncidenciaAsistencia,
+  type InsertIncidenciaAsistencia,
   type ClienteREPSE,
   type InsertClienteREPSE,
   type RegistroREPSE,
@@ -57,6 +59,7 @@ import {
   empleadosCentrosTrabajo,
   horasExtras,
   attendance,
+  incidenciasAsistencia,
   clientesREPSE,
   registrosREPSE,
   contratosREPSE,
@@ -177,6 +180,15 @@ export interface IStorage {
   getAttendancesByDate(date: string): Promise<Attendance[]>;
   updateAttendance(id: string, updates: Partial<InsertAttendance>): Promise<Attendance>;
   deleteAttendance(id: string): Promise<void>;
+  
+  // Incidencias de Asistencia (layout por periodo)
+  createIncidenciaAsistencia(incidencia: InsertIncidenciaAsistencia): Promise<IncidenciaAsistencia>;
+  getIncidenciaAsistencia(id: string): Promise<IncidenciaAsistencia | undefined>;
+  getIncidenciasAsistencia(): Promise<IncidenciaAsistencia[]>;
+  getIncidenciasAsistenciaByPeriodo(fechaInicio: string, fechaFin: string, centroTrabajoId?: string): Promise<IncidenciaAsistencia[]>;
+  getIncidenciasAsistenciaByEmpleado(empleadoId: string): Promise<IncidenciaAsistencia[]>;
+  updateIncidenciaAsistencia(id: string, updates: Partial<InsertIncidenciaAsistencia>): Promise<IncidenciaAsistencia>;
+  deleteIncidenciaAsistencia(id: string): Promise<void>;
   
   // Horas Extras
   createHoraExtra(horaExtra: InsertHoraExtra): Promise<HoraExtra>;
@@ -895,6 +907,70 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(attendance)
       .where(eq(attendance.id, id));
+  }
+
+  // Incidencias de Asistencia
+  async createIncidenciaAsistencia(incidenciaData: InsertIncidenciaAsistencia): Promise<IncidenciaAsistencia> {
+    const [newIncidencia] = await db
+      .insert(incidenciasAsistencia)
+      .values(incidenciaData)
+      .returning();
+    return newIncidencia;
+  }
+
+  async getIncidenciaAsistencia(id: string): Promise<IncidenciaAsistencia | undefined> {
+    const [incidencia] = await db
+      .select()
+      .from(incidenciasAsistencia)
+      .where(eq(incidenciasAsistencia.id, id));
+    return incidencia || undefined;
+  }
+
+  async getIncidenciasAsistencia(): Promise<IncidenciaAsistencia[]> {
+    return await db
+      .select()
+      .from(incidenciasAsistencia)
+      .orderBy(desc(incidenciasAsistencia.fechaInicio));
+  }
+
+  async getIncidenciasAsistenciaByPeriodo(fechaInicio: string, fechaFin: string, centroTrabajoId?: string): Promise<IncidenciaAsistencia[]> {
+    const conditions = [
+      eq(incidenciasAsistencia.fechaInicio, fechaInicio),
+      eq(incidenciasAsistencia.fechaFin, fechaFin)
+    ];
+
+    if (centroTrabajoId) {
+      conditions.push(eq(incidenciasAsistencia.centroTrabajoId, centroTrabajoId));
+    }
+
+    return await db
+      .select()
+      .from(incidenciasAsistencia)
+      .where(and(...conditions))
+      .orderBy(incidenciasAsistencia.employeeId);
+  }
+
+  async getIncidenciasAsistenciaByEmpleado(empleadoId: string): Promise<IncidenciaAsistencia[]> {
+    return await db
+      .select()
+      .from(incidenciasAsistencia)
+      .where(eq(incidenciasAsistencia.employeeId, empleadoId))
+      .orderBy(desc(incidenciasAsistencia.fechaInicio));
+  }
+
+  async updateIncidenciaAsistencia(id: string, updates: Partial<InsertIncidenciaAsistencia>): Promise<IncidenciaAsistencia> {
+    const [updated] = await db
+      .update(incidenciasAsistencia)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(incidenciasAsistencia.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteIncidenciaAsistencia(id: string): Promise<void> {
+    await db
+      .delete(incidenciasAsistencia)
+      .where(eq(incidenciasAsistencia.id, id));
   }
 
   // Horas Extras
