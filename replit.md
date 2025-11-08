@@ -28,7 +28,7 @@ Preferred communication style: Simple, everyday language.
 
 **Database**: PostgreSQL (Neon serverless).
 **ORM**: Drizzle ORM with type-safe schemas, Zod integration, and migration support.
-**Schema Design**: Tables for `employees`, `departments`, `payroll_periods`, `attendance`, `users`, `configurationChangeLogs`, `hiring_process`, and extended fields for `bajas` (terminations). UUID primary keys and audit logging are standard.
+**Schema Design**: Tables for `employees`, `departments`, `payroll_periods`, `attendance`, `users`, `configurationChangeLogs`, `hiring_process`, `bajas` (terminations), `empresas` (companies), `registrosPatronales` (IMSS employer registrations), and `credencialesSistemas` (government system credentials). UUID primary keys and audit logging are standard. Spanish column names are used throughout to match Mexican business requirements.
 
 ### Payroll Calculation Engine
 
@@ -52,6 +52,13 @@ Preferred communication style: Simple, everyday language.
 - **Kanban Board Workflow**: Tracks hiring processes through stages: Carta Oferta, Documentos, Contrato, Alta IMSS, Onboarding, Completado, No Completado.
 - **Offer Letter Generation**: Creates professional job offer letters.
 - **Document Upload & Management**: Uses Replit Object Storage for file uploads, tracking document status and URLs. Special handling for NSS (National Social Security number). Supports various contract types (Planta, Temporal, Por Obra Determinada, Honorarios, Practicante).
+
+**Empresas Module (Company Management)**:
+- **Multi-Company Support**: Manage multiple companies with full fiscal and legal data (RFC, razón social, domicilio fiscal, representante legal).
+- **Registros Patronales (IMSS)**: Track multiple IMSS employer registrations per company with risk classes (I-V), premium rates, and activity classifications.
+- **Sistema de Credenciales**: Secure credential management for government systems (IMSS Escritorio Virtual, SIPARE, Infonavit Portal Empresarial, Fonacot, IDSE, SUA).
+- **Replit Secrets Integration**: Passwords are NEVER stored in the database. Only secret key references are stored, with clear UI warnings and documentation links about creating Replit Secrets.
+- **e.firma Support**: Optional e.firma (FIEL) configuration for systems requiring digital signatures, with secure storage of certificate paths and password references.
 
 ## External Dependencies
 
