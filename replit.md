@@ -72,6 +72,17 @@ Preferred communication style: Simple, everyday language.
 - **Shift Display**: Attendance records show complete shift information (nombre, horaInicio-horaFin) for context and reporting.
 - **CRUD Operations**: Full create, read, update, delete operations for shifts via TurnosManager.tsx component with real-time updates.
 
+**Grupos de Nómina (Payroll Groups)**:
+- **Configurable Pay Periods**: Define payroll groups with different payment frequencies (semanal, catorcenal, quincenal, mensual).
+- **Period Configuration**: Each group specifies:
+  - Tipo de Periodo: semanal (weekly), catorcenal (biweekly), quincenal (twice monthly), mensual (monthly)
+  - Día de inicio de semana (configurable starting day for weekly/biweekly periods)
+  - Día de corte (optional cutoff day for monthly/quincenal periods)
+- **Employee Assignment**: Employees are assigned to specific payroll groups via grupoNominaId field.
+- **Attendance Integration**: Attendance module supports filtering by payroll group, with automatic period calculation based on group configuration.
+- **Smart Period Selection**: When a payroll group is selected, quick access buttons automatically calculate "Periodo Actual" and "Periodo Anterior" based on the group's payment frequency and current date.
+- **Combined Filtering**: Attendance tracking supports filtering by both work center (centroTrabajoId) and payroll group (grupoNominaId) simultaneously for precise reporting.
+
 **Attendance Module (Asistencia) - Redesigned**:
 - **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
 - **Incident Types**: Separate columns for each type:
@@ -81,11 +92,17 @@ Preferred communication style: Simple, everyday language.
   - Horas Descontadas (discounted hours) - decimal hours
   - Incapacidades (medical leave) - integer count
   - Permisos (permissions) - integer count
-- **Work Center Filtering**: Filter incidents by work center with clear UI messaging. Shows all employees in grid but filters displayed incidents by selected center.
+- **Dual Filtering System**: 
+  - Work Center Filter: Filter incidents by work center
+  - Payroll Group Filter: Filter incidents by payroll group (grupos de nómina)
+  - Combined Filtering: Both filters work together for precise employee and incident selection
 - **Grid Layout**: Employees in rows, incident types in columns (similar to Payroll module pattern).
 - **Real-time Stats**: Dashboard cards showing totals for each incident type across the selected period.
 - **Query Optimization**: Structured queryKey with custom queryFn for proper cache invalidation and URL parameter handling.
-- **Period Selection**: Quick access buttons for current week/month, plus manual date range selection.
+- **Smart Period Selection**: 
+  - Manual date range selection
+  - Quick access buttons for current week/month (when no payroll group selected)
+  - Automatic period calculation based on payroll group's payment frequency (when group selected)
 
 ## External Dependencies
 

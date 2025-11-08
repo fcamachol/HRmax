@@ -117,10 +117,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employees", async (req, res) => {
     try {
-      const { centroTrabajoId } = req.query;
+      const { centroTrabajoId, grupoNominaId } = req.query;
       
+      // Filtrar por ambos: centro y grupo
+      if (centroTrabajoId && grupoNominaId) {
+        const employees = await storage.getEmployeesByCentroAndGrupo(
+          centroTrabajoId as string, 
+          grupoNominaId as string
+        );
+        return res.json(employees);
+      }
+      
+      // Filtrar solo por centro
       if (centroTrabajoId) {
         const employees = await storage.getEmployeesByCentroTrabajo(centroTrabajoId as string);
+        return res.json(employees);
+      }
+      
+      // Filtrar solo por grupo de nómina
+      if (grupoNominaId) {
+        const employees = await storage.getEmployeesByGrupoNomina(grupoNominaId as string);
         return res.json(employees);
       }
       

@@ -331,6 +331,35 @@ export class DatabaseStorage implements IStorage {
     return empleadosDelCentro.map(row => row.employee);
   }
 
+  async getEmployeesByGrupoNomina(grupoNominaId: string): Promise<Employee[]> {
+    return await db
+      .select()
+      .from(employees)
+      .where(
+        and(
+          eq(employees.grupoNominaId, grupoNominaId),
+          eq(employees.estatus, 'activo')
+        )
+      );
+  }
+
+  async getEmployeesByCentroAndGrupo(centroTrabajoId: string, grupoNominaId: string): Promise<Employee[]> {
+    const empleadosDelCentro = await db
+      .select({ employee: employees })
+      .from(employees)
+      .innerJoin(empleadosCentrosTrabajo, eq(employees.id, empleadosCentrosTrabajo.empleadoId))
+      .where(
+        and(
+          eq(empleadosCentrosTrabajo.centroTrabajoId, centroTrabajoId),
+          eq(empleadosCentrosTrabajo.estatus, 'activo'),
+          eq(employees.grupoNominaId, grupoNominaId),
+          eq(employees.estatus, 'activo')
+        )
+      );
+    
+    return empleadosDelCentro.map(row => row.employee);
+  }
+
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
     const [updated] = await db
       .update(employees)
