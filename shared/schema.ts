@@ -87,11 +87,24 @@ export const employees = pgTable("employees", {
   diaPago: varchar("dia_pago"),
   driveId: text("drive_id"),
   cuenta: numeric("cuenta"),
+  grupoNominaId: varchar("grupo_nomina_id"),
 });
 
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
+});
+
+export const gruposNomina = pgTable("grupos_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre").notNull().unique(),
+  tipoPeriodo: varchar("tipo_periodo").notNull(), // semanal, catorcenal, quincenal, mensual
+  diaInicioSemana: integer("dia_inicio_semana").default(1), // 0=domingo, 1=lunes, ..., 6=sábado
+  diaCorte: integer("dia_corte"), // Día del mes para corte mensual/quincenal
+  descripcion: text("descripcion"),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
 });
 
 export const payrollPeriods = pgTable("payroll_periods", {
@@ -302,6 +315,19 @@ export const insertDepartmentSchema = createInsertSchema(departments).omit({
   id: true,
 });
 
+export const tiposPeriodoNomina = ["semanal", "catorcenal", "quincenal", "mensual"] as const;
+export type TipoPeriodoNomina = typeof tiposPeriodoNomina[number];
+
+export const insertGrupoNominaSchema = createInsertSchema(gruposNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoPeriodo: z.enum(tiposPeriodoNomina),
+});
+
+export const updateGrupoNominaSchema = insertGrupoNominaSchema.partial();
+
 export const insertPayrollPeriodSchema = createInsertSchema(payrollPeriods).omit({
   id: true,
 });
@@ -427,6 +453,8 @@ export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 export type Department = typeof departments.$inferSelect;
 export type InsertDepartment = z.infer<typeof insertDepartmentSchema>;
+export type GrupoNomina = typeof gruposNomina.$inferSelect;
+export type InsertGrupoNomina = z.infer<typeof insertGrupoNominaSchema>;
 export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
 export type Attendance = typeof attendance.$inferSelect;
