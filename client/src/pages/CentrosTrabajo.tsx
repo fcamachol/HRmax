@@ -28,6 +28,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { CentroTrabajo, Empresa } from "@shared/schema";
 import CentroTrabajoForm from "@/components/CentroTrabajoForm";
 import AsignacionEmpleados from "@/components/AsignacionEmpleados";
+import TurnosManager from "@/components/TurnosManager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function CentrosTrabajo() {
@@ -182,20 +183,15 @@ export default function CentrosTrabajo() {
                       <span className="text-muted-foreground line-clamp-2">{formatDireccion(centro)}</span>
                     </div>
                   )}
-                  
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex flex-col">
-                      <span className="text-muted-foreground">
-                        Entrada: {centro.horaEntrada} - Salida: {centro.horaSalida}
+
+                  {centro.responsable && (
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground text-xs">
+                        Responsable: {centro.responsable}
                       </span>
-                      {centro.turno && (
-                        <span className="text-xs text-muted-foreground">
-                          Turno: {centro.turno}
-                        </span>
-                      )}
                     </div>
-                  </div>
+                  )}
 
                   {centro.descripcion && (
                     <p className="text-muted-foreground text-xs line-clamp-2 mt-2">
@@ -225,11 +221,18 @@ export default function CentrosTrabajo() {
                           Gestiona empleados y configuración del centro de trabajo
                         </DialogDescription>
                       </DialogHeader>
-                      <Tabs defaultValue="empleados" className="w-full">
-                        <TabsList className="grid w-full grid-cols-2">
-                          <TabsTrigger value="empleados">Empleados Asignados</TabsTrigger>
+                      <Tabs defaultValue="turnos" className="w-full">
+                        <TabsList className="grid w-full grid-cols-3">
+                          <TabsTrigger value="turnos">Turnos</TabsTrigger>
+                          <TabsTrigger value="empleados">Empleados</TabsTrigger>
                           <TabsTrigger value="info">Información</TabsTrigger>
                         </TabsList>
+                        <TabsContent value="turnos" className="mt-4">
+                          <TurnosManager 
+                            centroTrabajoId={centro.id!} 
+                            centroTrabajoNombre={centro.nombre}
+                          />
+                        </TabsContent>
                         <TabsContent value="empleados" className="mt-4">
                           <AsignacionEmpleados centroTrabajoId={centro.id!} />
                         </TabsContent>
@@ -261,20 +264,12 @@ export default function CentrosTrabajo() {
                               </dl>
                             </div>
                             <div>
-                              <h4 className="text-sm font-medium text-muted-foreground mb-2">Horarios y Turnos</h4>
+                              <h4 className="text-sm font-medium text-muted-foreground mb-2">Información Adicional</h4>
                               <dl className="space-y-2">
-                                <div>
-                                  <dt className="text-sm font-medium">Horario de Entrada</dt>
-                                  <dd className="text-sm text-muted-foreground">{centro.horaEntrada}</dd>
-                                </div>
-                                <div>
-                                  <dt className="text-sm font-medium">Horario de Salida</dt>
-                                  <dd className="text-sm text-muted-foreground">{centro.horaSalida}</dd>
-                                </div>
-                                {centro.turno && (
+                                {centro.responsable && (
                                   <div>
-                                    <dt className="text-sm font-medium">Turno</dt>
-                                    <dd className="text-sm text-muted-foreground">{centro.turno}</dd>
+                                    <dt className="text-sm font-medium">Responsable</dt>
+                                    <dd className="text-sm text-muted-foreground">{centro.responsable}</dd>
                                   </div>
                                 )}
                                 {centro.registroPatronalId && (
@@ -283,6 +278,12 @@ export default function CentrosTrabajo() {
                                     <dd className="text-sm text-muted-foreground">Vinculado</dd>
                                   </div>
                                 )}
+                                <div>
+                                  <dt className="text-sm font-medium">Estatus</dt>
+                                  <dd className="text-sm text-muted-foreground">
+                                    {centro.estatus === 'activo' ? 'Activo' : 'Inactivo'}
+                                  </dd>
+                                </div>
                               </dl>
                             </div>
                           </div>
