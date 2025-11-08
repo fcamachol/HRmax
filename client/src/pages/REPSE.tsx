@@ -46,13 +46,13 @@ export default function REPSE() {
             <ClipboardList className="h-4 w-4 mr-2" />
             Contratos
           </TabsTrigger>
-          <TabsTrigger value="avisos" data-testid="tab-avisos-repse">
-            <Bell className="h-4 w-4 mr-2" />
-            Avisos
-          </TabsTrigger>
           <TabsTrigger value="asignaciones" data-testid="tab-asignaciones-repse">
             <Users className="h-4 w-4 mr-2" />
             Asignaciones de Personal
+          </TabsTrigger>
+          <TabsTrigger value="avisos" data-testid="tab-avisos-repse">
+            <Bell className="h-4 w-4 mr-2" />
+            Avisos
           </TabsTrigger>
         </TabsList>
 
@@ -80,18 +80,18 @@ export default function REPSE() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="avisos">
-          <Card>
-            <CardContent className="pt-6">
-              <AvisosREPSE contratos={contratos} />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="asignaciones">
           <Card>
             <CardContent className="pt-6">
               <AsignacionesPersonalREPSE />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="avisos">
+          <Card>
+            <CardContent className="pt-6">
+              <AvisosREPSE contratos={contratos} />
             </CardContent>
           </Card>
         </TabsContent>
