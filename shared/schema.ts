@@ -392,3 +392,153 @@ export type Settlement = typeof settlements.$inferSelect;
 export type InsertSettlement = z.infer<typeof insertSettlementSchema>;
 export type Lawsuit = typeof lawsuits.$inferSelect;
 export type InsertLawsuit = z.infer<typeof insertLawsuitSchema>;
+
+// Empresas (Companies)
+export const empresas = pgTable("empresas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  razonSocial: text("razon_social").notNull(),
+  nombreComercial: text("nombre_comercial"),
+  rfc: varchar("rfc", { length: 13 }).notNull().unique(),
+  regimenFiscal: text("regimen_fiscal"),
+  actividadEconomica: text("actividad_economica"),
+  // Domicilio fiscal
+  calle: text("calle"),
+  numeroExterior: varchar("numero_exterior"),
+  numeroInterior: varchar("numero_interior"),
+  colonia: text("colonia"),
+  municipio: text("municipio"),
+  estado: text("estado"),
+  codigoPostal: varchar("codigo_postal", { length: 5 }),
+  pais: varchar("pais").default("México"),
+  // Datos de contacto
+  telefono: varchar("telefono"),
+  email: varchar("email"),
+  sitioWeb: text("sitio_web"),
+  // Representante legal
+  representanteLegal: text("representante_legal"),
+  rfcRepresentante: varchar("rfc_representante", { length: 13 }),
+  curpRepresentante: varchar("curp_representante", { length: 18 }),
+  // Información adicional
+  fechaConstitucion: date("fecha_constitucion"),
+  fechaInicioOperaciones: date("fecha_inicio_operaciones"),
+  logoUrl: text("logo_url"),
+  notas: text("notas"),
+  estatus: varchar("estatus").default("activa"), // activa, suspendida, inactiva
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertEmpresaSchema = createInsertSchema(empresas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateEmpresaSchema = insertEmpresaSchema.partial();
+
+export type Empresa = typeof empresas.$inferSelect;
+export type InsertEmpresa = z.infer<typeof insertEmpresaSchema>;
+
+// Registros Patronales (Employer Registrations)
+// Clase de riesgo IMSS: I (mínimo), II (bajo), III (medio), IV (alto), V (máximo)
+export const clasesRiesgo = ["I", "II", "III", "IV", "V"] as const;
+export type ClaseRiesgo = typeof clasesRiesgo[number];
+
+export const registrosPatronales = pgTable("registros_patronales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  numeroRegistroPatronal: varchar("numero_registro_patronal", { length: 11 }).notNull().unique(), // 11 caracteres IMSS
+  nombreCentroTrabajo: text("nombre_centro_trabajo").notNull(),
+  // Domicilio del centro de trabajo
+  calle: text("calle"),
+  numeroExterior: varchar("numero_exterior"),
+  numeroInterior: varchar("numero_interior"),
+  colonia: text("colonia"),
+  municipio: text("municipio"),
+  estado: text("estado"),
+  codigoPostal: varchar("codigo_postal", { length: 5 }),
+  // Clasificación de riesgo IMSS
+  claseRiesgo: varchar("clase_riesgo").notNull().default("I"), // I, II, III, IV, V
+  primaRiesgo: decimal("prima_riesgo", { precision: 5, scale: 4 }).default("0.5000"), // Porcentaje (ej: 0.5000 = 0.5%)
+  divisionEconomica: text("division_economica"),
+  grupoActividad: text("grupo_actividad"),
+  fraccionActividad: text("fraccion_actividad"),
+  descripcionActividad: text("descripcion_actividad"),
+  // Información de registro
+  fechaRegistro: date("fecha_registro"),
+  fechaBaja: date("fecha_baja"),
+  estatus: varchar("estatus").default("activo"), // activo, suspendido, baja
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertRegistroPatronalSchema = createInsertSchema(registrosPatronales).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  claseRiesgo: z.enum(clasesRiesgo).default("I"),
+});
+
+export const updateRegistroPatronalSchema = insertRegistroPatronalSchema.partial();
+
+export type RegistroPatronal = typeof registrosPatronales.$inferSelect;
+export type InsertRegistroPatronal = z.infer<typeof insertRegistroPatronalSchema>;
+
+// Credenciales de Sistemas (System Credentials)
+// Tipos de sistemas: imss_escritorio_virtual, sipare, infonavit, fonacot
+export const tiposSistema = [
+  "imss_escritorio_virtual",
+  "sipare", 
+  "infonavit_portal_empresarial",
+  "fonacot",
+  "idse",
+  "sua",
+  "otro"
+] as const;
+export type TipoSistema = typeof tiposSistema[number];
+
+export const credencialesSistemas = pgTable("credenciales_sistemas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+  registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "cascade" }),
+  tipoSistema: varchar("tipo_sistema").notNull(), // imss_escritorio_virtual, sipare, infonavit, fonacot, etc.
+  nombreSistema: text("nombre_sistema").notNull(), // Nombre descriptivo
+  // Credenciales (IMPORTANTE: Estos campos deben encriptarse o usar sistema de secrets)
+  usuario: text("usuario"), // Usuario, RFC, o identificador
+  // NOTA IMPORTANTE: Las contraseñas NO deben almacenarse en texto plano
+  // Opciones recomendadas:
+  // 1. Usar Replit Secrets con una convención de nombres
+  // 2. Encriptar con una clave maestra almacenada en secrets
+  // 3. Usar un servicio de gestión de secretos externo
+  passwordEncrypted: text("password_encrypted"), // Contraseña encriptada (NO guardar en texto plano)
+  passwordSecretKey: text("password_secret_key"), // Referencia a secret de Replit (ej: "EMPRESA_1_IMSS_PASSWORD")
+  // e.firma (FIEL) para sistemas que la requieren
+  efirmaRfc: varchar("efirma_rfc", { length: 13 }),
+  efirmaCertPath: text("efirma_cert_path"), // Ruta al archivo .cer en object storage
+  efirmaKeyPath: text("efirma_key_path"), // Ruta al archivo .key en object storage
+  efirmaPasswordSecretKey: text("efirma_password_secret_key"), // Referencia a secret para contraseña de e.firma
+  // Información adicional
+  url: text("url"), // URL del sistema
+  descripcion: text("descripcion"),
+  fechaUltimoAcceso: timestamp("fecha_ultimo_acceso"),
+  fechaVencimiento: date("fecha_vencimiento"), // Para certificados o contraseñas con vencimiento
+  notasSeguridad: text("notas_seguridad"),
+  estatus: varchar("estatus").default("activo"), // activo, vencido, inactivo
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertCredencialSistemaSchema = createInsertSchema(credencialesSistemas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoSistema: z.enum(tiposSistema),
+});
+
+export const updateCredencialSistemaSchema = insertCredencialSistemaSchema.partial();
+
+export type CredencialSistema = typeof credencialesSistemas.$inferSelect;
+export type InsertCredencialSistema = z.infer<typeof insertCredencialSistemaSchema>;
