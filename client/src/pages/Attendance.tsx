@@ -32,7 +32,7 @@ import type {
   CentroTrabajo,
   IncidenciaAsistencia,
 } from "@shared/schema";
-import { IncidenciasAsistenciaLayout } from "@/components/IncidenciasAsistenciaLayout";
+import { IncidenciasAsistenciaGrid } from "@/components/IncidenciasAsistenciaGrid";
 
 export default function Attendance() {
   const [activeTab, setActiveTab] = useState<"registro" | "historial">("registro");
@@ -48,7 +48,27 @@ export default function Attendance() {
   const [selectedCentro, setSelectedCentro] = useState<string>("all");
 
   const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: [
+      "/api/employees",
+      { centroTrabajoId: selectedCentro !== "all" ? selectedCentro : undefined }
+    ],
+    queryFn: async ({ queryKey }) => {
+      const [path, params] = queryKey as [string, Record<string, string | undefined>];
+      const searchParams = new URLSearchParams();
+      
+      if (params?.centroTrabajoId) {
+        searchParams.append("centroTrabajoId", params.centroTrabajoId);
+      }
+      
+      const url = params?.centroTrabajoId ? `${path}?${searchParams.toString()}` : path;
+      const res = await fetch(url, { credentials: "include" });
+      
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${res.statusText}`);
+      }
+      
+      return res.json();
+    },
   });
 
   const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
@@ -91,7 +111,7 @@ export default function Attendance() {
     totalIncidencias: incidenciasAsistencia.length,
     faltas: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.faltas || 0), 0),
     retardos: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.retardos || 0), 0),
-    horasExtra: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.horasExtra || 0), 0),
+    horasExtra: incidenciasAsistencia.reduce((sum, inc) => sum + parseFloat(inc.horasExtra || "0"), 0),
     incapacidades: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0),
     permisos: incidenciasAsistencia.reduce((sum, inc) => sum + (inc.permisos || 0), 0),
   };
@@ -256,7 +276,7 @@ export default function Attendance() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                  {incidenciasAsistencia.reduce((sum, inc) => sum + (inc.horasDescontadas || 0), 0)}
+                  {incidenciasAsistencia.reduce((sum, inc) => sum + parseFloat(inc.horasDescontadas || "0"), 0)}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Total de horas
@@ -315,7 +335,7 @@ export default function Attendance() {
           )}
 
           {/* Grid de Incidencias */}
-          <IncidenciasAsistenciaLayout
+          <IncidenciasAsistenciaGrid
             fechaInicio={fechaInicio}
             fechaFin={fechaFin}
             centroTrabajoId={selectedCentro !== "all" ? selectedCentro : undefined}
