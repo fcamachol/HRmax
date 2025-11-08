@@ -104,6 +104,9 @@ export default function Payroll() {
   const [newGroupTipoPeriodo, setNewGroupTipoPeriodo] = useState<"semanal" | "catorcenal" | "quincenal" | "mensual">("quincenal");
   const [newGroupDiaInicioSemana, setNewGroupDiaInicioSemana] = useState<number>(1); // 1 = Lunes
   const [newGroupDiaCorte, setNewGroupDiaCorte] = useState<number>(15);
+  const [newGroupDiaPago, setNewGroupDiaPago] = useState<number>(5); // 5 = Viernes (default para semanal/catorcenal)
+  const [newGroupDiaPagoMes, setNewGroupDiaPagoMes] = useState<number>(15); // Día del mes para quincenal/mensual
+  const [newGroupDiasCalculo, setNewGroupDiasCalculo] = useState<number>(2); // Días de anticipación para cálculos
   const [newGroupDescripcion, setNewGroupDescripcion] = useState("");
   
   // New concept form
@@ -393,6 +396,12 @@ export default function Payroll() {
         diaCorte: (newGroupTipoPeriodo === "quincenal" || newGroupTipoPeriodo === "mensual") 
           ? newGroupDiaCorte 
           : undefined,
+        diaPago: (newGroupTipoPeriodo === "semanal" || newGroupTipoPeriodo === "catorcenal")
+          ? newGroupDiaPago
+          : (newGroupTipoPeriodo === "quincenal" || newGroupTipoPeriodo === "mensual")
+            ? newGroupDiaPagoMes
+            : undefined,
+        diasCalculo: newGroupDiasCalculo || undefined,
         descripcion: newGroupDescripcion || undefined,
         activo: true,
       };
@@ -404,6 +413,9 @@ export default function Payroll() {
       setNewGroupTipoPeriodo("quincenal");
       setNewGroupDiaInicioSemana(1);
       setNewGroupDiaCorte(15);
+      setNewGroupDiaPago(5);
+      setNewGroupDiaPagoMes(15);
+      setNewGroupDiasCalculo(2);
       setNewGroupDescripcion("");
       setIsCreateGroupOpen(false);
       
