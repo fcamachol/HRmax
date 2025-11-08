@@ -39,6 +39,8 @@ import {
   type InsertContratoREPSE,
   type AsignacionPersonalREPSE,
   type InsertAsignacionPersonalREPSE,
+  type AvisoREPSE,
+  type InsertAvisoREPSE,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -58,7 +60,8 @@ import {
   clientesREPSE,
   registrosREPSE,
   contratosREPSE,
-  asignacionesPersonalREPSE
+  asignacionesPersonalREPSE,
+  avisosREPSE
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -218,6 +221,17 @@ export interface IStorage {
   getAsignacionesPersonalREPSEByEmpleado(empleadoId: string): Promise<AsignacionPersonalREPSE[]>;
   updateAsignacionPersonalREPSE(id: string, updates: Partial<InsertAsignacionPersonalREPSE>): Promise<AsignacionPersonalREPSE>;
   deleteAsignacionPersonalREPSE(id: string): Promise<void>;
+  
+  // REPSE - Avisos
+  createAvisoREPSE(aviso: InsertAvisoREPSE): Promise<AvisoREPSE>;
+  getAvisoREPSE(id: string): Promise<AvisoREPSE | undefined>;
+  getAvisosREPSE(): Promise<AvisoREPSE[]>;
+  getAvisosREPSEByEmpresa(empresaId: string): Promise<AvisoREPSE[]>;
+  getAvisosREPSEByContrato(contratoREPSEId: string): Promise<AvisoREPSE[]>;
+  getAvisosREPSEPendientes(): Promise<AvisoREPSE[]>; // Solo avisos pendientes
+  updateAvisoREPSE(id: string, updates: Partial<InsertAvisoREPSE>): Promise<AvisoREPSE>;
+  deleteAvisoREPSE(id: string): Promise<void>;
+  marcarAvisoPresentado(id: string, fechaPresentacion: string, numeroFolioSTPS?: string): Promise<AvisoREPSE>; // Helper para marcar como presentado
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1158,6 +1172,83 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(asignacionesPersonalREPSE)
       .where(eq(asignacionesPersonalREPSE.id, id));
+  }
+
+  // ============================================================================
+  // REPSE - Avisos
+  // ============================================================================
+  
+  async createAvisoREPSE(aviso: InsertAvisoREPSE): Promise<AvisoREPSE> {
+    const [newAviso] = await db
+      .insert(avisosREPSE)
+      .values(aviso)
+      .returning();
+    return newAviso;
+  }
+
+  async getAvisoREPSE(id: string): Promise<AvisoREPSE | undefined> {
+    const [aviso] = await db
+      .select()
+      .from(avisosREPSE)
+      .where(eq(avisosREPSE.id, id));
+    return aviso || undefined;
+  }
+
+  async getAvisosREPSE(): Promise<AvisoREPSE[]> {
+    return await db
+      .select()
+      .from(avisosREPSE)
+      .orderBy(desc(avisosREPSE.fechaLimite));
+  }
+
+  async getAvisosREPSEByEmpresa(empresaId: string): Promise<AvisoREPSE[]> {
+    return await db
+      .select()
+      .from(avisosREPSE)
+      .where(eq(avisosREPSE.empresaId, empresaId))
+      .orderBy(desc(avisosREPSE.fechaLimite));
+  }
+
+  async getAvisosREPSEByContrato(contratoREPSEId: string): Promise<AvisoREPSE[]> {
+    return await db
+      .select()
+      .from(avisosREPSE)
+      .where(eq(avisosREPSE.contratoREPSEId, contratoREPSEId))
+      .orderBy(desc(avisosREPSE.fechaLimite));
+  }
+
+  async getAvisosREPSEPendientes(): Promise<AvisoREPSE[]> {
+    return await db
+      .select()
+      .from(avisosREPSE)
+      .where(eq(avisosREPSE.estatus, "PENDIENTE"))
+      .orderBy(avisosREPSE.fechaLimite); // Ordenar por fecha límite ascendente (los más urgentes primero)
+  }
+
+  async updateAvisoREPSE(id: string, updates: Partial<InsertAvisoREPSE>): Promise<AvisoREPSE> {
+    const [updatedAviso] = await db
+      .update(avisosREPSE)
+      .set(updates)
+      .where(eq(avisosREPSE.id, id))
+      .returning();
+    return updatedAviso;
+  }
+
+  async deleteAvisoREPSE(id: string): Promise<void> {
+    await db
+      .delete(avisosREPSE)
+      .where(eq(avisosREPSE.id, id));
+  }
+
+  async marcarAvisoPresentado(id: string, fechaPresentacion: string, numeroFolioSTPS?: string): Promise<AvisoREPSE> {
+    const updates: Partial<InsertAvisoREPSE> = {
+      estatus: "PRESENTADO",
+      fechaPresentacion,
+    };
+    if (numeroFolioSTPS) {
+      updates.numeroFolioSTPS = numeroFolioSTPS;
+    }
+    return this.updateAvisoREPSE(id, updates);
   }
 }
 
