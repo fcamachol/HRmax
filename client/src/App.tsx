@@ -15,6 +15,7 @@ import Reingresos from "@/pages/employees/Reingresos";
 import Cambios from "@/pages/employees/Cambios";
 import Payroll from "@/pages/Payroll";
 import Attendance from "@/pages/Attendance";
+import CentrosTrabajo from "@/pages/CentrosTrabajo";
 import Reports from "@/pages/Reports";
 import Configuration from "@/pages/Configuration";
 import Empresas from "@/pages/Empresas";
@@ -33,6 +34,7 @@ function Router() {
       <Route path="/employees/cambios" component={Cambios} />
       <Route path="/payroll" component={Payroll} />
       <Route path="/attendance" component={Attendance} />
+      <Route path="/centros-trabajo" component={CentrosTrabajo} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/configuration" component={Configuration} />

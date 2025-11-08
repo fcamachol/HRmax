@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ChevronRight,
   LayoutList,
+  MapPin,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -79,6 +80,11 @@ const mainMenuItems = [
     title: "Asistencia",
     url: "/attendance",
     icon: Calendar,
+  },
+  {
+    title: "Centros de Trabajo",
+    url: "/centros-trabajo",
+    icon: MapPin,
   },
   {
     title: "Reportes",
