@@ -54,7 +54,7 @@ export function CreateGrupoNominaDialog({
   };
 
   const handleOpenChange = (newOpen: boolean) => {
-    if (!newOpen) {
+    if (newOpen) {
       resetForm();
     }
     onOpenChange(newOpen);
@@ -95,7 +95,6 @@ export function CreateGrupoNominaDialog({
 
       await apiRequest("POST", "/api/grupos-nomina", grupoData);
 
-      resetForm();
       onOpenChange(false);
       
       queryClient.invalidateQueries({ queryKey: ["/api/grupos-nomina"] });
