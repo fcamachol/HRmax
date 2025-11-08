@@ -226,18 +226,33 @@ export default function PayrollGroups() {
         const currentDate = today.getDate();
         const isFirstHalf = currentDate <= 15;
         
-        // Start from current period and generate 4 periods
+        // Generate periods starting from current half
         let periodCount = 0;
         let monthOffset = 0;
+        let skipFirstHalf = !isFirstHalf; // Skip first half if we're already in second half
         
         while (periodCount < 4) {
           const month = currentMonth + monthOffset;
           const year = currentYear + Math.floor(month / 12);
           const adjustedMonth = month % 12;
           
-          // If it's the first iteration and we're in second half, skip first half
-          if (monthOffset === 0 && !isFirstHalf) {
-            // Only add second half of current month
+          // Add primera quincena unless we should skip it
+          if (!skipFirstHalf && periodCount < 4) {
+            const firstHalfStart = new Date(year, adjustedMonth, 1);
+            const firstHalfEnd = new Date(year, adjustedMonth, 15);
+            firstHalfEnd.setHours(23, 59, 59, 999);
+            
+            periods.push({
+              startDate: firstHalfStart,
+              endDate: firstHalfEnd,
+              periodName: `1ª Quincena ${format(firstHalfStart, 'MMMM yyyy', { locale: es })}`,
+            });
+            periodCount++;
+          }
+          skipFirstHalf = false; // Only skip on first iteration if needed
+          
+          // Add segunda quincena if we still need more periods
+          if (periodCount < 4) {
             const lastDay = new Date(year, adjustedMonth + 1, 0).getDate();
             const secondHalfStart = new Date(year, adjustedMonth, 16);
             const secondHalfEnd = new Date(year, adjustedMonth, lastDay);
@@ -249,34 +264,6 @@ export default function PayrollGroups() {
               periodName: `2ª Quincena ${format(secondHalfStart, 'MMMM yyyy', { locale: es })}`,
             });
             periodCount++;
-          } else {
-            // Add both halves for this month
-            // Primera quincena (1-15)
-            const firstHalfStart = new Date(year, adjustedMonth, 1);
-            const firstHalfEnd = new Date(year, adjustedMonth, 15);
-            firstHalfEnd.setHours(23, 59, 59, 999);
-            
-            periods.push({
-              startDate: firstHalfStart,
-              endDate: firstHalfEnd,
-              periodName: `1ª Quincena ${format(firstHalfStart, 'MMMM yyyy', { locale: es })}`,
-            });
-            periodCount++;
-            
-            if (periodCount < 4) {
-              // Segunda quincena (16-fin de mes)
-              const lastDay = new Date(year, adjustedMonth + 1, 0).getDate();
-              const secondHalfStart = new Date(year, adjustedMonth, 16);
-              const secondHalfEnd = new Date(year, adjustedMonth, lastDay);
-              secondHalfEnd.setHours(23, 59, 59, 999);
-              
-              periods.push({
-                startDate: secondHalfStart,
-                endDate: secondHalfEnd,
-                periodName: `2ª Quincena ${format(secondHalfStart, 'MMMM yyyy', { locale: es })}`,
-              });
-              periodCount++;
-            }
           }
           
           monthOffset++;
@@ -360,7 +347,9 @@ export default function PayrollGroups() {
     }
     
     // Filter out completely past periods (endDate < today) and limit to 4
-    return periods.filter(p => p.endDate >= today).slice(0, 4);
+    const filtered = periods.filter(p => p.endDate >= today).slice(0, 4);
+    console.log(`[getUpcomingPeriodsForGroup] ${group.nombre} (${group.tipoPeriodo}): Generated ${periods.length} periods, filtered to ${filtered.length}`, filtered.map(p => p.periodName));
+    return filtered;
   };
 
   return (
