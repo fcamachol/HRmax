@@ -117,6 +117,7 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse/pendientes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse-presentados"] });
       toast({
         title: "Aviso eliminado",
         description: "El aviso ha sido eliminado correctamente",
