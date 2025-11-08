@@ -26,6 +26,8 @@ import {
   insertAttendanceSchema,
   insertIncidenciaAsistenciaSchema,
   updateIncidenciaAsistenciaSchema,
+  insertGrupoNominaSchema,
+  updateGrupoNominaSchema,
   insertHoraExtraSchema,
   updateHoraExtraSchema,
   insertClienteREPSESchema,
@@ -976,6 +978,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/incidencias-asistencia/:id", async (req, res) => {
     try {
       await storage.deleteIncidenciaAsistencia(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Grupos de Nómina
+  app.post("/api/grupos-nomina", async (req, res) => {
+    try {
+      const validatedData = insertGrupoNominaSchema.parse(req.body);
+      const grupo = await storage.createGrupoNomina(validatedData);
+      res.json(grupo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/grupos-nomina", async (req, res) => {
+    try {
+      const grupos = await storage.getGruposNomina();
+      res.json(grupos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/grupos-nomina/:id", async (req, res) => {
+    try {
+      const grupo = await storage.getGrupoNomina(req.params.id);
+      if (!grupo) {
+        return res.status(404).json({ message: "Grupo de nómina no encontrado" });
+      }
+      res.json(grupo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/grupos-nomina/:id", async (req, res) => {
+    try {
+      const validatedData = updateGrupoNominaSchema.parse(req.body);
+      const grupo = await storage.updateGrupoNomina(req.params.id, validatedData);
+      res.json(grupo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/grupos-nomina/:id", async (req, res) => {
+    try {
+      await storage.deleteGrupoNomina(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

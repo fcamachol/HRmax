@@ -193,6 +193,13 @@ export interface IStorage {
   getIncidenciasAsistenciaByEmpleado(empleadoId: string): Promise<IncidenciaAsistencia[]>;
   updateIncidenciaAsistencia(id: string, updates: Partial<InsertIncidenciaAsistencia>): Promise<IncidenciaAsistencia>;
   deleteIncidenciaAsistencia(id: string): Promise<void>;
+
+  // Grupos de Nómina
+  createGrupoNomina(grupo: InsertGrupoNomina): Promise<GrupoNomina>;
+  getGrupoNomina(id: string): Promise<GrupoNomina | undefined>;
+  getGruposNomina(): Promise<GrupoNomina[]>;
+  updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina>;
+  deleteGrupoNomina(id: string): Promise<void>;
   
   // Horas Extras
   createHoraExtra(horaExtra: InsertHoraExtra): Promise<HoraExtra>;
@@ -992,6 +999,45 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(incidenciasAsistencia)
       .where(eq(incidenciasAsistencia.id, id));
+  }
+
+  // Grupos de Nómina
+  async createGrupoNomina(grupo: InsertGrupoNomina): Promise<GrupoNomina> {
+    const [newGrupo] = await db
+      .insert(gruposNomina)
+      .values(grupo)
+      .returning();
+    return newGrupo!;
+  }
+
+  async getGrupoNomina(id: string): Promise<GrupoNomina | undefined> {
+    const [grupo] = await db
+      .select()
+      .from(gruposNomina)
+      .where(eq(gruposNomina.id, id));
+    return grupo;
+  }
+
+  async getGruposNomina(): Promise<GrupoNomina[]> {
+    return await db
+      .select()
+      .from(gruposNomina)
+      .orderBy(gruposNomina.nombre);
+  }
+
+  async updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina> {
+    const [updated] = await db
+      .update(gruposNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(gruposNomina.id, id))
+      .returning();
+    return updated!;
+  }
+
+  async deleteGrupoNomina(id: string): Promise<void> {
+    await db
+      .delete(gruposNomina)
+      .where(eq(gruposNomina.id, id));
   }
 
   // Horas Extras
