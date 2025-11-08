@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -49,6 +50,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { GrupoNomina } from "@shared/schema";
 
 interface NominaGroup {
   id: string;
@@ -86,6 +88,11 @@ export default function Payroll() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<"list" | "create">("list");
   const [currentStep, setCurrentStep] = useState(0);
+  
+  // Fetch grupos de nómina from API
+  const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
+    queryKey: ["/api/grupos-nomina"],
+  });
   
   // Form state
   const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
@@ -238,20 +245,6 @@ export default function Payroll() {
     { employeeId: "5", conceptId: "faltas", amount: 380 },
   ]);
 
-  const [nominaGroups, setNominaGroups] = useState<NominaGroup[]>([
-    {
-      id: "1",
-      name: "Equipo de Ventas",
-      employeeIds: ["1", "6"],
-      createdAt: new Date("2025-01-15"),
-    },
-    {
-      id: "2",
-      name: "Administrativos",
-      employeeIds: ["3", "4"],
-      createdAt: new Date("2025-01-20"),
-    },
-  ]);
 
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
 
@@ -365,13 +358,12 @@ export default function Payroll() {
   };
 
   const loadGroup = (groupId: string) => {
-    const group = nominaGroups.find(g => g.id === groupId);
+    const group = gruposNomina.find((g: GrupoNomina) => g.id === groupId);
     if (group) {
-      setSelectedEmployees(new Set(group.employeeIds));
       setSelectedGroup(groupId);
       toast({
         title: "Grupo cargado",
-        description: `${group.name} - ${group.employeeIds.length} empleados seleccionados`,
+        description: `Grupo "${group.nombre}" seleccionado para nómina`,
       });
     }
   };
@@ -435,16 +427,29 @@ export default function Payroll() {
     }
   };
 
-  const deleteGroup = (groupId: string) => {
-    const group = nominaGroups.find(g => g.id === groupId);
-    setNominaGroups(nominaGroups.filter(g => g.id !== groupId));
-    if (selectedGroup === groupId) {
-      setSelectedGroup("");
+  const deleteGroup = async (groupId: string) => {
+    const group = gruposNomina.find((g: GrupoNomina) => g.id === groupId);
+    try {
+      await apiRequest("DELETE", `/api/grupos-nomina/${groupId}`, undefined);
+      
+      if (selectedGroup === groupId) {
+        setSelectedGroup("");
+      }
+      
+      // Invalidate cache to refresh groups list
+      queryClient.invalidateQueries({ queryKey: ["/api/grupos-nomina"] });
+      
+      toast({
+        title: "Grupo eliminado",
+        description: `"${group?.nombre}" ha sido eliminado`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error al eliminar grupo",
+        description: error.message || "No se pudo eliminar el grupo de nómina",
+        variant: "destructive",
+      });
     }
-    toast({
-      title: "Grupo eliminado",
-      description: `"${group?.name}" ha sido eliminado`,
-    });
   };
 
   const addConcept = () => {
@@ -802,11 +807,11 @@ export default function Payroll() {
                       <SelectValue placeholder="Cargar un grupo..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {nominaGroups.map((group) => (
-                        <SelectItem key={group.id} value={group.id}>
+                      {gruposNomina.filter(g => g.activo).map((group) => (
+                        <SelectItem key={group.id} value={group.id!}>
                           <div className="flex items-center gap-2">
                             <Users className="h-3 w-3" />
-                            {group.name} ({group.employeeIds.length})
+                            {group.nombre} ({group.tipoPeriodo})
                           </div>
                         </SelectItem>
                       ))}
