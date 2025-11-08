@@ -41,7 +41,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { EmpleadoCentroTrabajo, Employee, InsertEmpleadoCentroTrabajo } from "@shared/schema";
+import type { EmpleadoCentroTrabajo, Employee, InsertEmpleadoCentroTrabajo, TurnoCentroTrabajo } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmpleadoCentroTrabajoSchema } from "@shared/schema";
@@ -275,11 +275,21 @@ function AsignacionForm({
     queryKey: ["/api/employees"],
   });
 
+  const { data: turnos = [] } = useQuery<TurnoCentroTrabajo[]>({
+    queryKey: ["/api/turnos-centro-trabajo", centroTrabajoId],
+    queryFn: async () => {
+      const response = await fetch(`/api/turnos-centro-trabajo?centroTrabajoId=${centroTrabajoId}`);
+      if (!response.ok) throw new Error("Error al cargar turnos");
+      return response.json();
+    },
+  });
+
   const form = useForm<InsertEmpleadoCentroTrabajo>({
     resolver: zodResolver(insertEmpleadoCentroTrabajoSchema),
     defaultValues: {
       empleadoId: asignacion?.empleadoId || "",
       centroTrabajoId: centroTrabajoId,
+      turnoId: asignacion?.turnoId || "",
       fechaInicio: asignacion?.fechaInicio
         ? new Date(asignacion.fechaInicio).toISOString().split("T")[0]
         : new Date().toISOString().split("T")[0],
@@ -348,6 +358,40 @@ function AsignacionForm({
                       {empleado.nombre} {empleado.apellidoPaterno} {empleado.apellidoMaterno || ""}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="turnoId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Turno</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger data-testid="select-turno">
+                    <SelectValue placeholder="Selecciona un turno" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {turnos.length === 0 ? (
+                    <div className="p-2 text-sm text-muted-foreground">
+                      No hay turnos configurados. Crea un turno primero.
+                    </div>
+                  ) : (
+                    turnos.map((turno) => (
+                      <SelectItem key={turno.id} value={turno.id!}>
+                        {turno.nombre} ({turno.horaInicio} - {turno.horaFin})
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               <FormMessage />
