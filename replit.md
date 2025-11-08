@@ -126,7 +126,9 @@ Preferred communication style: Simple, everyday language.
   - Consistent group creation experience across modules
   - Single source of truth for form validation and API logic
   - Proper toast notifications with captured values (not blank)
-  - Automatic form reset on dialog close (whether canceled or submitted)
+  - Automatic form reset when dialog opens (ensures fresh defaults every time)
+  - Automatic dialog close after successful group creation
+  - Clean separation: form reset happens on open, not on close or submit
 
 **Attendance Module (Asistencia) - Redesigned**:
 - **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
