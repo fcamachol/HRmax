@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Save, Users, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Save, Users, ChevronDown, ChevronRight, Trash2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type {
@@ -75,6 +75,7 @@ export function IncidenciasAsistenciaGrid({
   const [employeeData, setEmployeeData] = useState<Map<string, EmployeeIncidencias>>(new Map());
   const [expandedColumns, setExpandedColumns] = useState<Set<IncidenciaTipo>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const dateRange = useMemo(() => {
     try {
@@ -114,9 +115,12 @@ export function IncidenciasAsistenciaGrid({
         });
       });
 
+      const apellidoMaterno = emp.apellidoMaterno ? ` ${emp.apellidoMaterno}` : "";
+      const employeeName = `${emp.apellidoPaterno}${apellidoMaterno}, ${emp.nombre}`;
+      
       newData.set(emp.id!, {
         employeeId: emp.id!,
-        employeeName: `${emp.nombre} ${emp.apellidoPaterno} ${emp.apellidoMaterno || ""}`.trim(),
+        employeeName,
         dailyData,
       });
     });
@@ -279,6 +283,69 @@ export function IncidenciasAsistenciaGrid({
     return count;
   }, [employeeData]);
 
+  const filteredAndSortedEmployees = useMemo(() => {
+    const empArray = Array.from(employeeData.values());
+    
+    const filtered = searchTerm
+      ? empArray.filter((emp) =>
+          emp.employeeName.toLowerCase().includes(searchTerm.toLowerCase())
+        )
+      : empArray;
+    
+    return filtered.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  }, [employeeData, searchTerm]);
+
+  const handleDiscardChanges = () => {
+    setEmployeeData((prev) => {
+      const newData = new Map(prev);
+      newData.forEach((empData, empId) => {
+        const newDailyData = new Map(empData.dailyData);
+        newDailyData.forEach((dayData, date) => {
+          if (dayData.hasChanges) {
+            const original = incidenciasAsistencia.find(
+              (inc) => inc.employeeId === empId && inc.fecha === date
+            );
+            if (original) {
+              newDailyData.set(date, {
+                fecha: date,
+                centroTrabajoId: original.centroTrabajoId || null,
+                faltas: original.faltas || 0,
+                retardos: original.retardos || 0,
+                horasExtra: parseFloat(original.horasExtra || "0"),
+                horasDescontadas: parseFloat(original.horasDescontadas || "0"),
+                incapacidades: original.incapacidades || 0,
+                permisos: original.permisos || 0,
+                notas: original.notas || "",
+                existingId: original.id,
+                hasChanges: false,
+              });
+            } else {
+              newDailyData.set(date, {
+                fecha: date,
+                centroTrabajoId: centroTrabajoId || null,
+                faltas: 0,
+                retardos: 0,
+                horasExtra: 0,
+                horasDescontadas: 0,
+                incapacidades: 0,
+                permisos: 0,
+                notas: "",
+                hasChanges: false,
+              });
+            }
+          }
+        });
+        newData.set(empId, { ...empData, dailyData: newDailyData });
+      });
+      return newData;
+    });
+    
+    toast({
+      title: "Cambios descartados",
+      description: "Se han revertido todos los cambios sin guardar",
+    });
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -332,6 +399,16 @@ export function IncidenciasAsistenciaGrid({
               <Badge variant="secondary">{changesCount} cambios sin guardar</Badge>
             )}
             <Button
+              variant="outline"
+              size="icon"
+              onClick={handleDiscardChanges}
+              disabled={!hasAnyChanges}
+              data-testid="button-descartar-cambios"
+              title="Descartar cambios"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+            <Button
               onClick={handleSaveAll}
               disabled={!hasAnyChanges || isSaving}
               data-testid="button-guardar-incidencias"
@@ -349,7 +426,17 @@ export function IncidenciasAsistenciaGrid({
             <TableHeader>
               <TableRow>
                 <TableHead className="min-w-[200px] sticky left-0 bg-background z-20">
-                  Empleado
+                  <div className="flex items-center gap-2">
+                    <Search className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="text"
+                      placeholder="Buscar empleado..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-8"
+                      data-testid="input-buscar-empleado"
+                    />
+                  </div>
                 </TableHead>
                 {incidenciaTipos.map((tipo) => {
                   const isExpanded = expandedColumns.has(tipo);
@@ -415,7 +502,7 @@ export function IncidenciasAsistenciaGrid({
               )}
             </TableHeader>
             <TableBody>
-              {Array.from(employeeData.values()).map((empData) => (
+              {filteredAndSortedEmployees.map((empData) => (
                 <TableRow
                   key={empData.employeeId}
                   data-testid={`row-incidencia-${empData.employeeId}`}
