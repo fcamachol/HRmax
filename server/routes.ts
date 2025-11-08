@@ -25,7 +25,15 @@ import {
   updateEmpleadoCentroTrabajoSchema,
   insertAttendanceSchema,
   insertHoraExtraSchema,
-  updateHoraExtraSchema
+  updateHoraExtraSchema,
+  insertClienteREPSESchema,
+  updateClienteREPSESchema,
+  insertRegistroREPSESchema,
+  updateRegistroREPSESchema,
+  insertContratoREPSESchema,
+  updateContratoREPSESchema,
+  insertAsignacionPersonalREPSESchema,
+  updateAsignacionPersonalREPSESchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -954,6 +962,249 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/horas-extras/:id", async (req, res) => {
     try {
       await storage.deleteHoraExtra(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // REPSE - Clientes
+  // ============================================================================
+
+  app.post("/api/clientes-repse", async (req, res) => {
+    try {
+      const validatedData = insertClienteREPSESchema.parse(req.body);
+      const cliente = await storage.createClienteREPSE(validatedData);
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clientes-repse", async (req, res) => {
+    try {
+      const clientes = await storage.getClientesREPSE();
+      res.json(clientes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clientes-repse/:id", async (req, res) => {
+    try {
+      const cliente = await storage.getClienteREPSE(req.params.id);
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/clientes-repse/:id", async (req, res) => {
+    try {
+      const validatedData = updateClienteREPSESchema.parse(req.body);
+      const cliente = await storage.updateClienteREPSE(req.params.id, validatedData);
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/clientes-repse/:id", async (req, res) => {
+    try {
+      await storage.deleteClienteREPSE(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // REPSE - Registros REPSE
+  // ============================================================================
+
+  app.post("/api/registros-repse", async (req, res) => {
+    try {
+      const validatedData = insertRegistroREPSESchema.parse(req.body);
+      const registro = await storage.createRegistroREPSE(validatedData);
+      res.json(registro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/registros-repse", async (req, res) => {
+    try {
+      const { empresaId } = req.query;
+      if (empresaId) {
+        const registros = await storage.getRegistrosREPSEByEmpresa(empresaId as string);
+        return res.json(registros);
+      }
+      const registros = await storage.getRegistrosREPSE();
+      res.json(registros);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/registros-repse/:id", async (req, res) => {
+    try {
+      const registro = await storage.getRegistroREPSE(req.params.id);
+      if (!registro) {
+        return res.status(404).json({ message: "Registro REPSE no encontrado" });
+      }
+      res.json(registro);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/registros-repse/:id", async (req, res) => {
+    try {
+      const validatedData = updateRegistroREPSESchema.parse(req.body);
+      const registro = await storage.updateRegistroREPSE(req.params.id, validatedData);
+      res.json(registro);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/registros-repse/:id", async (req, res) => {
+    try {
+      await storage.deleteRegistroREPSE(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // REPSE - Contratos
+  // ============================================================================
+
+  app.post("/api/contratos-repse", async (req, res) => {
+    try {
+      const validatedData = insertContratoREPSESchema.parse(req.body);
+      const contrato = await storage.createContratoREPSE(validatedData);
+      res.json(contrato);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/contratos-repse", async (req, res) => {
+    try {
+      const { empresaId, clienteId, registroREPSEId } = req.query;
+      if (empresaId) {
+        const contratos = await storage.getContratosREPSEByEmpresa(empresaId as string);
+        return res.json(contratos);
+      }
+      if (clienteId) {
+        const contratos = await storage.getContratosREPSEByCliente(clienteId as string);
+        return res.json(contratos);
+      }
+      if (registroREPSEId) {
+        const contratos = await storage.getContratosREPSEByRegistro(registroREPSEId as string);
+        return res.json(contratos);
+      }
+      const contratos = await storage.getContratosREPSE();
+      res.json(contratos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/contratos-repse/:id", async (req, res) => {
+    try {
+      const contrato = await storage.getContratoREPSE(req.params.id);
+      if (!contrato) {
+        return res.status(404).json({ message: "Contrato REPSE no encontrado" });
+      }
+      res.json(contrato);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/contratos-repse/:id", async (req, res) => {
+    try {
+      const validatedData = updateContratoREPSESchema.parse(req.body);
+      const contrato = await storage.updateContratoREPSE(req.params.id, validatedData);
+      res.json(contrato);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/contratos-repse/:id", async (req, res) => {
+    try {
+      await storage.deleteContratoREPSE(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // REPSE - Asignaciones de Personal
+  // ============================================================================
+
+  app.post("/api/asignaciones-personal-repse", async (req, res) => {
+    try {
+      const validatedData = insertAsignacionPersonalREPSESchema.parse(req.body);
+      const asignacion = await storage.createAsignacionPersonalREPSE(validatedData);
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/asignaciones-personal-repse", async (req, res) => {
+    try {
+      const { contratoREPSEId, empleadoId } = req.query;
+      if (contratoREPSEId) {
+        const asignaciones = await storage.getAsignacionesPersonalREPSEByContrato(contratoREPSEId as string);
+        return res.json(asignaciones);
+      }
+      if (empleadoId) {
+        const asignaciones = await storage.getAsignacionesPersonalREPSEByEmpleado(empleadoId as string);
+        return res.json(asignaciones);
+      }
+      const asignaciones = await storage.getAsignacionesPersonalREPSE();
+      res.json(asignaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/asignaciones-personal-repse/:id", async (req, res) => {
+    try {
+      const asignacion = await storage.getAsignacionPersonalREPSE(req.params.id);
+      if (!asignacion) {
+        return res.status(404).json({ message: "Asignación de personal no encontrada" });
+      }
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/asignaciones-personal-repse/:id", async (req, res) => {
+    try {
+      const validatedData = updateAsignacionPersonalREPSESchema.parse(req.body);
+      const asignacion = await storage.updateAsignacionPersonalREPSE(req.params.id, validatedData);
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/asignaciones-personal-repse/:id", async (req, res) => {
+    try {
+      await storage.deleteAsignacionPersonalREPSE(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

@@ -15,6 +15,7 @@ import {
   ChevronRight,
   LayoutList,
   MapPin,
+  ClipboardCheck,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -95,6 +96,11 @@ const mainMenuItems = [
     title: "Legal",
     url: "/legal",
     icon: Scale,
+  },
+  {
+    title: "REPSE",
+    url: "/repse",
+    icon: ClipboardCheck,
   },
   {
     title: "Configuración",

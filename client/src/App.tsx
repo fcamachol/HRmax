@@ -21,6 +21,7 @@ import Configuration from "@/pages/Configuration";
 import Empresas from "@/pages/Empresas";
 import Settings from "@/pages/Settings";
 import Legal from "@/pages/Legal";
+import REPSE from "@/pages/REPSE";
 import RelojChecador from "@/components/RelojChecador";
 import NotFound from "@/pages/not-found";
 
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/centros-trabajo" component={CentrosTrabajo} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
+      <Route path="/repse" component={REPSE} />
       <Route path="/configuration" component={Configuration} />
       <Route path="/empresas" component={Empresas} />
       <Route path="/settings" component={Settings} />
