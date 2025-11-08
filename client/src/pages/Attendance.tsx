@@ -54,6 +54,7 @@ import type {
   Employee,
   CentroTrabajo,
   InsertAttendance,
+  TurnoCentroTrabajo,
 } from "@shared/schema";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -80,6 +81,10 @@ export default function Attendance() {
     queryKey: ["/api/centros-trabajo"],
   });
 
+  const { data: turnos = [] } = useQuery<TurnoCentroTrabajo[]>({
+    queryKey: ["/api/turnos-centro-trabajo"],
+  });
+
   const filteredRecords = attendanceRecords.filter((record) => {
     const recordDate = new Date(record.date).toISOString().split("T")[0];
     const matchesDate = recordDate === selectedDate;
@@ -99,6 +104,12 @@ export default function Attendance() {
     if (!centroId) return "Sin asignar";
     const centro = centrosTrabajo.find((c) => c.id === centroId);
     return centro ? centro.nombre : "Sin asignar";
+  };
+
+  const getTurnoInfo = (turnoId: string | null) => {
+    if (!turnoId) return null;
+    const turno = turnos.find((t) => t.id === turnoId);
+    return turno;
   };
 
   const getStatusBadge = (status: string) => {
@@ -269,6 +280,7 @@ export default function Attendance() {
                 <TableRow>
                   <TableHead>Empleado</TableHead>
                   <TableHead>Centro de Trabajo</TableHead>
+                  <TableHead>Turno</TableHead>
                   <TableHead>Entrada</TableHead>
                   <TableHead>Salida</TableHead>
                   <TableHead>Horas Trabajadas</TableHead>
@@ -293,6 +305,20 @@ export default function Attendance() {
                           {getCentroName(record.centroTrabajoId)}
                         </span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const turno = getTurnoInfo(record.turnoId);
+                        if (!turno) return <span className="text-muted-foreground text-sm">Sin turno</span>;
+                        return (
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium">{turno.nombre}</span>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {turno.horaInicio} - {turno.horaFin}
+                            </span>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="font-mono">
                       {record.clockIn || "-"}
