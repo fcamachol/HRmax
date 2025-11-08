@@ -35,6 +35,8 @@ import {
   type InsertIncidenciaAsistencia,
   type GrupoNomina,
   type InsertGrupoNomina,
+  type PayrollPeriod,
+  type InsertPayrollPeriod,
   type ClienteREPSE,
   type InsertClienteREPSE,
   type RegistroREPSE,
@@ -63,6 +65,7 @@ import {
   attendance,
   incidenciasAsistencia,
   gruposNomina,
+  payrollPeriods,
   clientesREPSE,
   registrosREPSE,
   contratosREPSE,
@@ -200,6 +203,11 @@ export interface IStorage {
   getGruposNomina(): Promise<GrupoNomina[]>;
   updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina>;
   deleteGrupoNomina(id: string): Promise<void>;
+  
+  // Payroll Periods
+  createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
+  getPayrollPeriodsByGrupo(grupoNominaId: string, year?: number): Promise<PayrollPeriod[]>;
+  generatePayrollPeriodsForYear(grupoNominaId: string, year: number): Promise<PayrollPeriod[]>;
   
   // Horas Extras
   createHoraExtra(horaExtra: InsertHoraExtra): Promise<HoraExtra>;
@@ -1067,6 +1075,166 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(gruposNomina)
       .where(eq(gruposNomina.id, id));
+  }
+
+  // Payroll Periods
+  async createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]> {
+    if (periods.length === 0) return [];
+    
+    const created = await db
+      .insert(payrollPeriods)
+      .values(periods)
+      .returning();
+    return created;
+  }
+
+  async getPayrollPeriodsByGrupo(grupoNominaId: string, year?: number): Promise<PayrollPeriod[]> {
+    const conditions = [eq(payrollPeriods.grupoNominaId, grupoNominaId)];
+    
+    if (year) {
+      conditions.push(eq(payrollPeriods.year, year));
+    }
+    
+    return await db
+      .select()
+      .from(payrollPeriods)
+      .where(and(...conditions))
+      .orderBy(payrollPeriods.year, payrollPeriods.periodNumber);
+  }
+
+  async generatePayrollPeriodsForYear(grupoNominaId: string, year: number): Promise<PayrollPeriod[]> {
+    // Obtener el grupo para saber el tipo de periodo
+    const grupo = await this.getGrupoNomina(grupoNominaId);
+    if (!grupo) {
+      throw new Error('Grupo de nómina no encontrado');
+    }
+
+    const periods: InsertPayrollPeriod[] = [];
+    const startOfYear = new Date(year, 0, 1);
+    const endOfYear = new Date(year, 11, 31);
+    
+    let periodNumber = 1;
+    let currentDate = new Date(startOfYear);
+
+    switch (grupo.tipoPeriodo) {
+      case 'semanal': {
+        // Periodos semanales - aproximadamente 52 periodos al año
+        while (currentDate <= endOfYear) {
+          // Ajustar al día de inicio de semana configurado
+          const dayOfWeek = currentDate.getDay();
+          const targetDay = grupo.diaInicioSemana || 1; // Default: lunes
+          
+          if (dayOfWeek !== targetDay) {
+            const diff = (targetDay - dayOfWeek + 7) % 7;
+            currentDate.setDate(currentDate.getDate() + (diff === 0 ? 7 : diff));
+          }
+          
+          const periodStart = new Date(currentDate);
+          const periodEnd = new Date(currentDate);
+          periodEnd.setDate(periodEnd.getDate() + 6);
+          
+          // Solo agregar si el periodo empieza en este año
+          if (periodStart.getFullYear() === year) {
+            periods.push({
+              grupoNominaId,
+              startDate: periodStart.toISOString().split('T')[0],
+              endDate: periodEnd.toISOString().split('T')[0],
+              frequency: 'semanal',
+              year,
+              periodNumber: periodNumber++,
+              status: 'pending'
+            });
+          }
+          
+          currentDate.setDate(currentDate.getDate() + 7);
+        }
+        break;
+      }
+      
+      case 'catorcenal': {
+        // Periodos catorcenales - aproximadamente 26 periodos al año
+        while (currentDate <= endOfYear) {
+          const dayOfWeek = currentDate.getDay();
+          const targetDay = grupo.diaInicioSemana || 1;
+          
+          if (dayOfWeek !== targetDay) {
+            const diff = (targetDay - dayOfWeek + 7) % 7;
+            currentDate.setDate(currentDate.getDate() + (diff === 0 ? 7 : diff));
+          }
+          
+          const periodStart = new Date(currentDate);
+          const periodEnd = new Date(currentDate);
+          periodEnd.setDate(periodEnd.getDate() + 13);
+          
+          if (periodStart.getFullYear() === year) {
+            periods.push({
+              grupoNominaId,
+              startDate: periodStart.toISOString().split('T')[0],
+              endDate: periodEnd.toISOString().split('T')[0],
+              frequency: 'catorcenal',
+              year,
+              periodNumber: periodNumber++,
+              status: 'pending'
+            });
+          }
+          
+          currentDate.setDate(currentDate.getDate() + 14);
+        }
+        break;
+      }
+      
+      case 'quincenal': {
+        // Periodos quincenales - 24 periodos al año (2 por mes)
+        for (let month = 0; month < 12; month++) {
+          // Primera quincena: 1-15
+          periods.push({
+            grupoNominaId,
+            startDate: new Date(year, month, 1).toISOString().split('T')[0],
+            endDate: new Date(year, month, 15).toISOString().split('T')[0],
+            frequency: 'quincenal',
+            year,
+            periodNumber: periodNumber++,
+            status: 'pending'
+          });
+          
+          // Segunda quincena: 16-último día del mes
+          const lastDay = new Date(year, month + 1, 0).getDate();
+          periods.push({
+            grupoNominaId,
+            startDate: new Date(year, month, 16).toISOString().split('T')[0],
+            endDate: new Date(year, month, lastDay).toISOString().split('T')[0],
+            frequency: 'quincenal',
+            year,
+            periodNumber: periodNumber++,
+            status: 'pending'
+          });
+        }
+        break;
+      }
+      
+      case 'mensual': {
+        // Periodos mensuales - 12 periodos al año
+        for (let month = 0; month < 12; month++) {
+          const lastDay = new Date(year, month + 1, 0).getDate();
+          periods.push({
+            grupoNominaId,
+            startDate: new Date(year, month, 1).toISOString().split('T')[0],
+            endDate: new Date(year, month, lastDay).toISOString().split('T')[0],
+            frequency: 'mensual',
+            year,
+            periodNumber: periodNumber++,
+            status: 'pending'
+          });
+        }
+        break;
+      }
+      
+      default:
+        throw new Error(`Tipo de periodo no válido: ${grupo.tipoPeriodo}`);
+    }
+
+    // Insertar todos los periodos en la base de datos
+    return await this.createPayrollPeriods(periods);
   }
 
   // Horas Extras

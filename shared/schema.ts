@@ -109,10 +109,14 @@ export const gruposNomina = pgTable("grupos_nomina", {
 
 export const payrollPeriods = pgTable("payroll_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  grupoNominaId: varchar("grupo_nomina_id").notNull().references(() => gruposNomina.id, { onDelete: "cascade" }),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
-  frequency: text("frequency").notNull(),
-  status: text("status").notNull().default("pending"),
+  frequency: text("frequency").notNull(), // semanal, catorcenal, quincenal, mensual
+  year: integer("year").notNull(),
+  periodNumber: integer("period_number").notNull(), // 1, 2, 3... número del periodo en el año
+  status: text("status").notNull().default("pending"), // pending, processing, completed
+  createdAt: timestamp("created_at").default(sql`now()`),
 });
 
 export const attendance = pgTable("attendance", {
