@@ -201,6 +201,21 @@ export default function TurnosManager({ centroTrabajoId, centroTrabajoNombre }: 
     return dias;
   };
 
+  const calcularDuracionHoras = (horaInicio: string, horaFin: string): number => {
+    const [horaInicioHr, horaInicioMin] = horaInicio.split(":").map(Number);
+    const [horaFinHr, horaFinMin] = horaFin.split(":").map(Number);
+    
+    let minutosInicio = horaInicioHr * 60 + horaInicioMin;
+    let minutosFin = horaFinHr * 60 + horaFinMin;
+    
+    if (minutosFin < minutosInicio) {
+      minutosFin += 24 * 60;
+    }
+    
+    const duracionMinutos = minutosFin - minutosInicio;
+    return duracionMinutos / 60;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -454,11 +469,17 @@ export default function TurnosManager({ centroTrabajoId, centroTrabajoNombre }: 
             <Card key={turno.id} data-testid={`card-turno-${turno.id}`}>
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div>
+                  <div className="flex-1">
                     <CardTitle className="text-base">{turno.nombre}</CardTitle>
                     <CardDescription>
                       {turno.horaInicio} - {turno.horaFin}
                     </CardDescription>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Clock className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground">
+                        {calcularDuracionHoras(turno.horaInicio, turno.horaFin).toFixed(1)} horas
+                      </span>
+                    </div>
                   </div>
                   <div className="flex gap-1">
                     <Button
