@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { insertContratoREPSESchema, type ContratoREPSE, type Empresa, type ClienteREPSE, type RegistroREPSE } from "@shared/schema";
 import { z } from "zod";
 import { format } from "date-fns";
@@ -79,6 +79,7 @@ export default function ContratoREPSEForm({ contrato, empresas, clientes, regist
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/contratos-repse"] });
       toast({
         title: contrato ? "Contrato actualizado" : "Contrato creado",
         description: contrato 
@@ -110,7 +111,7 @@ export default function ContratoREPSEForm({ contrato, empresas, clientes, regist
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Empresa *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger data-testid="select-empresa">
                       <SelectValue placeholder="Seleccionar empresa" />
@@ -135,7 +136,7 @@ export default function ContratoREPSEForm({ contrato, empresas, clientes, regist
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Registro REPSE *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger data-testid="select-registro-repse">
                       <SelectValue placeholder="Seleccionar registro" />
@@ -160,7 +161,7 @@ export default function ContratoREPSEForm({ contrato, empresas, clientes, regist
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Cliente *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger data-testid="select-cliente">
                       <SelectValue placeholder="Seleccionar cliente" />
@@ -246,7 +247,7 @@ export default function ContratoREPSEForm({ contrato, empresas, clientes, regist
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Estatus</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <FormControl>
                     <SelectTrigger data-testid="select-estatus">
                       <SelectValue />

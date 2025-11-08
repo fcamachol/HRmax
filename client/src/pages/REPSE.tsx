@@ -10,7 +10,7 @@ import ContratosREPSE from "@/components/ContratosREPSE";
 import AsignacionesPersonalREPSE from "@/components/AsignacionesPersonalREPSE";
 
 export default function REPSE() {
-  const [activeTab, setActiveTab] = useState("registros");
+  const [activeTab, setActiveTab] = useState("clientes");
 
   const { data: empresas = [] } = useQuery<Empresa[]>({
     queryKey: ["/api/empresas"],
