@@ -78,6 +78,13 @@ Preferred communication style: Simple, everyday language.
   - Tipo de Periodo: semanal (weekly), catorcenal (biweekly), quincenal (twice monthly), mensual (monthly)
   - Día de inicio de semana (configurable starting day for weekly/biweekly periods)
   - Día de corte (optional cutoff day for monthly/quincenal periods)
+- **Automatic Period Generation**: When a payroll group is created, the system automatically generates payroll periods for the current year and next year:
+  - Semanal: ~52-53 periods per year, aligned to configured start day (includes partial first period if needed)
+  - Catorcenal: ~26-27 periods per year, aligned to configured start day (includes partial first period if needed)
+  - Quincenal: 24 periods per year (1-15 and 16-end of month for each month)
+  - Mensual: 12 periods per year (full months)
+- **Full Year Coverage**: Period generation ensures complete coverage from January 1st through December 31st, creating partial periods when needed to avoid coverage gaps.
+- **Duplicate Prevention**: Built-in checks prevent regenerating periods for the same group and year. Unique constraint on (grupoNominaId, year, periodNumber) enforces data integrity.
 - **Employee Assignment**: Employees are assigned to specific payroll groups via grupoNominaId field.
 - **Attendance Integration**: Attendance module supports filtering by payroll group, with automatic period calculation based on group configuration.
 - **Smart Period Selection**: When a payroll group is selected, quick access buttons automatically calculate "Periodo Actual" and "Periodo Anterior" based on the group's payment frequency and current date.
