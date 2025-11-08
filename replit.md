@@ -99,13 +99,34 @@ Preferred communication style: Simple, everyday language.
 - **Combined Filtering**: Attendance tracking supports filtering by both work center (centroTrabajoId) and payroll group (grupoNominaId) simultaneously for precise reporting.
 
 **Payroll Module (Nómina)**:
-- **Real-time API Integration**: Uses `useQuery` to fetch payroll groups from `/api/grupos-nomina`, ensuring consistency with Attendance and other modules.
+- **Real-time API Integration**: Uses `useQuery` to fetch payroll groups from `/api/grupos-nomina`, ensuring consistency across all modules.
+- **Modular Navigation**: Dropdown menu with two sub-modules:
+  - "Crear Nómina" (/payroll): Main payroll creation and management interface
+  - "Grupos de Nómina" (/payroll/grupos): Dedicated module for managing payroll groups
 - **Dynamic Group Selection**: Displays active payroll groups in dropdown, showing group name and period type (e.g., "Ventas (quincenal)").
-- **Group Management**: 
-  - Create new groups via dialog with automatic period generation
-  - Delete groups with API confirmation
-  - Load group configuration to filter/manage payroll for specific employee groups
 - **Data Consistency**: All payroll group data sourced from single API endpoint, eliminating hardcoded/mock data.
+
+**Grupos de Nómina Module** (Payroll Groups):
+- **Dedicated Management Interface**: Standalone module at /payroll/grupos for full CRUD operations on payroll groups.
+- **Comprehensive Listing**: Table view showing all configured groups with details:
+  - Nombre (Name)
+  - Periodicidad (Frequency with period count indicator)
+  - Día de Pago (Payment day - weekday or day of month depending on period type)
+  - Días Cálculo (Optional calculation advance days)
+  - Estado (Active/Inactive status with badges)
+  - Descripción (Optional description)
+- **Group Operations**:
+  - Create: Via shared CreateGrupoNominaDialog component with automatic period generation
+  - Delete: With confirmation dialog and cascade deletion of associated periods
+  - View: Complete group configuration display in table format
+- **Empty State Handling**: User-friendly empty state with call-to-action when no groups exist.
+
+**Shared Components**:
+- **CreateGrupoNominaDialog**: Reusable component used by both Payroll (for quick group creation during payroll setup) and Grupos de Nómina (for dedicated group management). Ensures:
+  - Consistent group creation experience across modules
+  - Single source of truth for form validation and API logic
+  - Proper toast notifications with captured values (not blank)
+  - Automatic form reset on dialog close (whether canceled or submitted)
 
 **Attendance Module (Asistencia) - Redesigned**:
 - **Period-Based Tracking**: Excel-like grid for mass incident capture per period (fechaInicio/fechaFin), replacing day-by-day clock-in/out tracking.
