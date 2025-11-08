@@ -397,11 +397,7 @@ export default function Payroll() {
         activo: true,
       };
 
-      await apiRequest("/api/grupos-nomina", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(grupoData),
-      });
+      await apiRequest("POST", "/api/grupos-nomina", grupoData);
 
       // Reset form
       setNewGroupName("");
@@ -810,11 +806,11 @@ export default function Payroll() {
                         <Plus className="h-4 w-4" />
                       </Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>Crear Grupo de Nómina</DialogTitle>
                         <DialogDescription>
-                          Guarda la selección actual como un grupo reutilizable
+                          Define la periodicidad y configuración del grupo de nómina
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -828,11 +824,89 @@ export default function Payroll() {
                             data-testid="input-group-name"
                           />
                         </div>
-                        <div className="rounded-md border p-4">
-                          <p className="text-sm font-medium mb-2">Empleados seleccionados:</p>
-                          <p className="text-sm text-muted-foreground">
-                            {selectedEmployees.size} empleados en este grupo
-                          </p>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="tipo-periodo">Periodicidad de Pago</Label>
+                          <Select 
+                            value={newGroupTipoPeriodo} 
+                            onValueChange={(v) => setNewGroupTipoPeriodo(v as any)}
+                          >
+                            <SelectTrigger id="tipo-periodo" data-testid="select-tipo-periodo">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="semanal">Semanal (~52 periodos/año)</SelectItem>
+                              <SelectItem value="catorcenal">Catorcenal (~26 periodos/año)</SelectItem>
+                              <SelectItem value="quincenal">Quincenal (24 periodos/año)</SelectItem>
+                              <SelectItem value="mensual">Mensual (12 periodos/año)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {(newGroupTipoPeriodo === "semanal" || newGroupTipoPeriodo === "catorcenal") && (
+                          <div className="space-y-2">
+                            <Label htmlFor="dia-inicio-semana">Día de Inicio de Semana</Label>
+                            <Select 
+                              value={newGroupDiaInicioSemana.toString()} 
+                              onValueChange={(v) => setNewGroupDiaInicioSemana(parseInt(v))}
+                            >
+                              <SelectTrigger id="dia-inicio-semana" data-testid="select-dia-inicio-semana">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="0">Domingo</SelectItem>
+                                <SelectItem value="1">Lunes</SelectItem>
+                                <SelectItem value="2">Martes</SelectItem>
+                                <SelectItem value="3">Miércoles</SelectItem>
+                                <SelectItem value="4">Jueves</SelectItem>
+                                <SelectItem value="5">Viernes</SelectItem>
+                                <SelectItem value="6">Sábado</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Los periodos se alinearán a este día de la semana
+                            </p>
+                          </div>
+                        )}
+
+                        {(newGroupTipoPeriodo === "quincenal" || newGroupTipoPeriodo === "mensual") && (
+                          <div className="space-y-2">
+                            <Label htmlFor="dia-corte">Día de Corte</Label>
+                            <Input
+                              id="dia-corte"
+                              type="number"
+                              min="1"
+                              max="31"
+                              value={newGroupDiaCorte}
+                              onChange={(e) => setNewGroupDiaCorte(parseInt(e.target.value) || 15)}
+                              data-testid="input-dia-corte"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {newGroupTipoPeriodo === "quincenal" 
+                                ? "Para quincenas: 1-15 y 16-fin de mes" 
+                                : "Día del mes para el corte de nómina"}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label htmlFor="descripcion">Descripción (opcional)</Label>
+                          <Input
+                            id="descripcion"
+                            placeholder="ej. Nómina semanal para personal operativo"
+                            value={newGroupDescripcion}
+                            onChange={(e) => setNewGroupDescripcion(e.target.value)}
+                            data-testid="input-descripcion"
+                          />
+                        </div>
+                        
+                        <div className="rounded-md border p-4 bg-muted/30">
+                          <p className="text-sm font-medium mb-1">Información Importante</p>
+                          <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                            <li>Los periodos de pago se generarán automáticamente para el año actual y próximo</li>
+                            <li>Los empleados deben ser asignados al grupo desde su perfil individual</li>
+                            <li>La configuración de periodicidad no puede modificarse después de crear el grupo</li>
+                          </ul>
                         </div>
                       </div>
                       <DialogFooter>
