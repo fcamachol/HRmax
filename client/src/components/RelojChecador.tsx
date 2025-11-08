@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Employee, Attendance, CentroTrabajo, InsertAttendance, EmpleadoCentroTrabajo } from "@shared/schema";
+import type { Employee, Attendance, CentroTrabajo, InsertAttendance, EmpleadoCentroTrabajo, TurnoCentroTrabajo } from "@shared/schema";
 
 export default function RelojChecador() {
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -33,6 +33,10 @@ export default function RelojChecador() {
     queryKey: ["/api/centros-trabajo"],
   });
 
+  const { data: turnos = [] } = useQuery<TurnoCentroTrabajo[]>({
+    queryKey: ["/api/turnos-centro-trabajo"],
+  });
+
   const { data: empleadosCentros = [] } = useQuery<EmpleadoCentroTrabajo[]>({
     queryKey: ["/api/empleados-centros-trabajo"],
   });
@@ -45,7 +49,7 @@ export default function RelojChecador() {
     },
   });
 
-  const getEmployeeActiveCentro = (employeeId: string): string | null => {
+  const getEmployeeActiveAssignment = (employeeId: string): { centroId: string; turnoId: string } | null => {
     const today = new Date();
     const activeAssignment = empleadosCentros.find((ec) => {
       const startDate = new Date(ec.fechaInicio);
@@ -58,7 +62,14 @@ export default function RelojChecador() {
       );
     });
 
-    return activeAssignment?.centroTrabajoId || null;
+    if (!activeAssignment || !activeAssignment.turnoId) {
+      return null;
+    }
+
+    return {
+      centroId: activeAssignment.centroTrabajoId,
+      turnoId: activeAssignment.turnoId,
+    };
   };
 
   const filteredEmployees = employees.filter(
@@ -75,10 +86,10 @@ export default function RelojChecador() {
       const now = new Date();
       const timeString = format(now, "HH:mm");
       
-      const centroId = getEmployeeActiveCentro(employeeId);
+      const assignment = getEmployeeActiveAssignment(employeeId);
 
-      if (!centroId) {
-        throw new Error("El empleado no tiene un centro de trabajo asignado activo");
+      if (!assignment) {
+        throw new Error("El empleado no tiene un turno asignado activo");
       }
 
       const data: InsertAttendance = {
@@ -86,7 +97,8 @@ export default function RelojChecador() {
         date: format(now, "yyyy-MM-dd"),
         status: "presente",
         clockIn: timeString,
-        centroTrabajoId: centroId,
+        centroTrabajoId: assignment.centroId,
+        turnoId: assignment.turnoId,
         tipoJornada: "ordinaria",
       };
 

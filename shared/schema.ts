@@ -106,6 +106,7 @@ export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
   centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo donde se registró la asistencia
+  turnoId: varchar("turno_id").references(() => turnosCentroTrabajo.id, { onDelete: "set null" }), // Turno del empleado
   date: date("date").notNull(),
   status: text("status").notNull(), // presente, ausente, retardo, vacaciones, permiso, incapacidad
   clockIn: text("clock_in"),
