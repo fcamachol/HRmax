@@ -24,19 +24,107 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 interface CSVRow {
+  // Campos requeridos
   numeroEmpleado: string;
   nombre: string;
   apellidoPaterno: string;
-  apellidoMaterno?: string;
-  email: string;
   telefono: string;
-  departamento: string;
+  email: string;
   puesto: string;
+  departamento: string;
   salarioBrutoMensual: string;
   fechaIngreso: string;
-  rfc?: string;
+  
+  // Campos opcionales - Información personal
+  apellidoMaterno?: string;
+  genero?: string;
   curp?: string;
+  rfc?: string;
   nss?: string;
+  estadoCivil?: string;
+  
+  // Campos opcionales - Dirección
+  calle?: string;
+  numeroExterior?: string;
+  numeroInterior?: string;
+  colonia?: string;
+  municipio?: string;
+  estado?: string;
+  codigoPostal?: string;
+  
+  // Campos opcionales - Contacto adicional
+  correo?: string;
+  contactoEmergencia?: string;
+  parentescoEmergencia?: string;
+  telefonoEmergencia?: string;
+  
+  // Campos opcionales - Información bancaria
+  banco?: string;
+  clabe?: string;
+  sucursal?: string;
+  cuenta?: string;
+  formaPago?: string;
+  periodicidadPago?: string;
+  
+  // Campos opcionales - Contrato
+  tipoCalculoSalario?: string;
+  tipoContrato?: string;
+  fechaAltaImss?: string;
+  fechaTerminacion?: string;
+  reconoceAntiguedad?: string;
+  fechaAntiguedad?: string;
+  
+  // Campos opcionales - Trabajo
+  modalidadTrabajo?: string;
+  lugarTrabajo?: string;
+  funciones?: string;
+  diasLaborales?: string;
+  horario?: string;
+  tipoJornada?: string;
+  tiempoParaAlimentos?: string;
+  diasDescanso?: string;
+  
+  // Campos opcionales - Salario y prestaciones
+  esquemaPago?: string;
+  salarioDiarioReal?: string;
+  salarioDiarioNominal?: string;
+  salarioDiarioExento?: string;
+  sbc?: string;
+  sdi?: string;
+  tablaImss?: string;
+  
+  // Campos opcionales - Vacaciones y aguinaldo
+  diasVacacionesAnuales?: string;
+  diasVacacionesDisponibles?: string;
+  diasVacacionesUsados?: string;
+  diasAguinaldoAdicionales?: string;
+  diasVacacionesAdicionales?: string;
+  
+  // Campos opcionales - Créditos
+  creditoInfonavit?: string;
+  numeroFonacot?: string;
+  
+  // Campos opcionales - Estado y organización
+  estatus?: string;
+  clienteProyecto?: string;
+  observacionesInternas?: string;
+  timezone?: string;
+  jefeDirectoId?: string;
+  empresaId?: string;
+  registroPatronalId?: string;
+  documentoContratoId?: string;
+  puestoId?: string;
+  
+  // Campos opcionales - Otros
+  esquemaContratacion?: string;
+  lugarNacimiento?: string;
+  entidadNacimiento?: string;
+  nacionalidad?: string;
+  escolaridad?: string;
+  periodoPrueba?: string;
+  duracionPrueba?: string;
+  diaPago?: string;
+  driveId?: string;
 }
 
 interface ValidationError {
@@ -110,6 +198,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       skipEmptyLines: true,
       transformHeader: (header) => {
         const headerMap: Record<string, string> = {
+          // Campos principales
           'numero_empleado': 'numeroEmpleado',
           'numero empleado': 'numeroEmpleado',
           'apellido_paterno': 'apellidoPaterno',
@@ -124,6 +213,136 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'telefono': 'telefono',
           'teléfono': 'telefono',
           'correo': 'email',
+          'estado_civil': 'estadoCivil',
+          'estado civil': 'estadoCivil',
+          
+          // Dirección
+          'numero_exterior': 'numeroExterior',
+          'numero exterior': 'numeroExterior',
+          'numero_interior': 'numeroInterior',
+          'numero interior': 'numeroInterior',
+          'codigo_postal': 'codigoPostal',
+          'código postal': 'codigoPostal',
+          'codigo postal': 'codigoPostal',
+          
+          // Contacto emergencia
+          'contacto_emergencia': 'contactoEmergencia',
+          'contacto emergencia': 'contactoEmergencia',
+          'parentesco_emergencia': 'parentescoEmergencia',
+          'parentesco emergencia': 'parentescoEmergencia',
+          'telefono_emergencia': 'telefonoEmergencia',
+          'teléfono emergencia': 'telefonoEmergencia',
+          
+          // Banco
+          'forma_pago': 'formaPago',
+          'forma pago': 'formaPago',
+          'periodicidad_pago': 'periodicidadPago',
+          'periodicidad pago': 'periodicidadPago',
+          
+          // Contrato
+          'tipo_calculo_salario': 'tipoCalculoSalario',
+          'tipo calculo salario': 'tipoCalculoSalario',
+          'tipo_contrato': 'tipoContrato',
+          'tipo contrato': 'tipoContrato',
+          'fecha_alta_imss': 'fechaAltaImss',
+          'fecha alta imss': 'fechaAltaImss',
+          'fecha_terminacion': 'fechaTerminacion',
+          'fecha terminacion': 'fechaTerminacion',
+          'fecha terminación': 'fechaTerminacion',
+          'reconoce_antiguedad': 'reconoceAntiguedad',
+          'reconoce antiguedad': 'reconoceAntiguedad',
+          'reconoce antigüedad': 'reconoceAntiguedad',
+          'fecha_antiguedad': 'fechaAntiguedad',
+          'fecha antiguedad': 'fechaAntiguedad',
+          'fecha antigüedad': 'fechaAntiguedad',
+          
+          // Trabajo
+          'modalidad_trabajo': 'modalidadTrabajo',
+          'modalidad trabajo': 'modalidadTrabajo',
+          'lugar_trabajo': 'lugarTrabajo',
+          'lugar trabajo': 'lugarTrabajo',
+          'dias_laborales': 'diasLaborales',
+          'días laborales': 'diasLaborales',
+          'dias laborales': 'diasLaborales',
+          'tipo_jornada': 'tipoJornada',
+          'tipo jornada': 'tipoJornada',
+          'tiempo_para_alimentos': 'tiempoParaAlimentos',
+          'tiempo para alimentos': 'tiempoParaAlimentos',
+          'dias_descanso': 'diasDescanso',
+          'días descanso': 'diasDescanso',
+          'dias descanso': 'diasDescanso',
+          
+          // Salario
+          'esquema_pago': 'esquemaPago',
+          'esquema pago': 'esquemaPago',
+          'salario_diario_real': 'salarioDiarioReal',
+          'salario diario real': 'salarioDiarioReal',
+          'salario_diario_nominal': 'salarioDiarioNominal',
+          'salario diario nominal': 'salarioDiarioNominal',
+          'salario_diario_exento': 'salarioDiarioExento',
+          'salario diario exento': 'salarioDiarioExento',
+          'tabla_imss': 'tablaImss',
+          'tabla imss': 'tablaImss',
+          
+          // Vacaciones
+          'dias_vacaciones_anuales': 'diasVacacionesAnuales',
+          'días vacaciones anuales': 'diasVacacionesAnuales',
+          'dias vacaciones anuales': 'diasVacacionesAnuales',
+          'dias_vacaciones_disponibles': 'diasVacacionesDisponibles',
+          'días vacaciones disponibles': 'diasVacacionesDisponibles',
+          'dias vacaciones disponibles': 'diasVacacionesDisponibles',
+          'dias_vacaciones_usados': 'diasVacacionesUsados',
+          'días vacaciones usados': 'diasVacacionesUsados',
+          'dias vacaciones usados': 'diasVacacionesUsados',
+          'dias_aguinaldo_adicionales': 'diasAguinaldoAdicionales',
+          'días aguinaldo adicionales': 'diasAguinaldoAdicionales',
+          'dias aguinaldo adicionales': 'diasAguinaldoAdicionales',
+          'dias_vacaciones_adicionales': 'diasVacacionesAdicionales',
+          'días vacaciones adicionales': 'diasVacacionesAdicionales',
+          'dias vacaciones adicionales': 'diasVacacionesAdicionales',
+          
+          // Créditos
+          'credito_infonavit': 'creditoInfonavit',
+          'crédito infonavit': 'creditoInfonavit',
+          'credito infonavit': 'creditoInfonavit',
+          'numero_fonacot': 'numeroFonacot',
+          'número fonacot': 'numeroFonacot',
+          'numero fonacot': 'numeroFonacot',
+          
+          // Organización
+          'cliente_proyecto': 'clienteProyecto',
+          'cliente proyecto': 'clienteProyecto',
+          'observaciones_internas': 'observacionesInternas',
+          'observaciones internas': 'observacionesInternas',
+          'jefe_directo_id': 'jefeDirectoId',
+          'jefe directo id': 'jefeDirectoId',
+          'empresa_id': 'empresaId',
+          'empresa id': 'empresaId',
+          'registro_patronal_id': 'registroPatronalId',
+          'registro patronal id': 'registroPatronalId',
+          'documento_contrato_id': 'documentoContratoId',
+          'documento contrato id': 'documentoContratoId',
+          'puesto_id': 'puestoId',
+          'puesto id': 'puestoId',
+          
+          // Otros
+          'esquema_contratacion': 'esquemaContratacion',
+          'esquema contratación': 'esquemaContratacion',
+          'esquema contratacion': 'esquemaContratacion',
+          'lugar_nacimiento': 'lugarNacimiento',
+          'lugar nacimiento': 'lugarNacimiento',
+          'entidad_nacimiento': 'entidadNacimiento',
+          'entidad nacimiento': 'entidadNacimiento',
+          'periodo_prueba': 'periodoPrueba',
+          'periodo prueba': 'periodoPrueba',
+          'duracion_prueba': 'duracionPrueba',
+          'duración prueba': 'duracionPrueba',
+          'duracion prueba': 'duracionPrueba',
+          'dia_pago': 'diaPago',
+          'día pago': 'diaPago',
+          'dia pago': 'diaPago',
+          'drive_id': 'driveId',
+          'drive id': 'driveId',
         };
 
         const normalized = header.toLowerCase().trim();
@@ -171,22 +390,111 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
   const bulkCreateMutation = useMutation({
     mutationFn: async (employees: CSVRow[]) => {
       const transformedEmployees = employees.map((emp) => {
-        return {
+        const employeeData: any = {
+          // Campos requeridos
           numeroEmpleado: emp.numeroEmpleado.trim(),
           nombre: emp.nombre.trim(),
           apellidoPaterno: emp.apellidoPaterno.trim(),
-          apellidoMaterno: emp.apellidoMaterno?.trim() || null,
           email: emp.email.trim(),
           telefono: emp.telefono.trim(),
           departamento: emp.departamento.trim(),
           puesto: emp.puesto.trim(),
           salarioBrutoMensual: emp.salarioBrutoMensual.trim(),
           fechaIngreso: emp.fechaIngreso.trim(),
-          rfc: emp.rfc?.trim() || null,
-          curp: emp.curp?.trim() || null,
-          nss: emp.nss?.trim() || null,
-          estatus: "activo",
         };
+
+        // Agregar todos los campos opcionales si están presentes
+        if (emp.apellidoMaterno) employeeData.apellidoMaterno = emp.apellidoMaterno.trim();
+        if (emp.genero) employeeData.genero = emp.genero.trim();
+        if (emp.curp) employeeData.curp = emp.curp.trim();
+        if (emp.rfc) employeeData.rfc = emp.rfc.trim();
+        if (emp.nss) employeeData.nss = emp.nss.trim();
+        if (emp.estadoCivil) employeeData.estadoCivil = emp.estadoCivil.trim();
+        
+        // Dirección
+        if (emp.calle) employeeData.calle = emp.calle.trim();
+        if (emp.numeroExterior) employeeData.numeroExterior = emp.numeroExterior.trim();
+        if (emp.numeroInterior) employeeData.numeroInterior = emp.numeroInterior.trim();
+        if (emp.colonia) employeeData.colonia = emp.colonia.trim();
+        if (emp.municipio) employeeData.municipio = emp.municipio.trim();
+        if (emp.estado) employeeData.estado = emp.estado.trim();
+        if (emp.codigoPostal) employeeData.codigoPostal = emp.codigoPostal.trim();
+        
+        // Contacto adicional
+        if (emp.correo) employeeData.correo = emp.correo.trim();
+        if (emp.contactoEmergencia) employeeData.contactoEmergencia = emp.contactoEmergencia.trim();
+        if (emp.parentescoEmergencia) employeeData.parentescoEmergencia = emp.parentescoEmergencia.trim();
+        if (emp.telefonoEmergencia) employeeData.telefonoEmergencia = emp.telefonoEmergencia.trim();
+        
+        // Información bancaria
+        if (emp.banco) employeeData.banco = emp.banco.trim();
+        if (emp.clabe) employeeData.clabe = emp.clabe.trim();
+        if (emp.sucursal) employeeData.sucursal = emp.sucursal.trim();
+        if (emp.cuenta) employeeData.cuenta = emp.cuenta.trim();
+        if (emp.formaPago) employeeData.formaPago = emp.formaPago.trim();
+        if (emp.periodicidadPago) employeeData.periodicidadPago = emp.periodicidadPago.trim();
+        
+        // Contrato
+        if (emp.tipoCalculoSalario) employeeData.tipoCalculoSalario = emp.tipoCalculoSalario.trim();
+        if (emp.tipoContrato) employeeData.tipoContrato = emp.tipoContrato.trim();
+        if (emp.fechaAltaImss) employeeData.fechaAltaImss = emp.fechaAltaImss.trim();
+        if (emp.fechaTerminacion) employeeData.fechaTerminacion = emp.fechaTerminacion.trim();
+        if (emp.reconoceAntiguedad) employeeData.reconoceAntiguedad = emp.reconoceAntiguedad.toLowerCase() === 'true' || emp.reconoceAntiguedad === '1';
+        if (emp.fechaAntiguedad) employeeData.fechaAntiguedad = emp.fechaAntiguedad.trim();
+        
+        // Trabajo
+        if (emp.modalidadTrabajo) employeeData.modalidadTrabajo = emp.modalidadTrabajo.trim();
+        if (emp.lugarTrabajo) employeeData.lugarTrabajo = emp.lugarTrabajo.trim();
+        if (emp.funciones) employeeData.funciones = emp.funciones.trim();
+        if (emp.diasLaborales) employeeData.diasLaborales = emp.diasLaborales.trim();
+        if (emp.horario) employeeData.horario = emp.horario.trim();
+        if (emp.tipoJornada) employeeData.tipoJornada = emp.tipoJornada.trim();
+        if (emp.tiempoParaAlimentos) employeeData.tiempoParaAlimentos = emp.tiempoParaAlimentos.trim();
+        if (emp.diasDescanso) employeeData.diasDescanso = emp.diasDescanso.trim();
+        
+        // Salario y prestaciones
+        if (emp.esquemaPago) employeeData.esquemaPago = emp.esquemaPago.trim();
+        if (emp.salarioDiarioReal) employeeData.salarioDiarioReal = emp.salarioDiarioReal.trim();
+        if (emp.salarioDiarioNominal) employeeData.salarioDiarioNominal = emp.salarioDiarioNominal.trim();
+        if (emp.salarioDiarioExento) employeeData.salarioDiarioExento = emp.salarioDiarioExento.trim();
+        if (emp.sbc) employeeData.sbc = emp.sbc.trim();
+        if (emp.sdi) employeeData.sdi = emp.sdi.trim();
+        if (emp.tablaImss) employeeData.tablaImss = emp.tablaImss.trim();
+        
+        // Vacaciones y aguinaldo
+        if (emp.diasVacacionesAnuales) employeeData.diasVacacionesAnuales = parseInt(emp.diasVacacionesAnuales);
+        if (emp.diasVacacionesDisponibles) employeeData.diasVacacionesDisponibles = parseInt(emp.diasVacacionesDisponibles);
+        if (emp.diasVacacionesUsados) employeeData.diasVacacionesUsados = parseInt(emp.diasVacacionesUsados);
+        if (emp.diasAguinaldoAdicionales) employeeData.diasAguinaldoAdicionales = parseInt(emp.diasAguinaldoAdicionales);
+        if (emp.diasVacacionesAdicionales) employeeData.diasVacacionesAdicionales = parseInt(emp.diasVacacionesAdicionales);
+        
+        // Créditos
+        if (emp.creditoInfonavit) employeeData.creditoInfonavit = emp.creditoInfonavit.trim();
+        if (emp.numeroFonacot) employeeData.numeroFonacot = emp.numeroFonacot.trim();
+        
+        // Estado y organización
+        if (emp.estatus) employeeData.estatus = emp.estatus.trim();
+        if (emp.clienteProyecto) employeeData.clienteProyecto = emp.clienteProyecto.trim();
+        if (emp.observacionesInternas) employeeData.observacionesInternas = emp.observacionesInternas.trim();
+        if (emp.timezone) employeeData.timezone = emp.timezone.trim();
+        if (emp.jefeDirectoId) employeeData.jefeDirectoId = emp.jefeDirectoId.trim();
+        if (emp.empresaId) employeeData.empresaId = emp.empresaId.trim();
+        if (emp.registroPatronalId) employeeData.registroPatronalId = parseInt(emp.registroPatronalId);
+        if (emp.documentoContratoId) employeeData.documentoContratoId = emp.documentoContratoId.trim();
+        if (emp.puestoId) employeeData.puestoId = emp.puestoId.trim();
+        
+        // Otros
+        if (emp.esquemaContratacion) employeeData.esquemaContratacion = emp.esquemaContratacion.trim();
+        if (emp.lugarNacimiento) employeeData.lugarNacimiento = emp.lugarNacimiento.trim();
+        if (emp.entidadNacimiento) employeeData.entidadNacimiento = emp.entidadNacimiento.trim();
+        if (emp.nacionalidad) employeeData.nacionalidad = emp.nacionalidad.trim();
+        if (emp.escolaridad) employeeData.escolaridad = emp.escolaridad.trim();
+        if (emp.periodoPrueba) employeeData.periodoPrueba = emp.periodoPrueba.toLowerCase() === 'true' || emp.periodoPrueba === '1';
+        if (emp.duracionPrueba) employeeData.duracionPrueba = parseInt(emp.duracionPrueba);
+        if (emp.diaPago) employeeData.diaPago = emp.diaPago.trim();
+        if (emp.driveId) employeeData.driveId = emp.driveId.trim();
+
+        return employeeData;
       });
 
       const response = await apiRequest("POST", "/api/employees/bulk", transformedEmployees);
@@ -230,19 +538,89 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
   };
 
   const downloadTemplate = () => {
+    console.log("📥 Iniciando descarga de plantilla CSV...");
+    
+    // Encabezados de todas las columnas - total 78 campos (excluye id, createdAt, updatedAt, otrosCreditos, preferencias)
+    const headers = [
+      // Campos requeridos (9)
+      "numeroEmpleado", "nombre", "apellidoPaterno", "telefono", "email", "puesto", "departamento", "salarioBrutoMensual", "fechaIngreso",
+      // Información personal (6)
+      "apellidoMaterno", "genero", "curp", "rfc", "nss", "estadoCivil",
+      // Dirección (7)
+      "calle", "numeroExterior", "numeroInterior", "colonia", "municipio", "estado", "codigoPostal",
+      // Contacto adicional (4)
+      "correo", "contactoEmergencia", "parentescoEmergencia", "telefonoEmergencia",
+      // Información bancaria (6)
+      "banco", "clabe", "sucursal", "formaPago", "periodicidadPago", "cuenta",
+      // Contrato (6)
+      "tipoCalculoSalario", "tipoContrato", "fechaAltaImss", "fechaTerminacion", "reconoceAntiguedad", "fechaAntiguedad",
+      // Trabajo (8)
+      "modalidadTrabajo", "lugarTrabajo", "funciones", "diasLaborales", "horario", "tipoJornada", "tiempoParaAlimentos", "diasDescanso",
+      // Salario y prestaciones (7)
+      "esquemaPago", "salarioDiarioReal", "salarioDiarioNominal", "salarioDiarioExento", "sbc", "sdi", "tablaImss",
+      // Vacaciones y aguinaldo (5)
+      "diasVacacionesAnuales", "diasVacacionesDisponibles", "diasVacacionesUsados", "diasAguinaldoAdicionales", "diasVacacionesAdicionales",
+      // Créditos (2)
+      "creditoInfonavit", "numeroFonacot",
+      // Estado y organización (9)
+      "estatus", "clienteProyecto", "observacionesInternas", "timezone", "jefeDirectoId", "empresaId", "registroPatronalId", "documentoContratoId", "puestoId",
+      // Otros (9)
+      "esquemaContratacion", "lugarNacimiento", "entidadNacimiento", "nacionalidad", "escolaridad", "periodoPrueba", "duracionPrueba", "diaPago", "driveId"
+    ];
+
+    console.log(`📋 Plantilla generada con ${headers.length} campos`);
+
+    // Dos filas de ejemplo con datos completos
+    const row1 = [
+      "EMP001", "Juan", "Pérez", "5512345678", "juan.perez@example.com", "Gerente", "Ventas", "25000", "2024-01-15",
+      "Martínez", "M", "PEXJ900215HDFRNS01", "PEXJ900215AB1", "12345678901", "casado",
+      "Insurgentes Sur", "1234", "5A", "Del Valle", "Benito Juárez", "Ciudad de México", "03100",
+      "", "María García", "esposa", "5598765432",
+      "Banamex", "012180001234567890", "001", "0123456789", "transferencia", "quincenal",
+      "diario", "indeterminado", "2024-01-15", "", "false", "",
+      "presencial", "Oficina Central", "Gestión de ventas y equipo", "lunes_viernes", "09:00-18:00", "diurna", "30_minutos", "sabado_domingo",
+      "tradicional", "833.33", "833.33", "", "833.33", "833.33", "fija",
+      "12", "12", "0", "0", "0",
+      "", "",
+      "activo", "", "", "America/Mexico_City", "", "", "", "", "",
+      "", "Ciudad de México", "Ciudad de México", "mexicana", "licenciatura", "false", "", "", ""
+    ];
+
+    const row2 = [
+      "EMP002", "María", "García", "5598765432", "maria.garcia@example.com", "Desarrollador", "IT", "30000", "2024-02-01",
+      "López", "F", "GACM850101MDFRNS02", "GACM850101CD2", "98765432109", "soltera",
+      "Reforma", "567", "", "Juárez", "Cuauhtémoc", "Ciudad de México", "06600",
+      "", "Pedro López", "padre", "5587654321",
+      "BBVA", "012180009876543210", "002", "9876543210", "transferencia", "quincenal",
+      "diario", "indeterminado", "2024-02-01", "", "false", "",
+      "hibrido", "Oficina Central", "Desarrollo de software", "lunes_viernes", "10:00-19:00", "diurna", "30_minutos", "sabado_domingo",
+      "tradicional", "1000", "1000", "", "1000", "1000", "fija",
+      "12", "12", "0", "0", "0",
+      "", "",
+      "activo", "", "", "America/Mexico_City", "", "", "", "", "",
+      "", "Guadalajara", "Jalisco", "mexicana", "maestria", "false", "", "", ""
+    ];
+
     const template = [
-      "numeroEmpleado,nombre,apellidoPaterno,apellidoMaterno,email,telefono,departamento,puesto,salarioBrutoMensual,fechaIngreso,rfc,curp,nss",
-      "EMP001,Juan,Pérez,Martínez,juan.perez@example.com,5512345678,Ventas,Gerente,25000,2024-01-15,PEXJ900215AB1,PEXJ900215HDFRNS01,12345678901",
-      "EMP002,María,García,López,maria.garcia@example.com,5598765432,IT,Desarrollador,30000,2024-02-01,GACM850101CD2,GACM850101MDFRNS02,98765432109",
+      headers.join(","),
+      row1.join(","),
+      row2.join(",")
     ].join("\n");
 
-    const blob = new Blob([template], { type: "text/csv" });
+    const blob = new Blob([template], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "plantilla_empleados.csv";
+    link.download = "plantilla_empleados_completa.csv";
     link.click();
     URL.revokeObjectURL(url);
+    
+    console.log(`✅ Descarga de plantilla CSV completada: plantilla_empleados_completa.csv con ${headers.length} campos`);
+    
+    toast({
+      title: "Plantilla descargada",
+      description: `La plantilla CSV con ${headers.length} campos ha sido descargada exitosamente`,
+    });
   };
 
   const getErrorsForRow = (rowIndex: number) => {
@@ -255,7 +633,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         <DialogHeader>
           <DialogTitle>Importar Empleados desde CSV</DialogTitle>
           <DialogDescription>
-            Sube un archivo CSV con la información de los empleados. Asegúrate de que el formato sea correcto.
+            Sube un archivo CSV con la información de los empleados. La plantilla incluye 78 campos disponibles del sistema (excluye campos autogenerados y complejos JSONB).
           </DialogDescription>
         </DialogHeader>
 
@@ -285,7 +663,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
               data-testid="button-download-template"
             >
               <FileText className="h-4 w-4 mr-2" />
-              Descargar Plantilla
+              Descargar Plantilla Completa
             </Button>
 
             {fileName && (
@@ -300,10 +678,11 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Formato del CSV:</strong> El archivo debe contener las siguientes columnas mínimas:
-                numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
+                <strong>Formato del CSV:</strong> La plantilla incluye 78 campos disponibles del sistema.
                 <br />
-                Opcionales: apellidoMaterno, rfc, curp, nss.
+                <strong>Campos requeridos:</strong> numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
+                <br />
+                <strong>Campos opcionales:</strong> Todos los demás campos son opcionales y pueden dejarse vacíos.
               </AlertDescription>
             </Alert>
           )}
