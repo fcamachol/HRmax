@@ -1,0 +1,84 @@
+1. Reportes Trimestrales (Obligatorios - periódicos)
+Cada 3 meses - ya te los mencioné antes
+2. Avisos por Eventos (Cuando ocurren)
+Tienes que presentar aviso INMEDIATO cuando:
+a) Nuevos contratos con clientes:
+
+Plazo: 30 días naturales después de firmar el contrato
+Subes el contrato a la plataforma REPSE-STPS
+Notificas también al IMSS
+
+b) Modificaciones a contratos existentes:
+
+Plazo: 30 días naturales después del cambio
+Cambio de servicios, ampliación, renovación
+
+c) Terminación de contratos:
+
+Plazo: 30 días naturales después de que termine
+Especificas fecha de conclusión
+
+d) Cambios en tu empresa:
+
+Plazo: 30 días naturales
+Cambio de domicilio fiscal
+Cambio de representante legal
+Cambio de razón social
+
+e) Altas/bajas de personal en contratos:
+
+Se incluyen en el reporte trimestral
+NO requieren aviso inmediato (a menos que sean masivas)
+
+Resumen práctico:
+PERIÓDICOS (calendario fijo):
+└─ Reportes trimestrales: cada 3 meses
+
+POR EVENTO (30 días después):
+├─ Nuevo contrato → aviso en 30 días
+├─ Modificación contrato → aviso en 30 días
+├─ Fin de contrato → aviso en 30 días
+└─ Cambios empresa → aviso en 30 días
+Para tu módulo de gestión:
+Dashboard de avisos pendientes:
+┌────────────────────────────────────────┐
+│ AVISOS PENDIENTES                      │
+├────────────────────────────────────────┤
+│ ⚠️ Contrato con Cliente X              │
+│    Firmado: 15/Oct/2025                │
+│    Aviso vence: 14/Nov/2025 (7 días)   │
+│    [Presentar Aviso]                   │
+│                                        │
+│ ⚠️ Modificación Contrato Cliente Y     │
+│    Modificado: 20/Oct/2025             │
+│    Aviso vence: 19/Nov/2025 (12 días)  │
+│    [Presentar Aviso]                   │
+│                                        │
+│ ✅ Reporte Trimestral Q3-2025          │
+│    Presentado: 15/Oct/2025             │
+└────────────────────────────────────────┘
+Automatizaciones que debes incluir:
+javascript// Al crear contrato
+onContractCreated(contract) {
+  createPendingNotice({
+    type: 'NEW_CONTRACT',
+    contract_id: contract.id,
+    deadline: addDays(contract.signature_date, 30),
+    status: 'PENDING'
+  });
+  
+  // Alertas
+  scheduleAlert(deadline - 7days, "Aviso vence en 7 días");
+  scheduleAlert(deadline - 3days, "⚠️ Aviso vence en 3 días");
+  scheduleAlert(deadline, "🚨 URGENTE: Aviso vence HOY");
+}
+
+// Al modificar contrato
+onContractModified(contract) {
+  createPendingNotice({
+    type: 'CONTRACT_MODIFICATION',
+    contract_id: contract.id,
+    deadline: addDays(today, 30),
+    status: 'PENDING'
+  });
+}

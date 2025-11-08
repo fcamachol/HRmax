@@ -833,3 +833,50 @@ export const updateAsignacionPersonalREPSESchema = insertAsignacionPersonalREPSE
 
 export type AsignacionPersonalREPSE = typeof asignacionesPersonalREPSE.$inferSelect;
 export type InsertAsignacionPersonalREPSE = z.infer<typeof insertAsignacionPersonalREPSESchema>;
+
+// Avisos REPSE - Obligaciones de presentación periódica y por eventos
+export const tiposAvisoREPSE = [
+  "REPORTE_TRIMESTRAL",
+  "NUEVO_CONTRATO", 
+  "MODIFICACION_CONTRATO",
+  "TERMINACION_CONTRATO",
+  "CAMBIO_EMPRESA"
+] as const;
+export type TipoAvisoREPSE = typeof tiposAvisoREPSE[number];
+
+export const estatusAvisoREPSE = ["PENDIENTE", "PRESENTADO", "VENCIDO"] as const;
+export type EstatusAvisoREPSE = typeof estatusAvisoREPSE[number];
+
+export const avisosREPSE = pgTable("avisos_repse", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tipo: varchar("tipo").notNull(), // REPORTE_TRIMESTRAL, NUEVO_CONTRATO, etc.
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  contratoREPSEId: varchar("contrato_repse_id").references(() => contratosREPSE.id, { onDelete: "cascade" }), // Null para reportes trimestrales o cambios de empresa
+  descripcion: text("descripcion").notNull(), // Descripción del aviso
+  fechaEvento: date("fecha_evento"), // Fecha del evento que genera el aviso (firma, modificación, etc.)
+  fechaLimite: date("fecha_limite").notNull(), // Fecha límite para presentar el aviso
+  estatus: varchar("estatus").default("PENDIENTE"), // PENDIENTE, PRESENTADO, VENCIDO
+  fechaPresentacion: date("fecha_presentacion"), // Cuándo se presentó el aviso
+  trimestre: integer("trimestre"), // 1, 2, 3, 4 (solo para reportes trimestrales)
+  año: integer("año"), // Año del trimestre (solo para reportes trimestrales)
+  archivoUrl: text("archivo_url"), // URL del archivo de evidencia
+  archivoNombre: varchar("archivo_nombre"), // Nombre del archivo
+  numeroFolioSTPS: varchar("numero_folio_stps"), // Número de folio asignado por la STPS al presentar
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertAvisoREPSESchema = createInsertSchema(avisosREPSE).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipo: z.enum(tiposAvisoREPSE),
+  estatus: z.enum(estatusAvisoREPSE).default("PENDIENTE"),
+});
+
+export const updateAvisoREPSESchema = insertAvisoREPSESchema.partial();
+
+export type AvisoREPSE = typeof avisosREPSE.$inferSelect;
+export type InsertAvisoREPSE = z.infer<typeof insertAvisoREPSESchema>;
