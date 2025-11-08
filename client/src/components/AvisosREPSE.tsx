@@ -48,9 +48,13 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
 
   const presentarMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      return await apiRequest("POST", `/api/avisos-repse/${id}/presentar`, data);
+      console.log("[AvisosREPSE] Presentando aviso:", id, data);
+      const result = await apiRequest("POST", `/api/avisos-repse/${id}/presentar`, data);
+      console.log("[AvisosREPSE] Respuesta de presentar:", result);
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("[AvisosREPSE] onSuccess ejecutado, cerrando diálogo");
       queryClient.invalidateQueries({ queryKey: ["/api/avisos-repse/pendientes"] });
       toast({
         title: "Aviso presentado",
@@ -62,6 +66,7 @@ export default function AvisosREPSE({ contratos }: AvisosREPSEProps) {
       setNumeroFolio("");
     },
     onError: (error: any) => {
+      console.error("[AvisosREPSE] onError ejecutado:", error);
       toast({
         title: "Error",
         description: error.message || "No se pudo marcar el aviso como presentado",

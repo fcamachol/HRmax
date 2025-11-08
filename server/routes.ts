@@ -1090,7 +1090,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/contratos-repse", async (req, res) => {
     try {
       const validatedData = insertContratoREPSESchema.parse(req.body);
+      console.log("[POST /api/contratos-repse] Creating contract:", validatedData);
       const contrato = await storage.createContratoREPSE(validatedData);
+      console.log("[POST /api/contratos-repse] Contract created:", contrato.id);
       
       // Crear aviso automático para nuevo contrato (30 días de plazo)
       const fechaEvento = new Date(contrato.fechaInicio);
@@ -1099,11 +1101,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Obtener información del cliente para la descripción
       const cliente = await storage.getClienteREPSE(contrato.clienteId);
+      console.log("[POST /api/contratos-repse] Cliente fetched:", cliente?.razonSocial);
       const descripcion = cliente 
         ? `Aviso de nuevo contrato con ${cliente.razonSocial} - Contrato ${contrato.numeroContrato}`
         : `Aviso de nuevo contrato - Contrato ${contrato.numeroContrato}`;
       
-      await storage.createAvisoREPSE({
+      console.log("[POST /api/contratos-repse] Creating aviso:", {
+        tipo: "NUEVO_CONTRATO",
+        empresaId: contrato.empresaId,
+        contratoREPSEId: contrato.id,
+        descripcion,
+        fechaEvento: contrato.fechaInicio,
+        fechaLimite: fechaLimite.toISOString().split('T')[0],
+      });
+      
+      const aviso = await storage.createAvisoREPSE({
         tipo: "NUEVO_CONTRATO",
         empresaId: contrato.empresaId,
         contratoREPSEId: contrato.id,
@@ -1112,9 +1124,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fechaLimite: fechaLimite.toISOString().split('T')[0],
         estatus: "PENDIENTE",
       });
+      console.log("[POST /api/contratos-repse] Aviso created:", aviso.id);
       
       res.json(contrato);
     } catch (error: any) {
+      console.error("[POST /api/contratos-repse] Error:", error);
       res.status(400).json({ message: error.message });
     }
   });

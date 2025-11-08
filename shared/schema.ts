@@ -800,6 +800,9 @@ export const insertContratoREPSESchema = createInsertSchema(contratosREPSE).omit
   updatedAt: true,
 }).extend({
   estatus: z.enum(estatusContratoREPSE).default("vigente"),
+  // Transform empty strings to null for optional date fields
+  fechaFin: z.string().transform(val => val === "" ? null : val).nullable().optional(),
+  fechaNotificacionIMSS: z.string().transform(val => val === "" ? null : val).nullable().optional(),
 });
 
 export const updateContratoREPSESchema = insertContratoREPSESchema.partial();
