@@ -31,6 +31,14 @@ import {
   type InsertHoraExtra,
   type Attendance,
   type InsertAttendance,
+  type ClienteREPSE,
+  type InsertClienteREPSE,
+  type RegistroREPSE,
+  type InsertRegistroREPSE,
+  type ContratoREPSE,
+  type InsertContratoREPSE,
+  type AsignacionPersonalREPSE,
+  type InsertAsignacionPersonalREPSE,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -46,7 +54,11 @@ import {
   turnosCentroTrabajo,
   empleadosCentrosTrabajo,
   horasExtras,
-  attendance
+  attendance,
+  clientesREPSE,
+  registrosREPSE,
+  contratosREPSE,
+  asignacionesPersonalREPSE
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and } from "drizzle-orm";
@@ -172,6 +184,40 @@ export interface IStorage {
   getHorasExtrasByEstatus(estatus: string): Promise<HoraExtra[]>;
   updateHoraExtra(id: string, updates: Partial<InsertHoraExtra>): Promise<HoraExtra>;
   deleteHoraExtra(id: string): Promise<void>;
+  
+  // REPSE - Clientes
+  createClienteREPSE(cliente: InsertClienteREPSE): Promise<ClienteREPSE>;
+  getClienteREPSE(id: string): Promise<ClienteREPSE | undefined>;
+  getClientesREPSE(): Promise<ClienteREPSE[]>;
+  updateClienteREPSE(id: string, updates: Partial<InsertClienteREPSE>): Promise<ClienteREPSE>;
+  deleteClienteREPSE(id: string): Promise<void>;
+  
+  // REPSE - Registros REPSE
+  createRegistroREPSE(registro: InsertRegistroREPSE): Promise<RegistroREPSE>;
+  getRegistroREPSE(id: string): Promise<RegistroREPSE | undefined>;
+  getRegistrosREPSE(): Promise<RegistroREPSE[]>;
+  getRegistrosREPSEByEmpresa(empresaId: string): Promise<RegistroREPSE[]>;
+  updateRegistroREPSE(id: string, updates: Partial<InsertRegistroREPSE>): Promise<RegistroREPSE>;
+  deleteRegistroREPSE(id: string): Promise<void>;
+  
+  // REPSE - Contratos
+  createContratoREPSE(contrato: InsertContratoREPSE): Promise<ContratoREPSE>;
+  getContratoREPSE(id: string): Promise<ContratoREPSE | undefined>;
+  getContratosREPSE(): Promise<ContratoREPSE[]>;
+  getContratosREPSEByEmpresa(empresaId: string): Promise<ContratoREPSE[]>;
+  getContratosREPSEByCliente(clienteId: string): Promise<ContratoREPSE[]>;
+  getContratosREPSEByRegistro(registroREPSEId: string): Promise<ContratoREPSE[]>;
+  updateContratoREPSE(id: string, updates: Partial<InsertContratoREPSE>): Promise<ContratoREPSE>;
+  deleteContratoREPSE(id: string): Promise<void>;
+  
+  // REPSE - Asignaciones de Personal
+  createAsignacionPersonalREPSE(asignacion: InsertAsignacionPersonalREPSE): Promise<AsignacionPersonalREPSE>;
+  getAsignacionPersonalREPSE(id: string): Promise<AsignacionPersonalREPSE | undefined>;
+  getAsignacionesPersonalREPSE(): Promise<AsignacionPersonalREPSE[]>;
+  getAsignacionesPersonalREPSEByContrato(contratoREPSEId: string): Promise<AsignacionPersonalREPSE[]>;
+  getAsignacionesPersonalREPSEByEmpleado(empleadoId: string): Promise<AsignacionPersonalREPSE[]>;
+  updateAsignacionPersonalREPSE(id: string, updates: Partial<InsertAsignacionPersonalREPSE>): Promise<AsignacionPersonalREPSE>;
+  deleteAsignacionPersonalREPSE(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -896,6 +942,222 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(horasExtras)
       .where(eq(horasExtras.id, id));
+  }
+
+  // ============================================================================
+  // REPSE - Clientes
+  // ============================================================================
+  
+  async createClienteREPSE(cliente: InsertClienteREPSE): Promise<ClienteREPSE> {
+    const [newCliente] = await db
+      .insert(clientesREPSE)
+      .values(cliente)
+      .returning();
+    return newCliente;
+  }
+
+  async getClienteREPSE(id: string): Promise<ClienteREPSE | undefined> {
+    const [cliente] = await db
+      .select()
+      .from(clientesREPSE)
+      .where(eq(clientesREPSE.id, id));
+    return cliente || undefined;
+  }
+
+  async getClientesREPSE(): Promise<ClienteREPSE[]> {
+    return await db
+      .select()
+      .from(clientesREPSE)
+      .orderBy(desc(clientesREPSE.razonSocial));
+  }
+
+  async updateClienteREPSE(id: string, updates: Partial<InsertClienteREPSE>): Promise<ClienteREPSE> {
+    const [updated] = await db
+      .update(clientesREPSE)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientesREPSE.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClienteREPSE(id: string): Promise<void> {
+    await db
+      .delete(clientesREPSE)
+      .where(eq(clientesREPSE.id, id));
+  }
+
+  // ============================================================================
+  // REPSE - Registros REPSE
+  // ============================================================================
+  
+  async createRegistroREPSE(registro: InsertRegistroREPSE): Promise<RegistroREPSE> {
+    const [newRegistro] = await db
+      .insert(registrosREPSE)
+      .values(registro)
+      .returning();
+    return newRegistro;
+  }
+
+  async getRegistroREPSE(id: string): Promise<RegistroREPSE | undefined> {
+    const [registro] = await db
+      .select()
+      .from(registrosREPSE)
+      .where(eq(registrosREPSE.id, id));
+    return registro || undefined;
+  }
+
+  async getRegistrosREPSE(): Promise<RegistroREPSE[]> {
+    return await db
+      .select()
+      .from(registrosREPSE)
+      .orderBy(desc(registrosREPSE.fechaEmision));
+  }
+
+  async getRegistrosREPSEByEmpresa(empresaId: string): Promise<RegistroREPSE[]> {
+    return await db
+      .select()
+      .from(registrosREPSE)
+      .where(eq(registrosREPSE.empresaId, empresaId))
+      .orderBy(desc(registrosREPSE.fechaEmision));
+  }
+
+  async updateRegistroREPSE(id: string, updates: Partial<InsertRegistroREPSE>): Promise<RegistroREPSE> {
+    const [updated] = await db
+      .update(registrosREPSE)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(registrosREPSE.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteRegistroREPSE(id: string): Promise<void> {
+    await db
+      .delete(registrosREPSE)
+      .where(eq(registrosREPSE.id, id));
+  }
+
+  // ============================================================================
+  // REPSE - Contratos
+  // ============================================================================
+  
+  async createContratoREPSE(contrato: InsertContratoREPSE): Promise<ContratoREPSE> {
+    const [newContrato] = await db
+      .insert(contratosREPSE)
+      .values(contrato)
+      .returning();
+    return newContrato;
+  }
+
+  async getContratoREPSE(id: string): Promise<ContratoREPSE | undefined> {
+    const [contrato] = await db
+      .select()
+      .from(contratosREPSE)
+      .where(eq(contratosREPSE.id, id));
+    return contrato || undefined;
+  }
+
+  async getContratosREPSE(): Promise<ContratoREPSE[]> {
+    return await db
+      .select()
+      .from(contratosREPSE)
+      .orderBy(desc(contratosREPSE.fechaInicio));
+  }
+
+  async getContratosREPSEByEmpresa(empresaId: string): Promise<ContratoREPSE[]> {
+    return await db
+      .select()
+      .from(contratosREPSE)
+      .where(eq(contratosREPSE.empresaId, empresaId))
+      .orderBy(desc(contratosREPSE.fechaInicio));
+  }
+
+  async getContratosREPSEByCliente(clienteId: string): Promise<ContratoREPSE[]> {
+    return await db
+      .select()
+      .from(contratosREPSE)
+      .where(eq(contratosREPSE.clienteId, clienteId))
+      .orderBy(desc(contratosREPSE.fechaInicio));
+  }
+
+  async getContratosREPSEByRegistro(registroREPSEId: string): Promise<ContratoREPSE[]> {
+    return await db
+      .select()
+      .from(contratosREPSE)
+      .where(eq(contratosREPSE.registroREPSEId, registroREPSEId))
+      .orderBy(desc(contratosREPSE.fechaInicio));
+  }
+
+  async updateContratoREPSE(id: string, updates: Partial<InsertContratoREPSE>): Promise<ContratoREPSE> {
+    const [updated] = await db
+      .update(contratosREPSE)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contratosREPSE.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContratoREPSE(id: string): Promise<void> {
+    await db
+      .delete(contratosREPSE)
+      .where(eq(contratosREPSE.id, id));
+  }
+
+  // ============================================================================
+  // REPSE - Asignaciones de Personal
+  // ============================================================================
+  
+  async createAsignacionPersonalREPSE(asignacion: InsertAsignacionPersonalREPSE): Promise<AsignacionPersonalREPSE> {
+    const [newAsignacion] = await db
+      .insert(asignacionesPersonalREPSE)
+      .values(asignacion)
+      .returning();
+    return newAsignacion;
+  }
+
+  async getAsignacionPersonalREPSE(id: string): Promise<AsignacionPersonalREPSE | undefined> {
+    const [asignacion] = await db
+      .select()
+      .from(asignacionesPersonalREPSE)
+      .where(eq(asignacionesPersonalREPSE.id, id));
+    return asignacion || undefined;
+  }
+
+  async getAsignacionesPersonalREPSE(): Promise<AsignacionPersonalREPSE[]> {
+    return await db
+      .select()
+      .from(asignacionesPersonalREPSE)
+      .orderBy(desc(asignacionesPersonalREPSE.fechaAsignacion));
+  }
+
+  async getAsignacionesPersonalREPSEByContrato(contratoREPSEId: string): Promise<AsignacionPersonalREPSE[]> {
+    return await db
+      .select()
+      .from(asignacionesPersonalREPSE)
+      .where(eq(asignacionesPersonalREPSE.contratoREPSEId, contratoREPSEId))
+      .orderBy(desc(asignacionesPersonalREPSE.fechaAsignacion));
+  }
+
+  async getAsignacionesPersonalREPSEByEmpleado(empleadoId: string): Promise<AsignacionPersonalREPSE[]> {
+    return await db
+      .select()
+      .from(asignacionesPersonalREPSE)
+      .where(eq(asignacionesPersonalREPSE.empleadoId, empleadoId))
+      .orderBy(desc(asignacionesPersonalREPSE.fechaAsignacion));
+  }
+
+  async updateAsignacionPersonalREPSE(id: string, updates: Partial<InsertAsignacionPersonalREPSE>): Promise<AsignacionPersonalREPSE> {
+    const [updated] = await db
+      .update(asignacionesPersonalREPSE)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(asignacionesPersonalREPSE.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAsignacionPersonalREPSE(id: string): Promise<void> {
+    await db
+      .delete(asignacionesPersonalREPSE)
+      .where(eq(asignacionesPersonalREPSE.id, id));
   }
 }
 
