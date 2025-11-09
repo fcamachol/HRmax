@@ -25,6 +25,9 @@ import Legal from "@/pages/Legal";
 import REPSE from "@/pages/REPSE";
 import Creditos from "@/pages/Creditos";
 import Puestos from "@/pages/Puestos";
+import Vacantes from "@/pages/reclutamiento/Vacantes";
+import Candidatos from "@/pages/reclutamiento/Candidatos";
+import ProcesoSeleccion from "@/pages/reclutamiento/ProcesoSeleccion";
 import RelojChecador from "@/components/RelojChecador";
 import NotFound from "@/pages/not-found";
 
@@ -43,6 +46,9 @@ function Router() {
       <Route path="/reloj-checador" component={RelojChecador} />
       <Route path="/organizacion/puestos" component={Puestos} />
       <Route path="/organizacion/centros-trabajo" component={CentrosTrabajo} />
+      <Route path="/reclutamiento/vacantes" component={Vacantes} />
+      <Route path="/reclutamiento/candidatos" component={Candidatos} />
+      <Route path="/reclutamiento/proceso" component={ProcesoSeleccion} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/repse" component={REPSE} />
