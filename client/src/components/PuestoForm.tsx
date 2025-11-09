@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertPuestoSchema } from "@shared/schema";
@@ -41,9 +42,10 @@ interface PuestoFormProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: PuestoFormValues) => void;
   defaultValues?: Partial<PuestoFormValues>;
+  mode?: "create" | "edit";
 }
 
-export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues }: PuestoFormProps) {
+export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode = "create" }: PuestoFormProps) {
   const form = useForm<PuestoFormValues>({
     resolver: zodResolver(puestoFormSchema),
     defaultValues: defaultValues || {
@@ -57,18 +59,30 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues }: Pues
     },
   });
 
+  // Reset form when defaultValues change (for edit mode)
+  useEffect(() => {
+    if (defaultValues && open) {
+      form.reset(defaultValues);
+    }
+  }, [defaultValues, open, form]);
+
   const handleSubmit = (data: PuestoFormValues) => {
     onSubmit(data);
-    form.reset();
+    if (mode === "create") {
+      form.reset();
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nuevo Puesto</DialogTitle>
+          <DialogTitle>{mode === "create" ? "Nuevo Puesto" : "Editar Puesto"}</DialogTitle>
           <DialogDescription>
-            Crea una nueva descripción de puesto para la organización
+            {mode === "create" 
+              ? "Crea una nueva descripción de puesto para la organización"
+              : "Modifica los datos del puesto"
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -235,7 +249,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues }: Pues
                 Cancelar
               </Button>
               <Button type="submit" data-testid="button-submit-puesto">
-                Crear Puesto
+                {mode === "create" ? "Crear Puesto" : "Guardar Cambios"}
               </Button>
             </DialogFooter>
           </form>

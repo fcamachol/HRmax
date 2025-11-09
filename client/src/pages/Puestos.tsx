@@ -31,6 +31,7 @@ export default function Puestos() {
   const [viewMode, setViewMode] = useState<"list" | "quick" | "detail">("list");
   const [selectedPuestoId, setSelectedPuestoId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingPuesto, setEditingPuesto] = useState<Puesto | null>(null);
   const { toast } = useToast();
 
   const { data: puestos = [], isLoading } = useQuery<Puesto[]>({
@@ -50,9 +51,34 @@ export default function Puestos() {
       queryClient.invalidateQueries({ queryKey: ["/api/puestos"] });
       queryClient.invalidateQueries({ queryKey: ["/api/puestos/employees/counts"] });
       setIsFormOpen(false);
+      setEditingPuesto(null);
       toast({
         title: "Puesto creado",
         description: "El puesto ha sido creado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updatePuestoMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: InsertPuesto }) => {
+      const response = await apiRequest("PATCH", `/api/puestos/${id}`, data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/puestos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/puestos/employees/counts"] });
+      setIsFormOpen(false);
+      setEditingPuesto(null);
+      toast({
+        title: "Puesto actualizado",
+        description: "Los cambios han sido guardados exitosamente",
       });
     },
     onError: (error: Error) => {
@@ -78,6 +104,40 @@ export default function Puestos() {
   const handleViewPuesto = (id: string) => {
     setSelectedPuestoId(id);
     setViewMode("quick");
+  };
+
+  const handleEditPuesto = (puesto: Puesto) => {
+    setEditingPuesto(puesto);
+    setIsFormOpen(true);
+  };
+
+  const getPuestoFormValues = (puesto: Puesto | null): Partial<InsertPuesto> | undefined => {
+    if (!puesto) return undefined;
+    
+    return {
+      nombrePuesto: puesto.nombrePuesto,
+      clavePuesto: puesto.clavePuesto,
+      departamento: puesto.departamento,
+      area: puesto.area,
+      nivelJerarquico: puesto.nivelJerarquico,
+      propositoGeneral: puesto.propositoGeneral,
+      estatus: puesto.estatus,
+    };
+  };
+
+  const handleFormSubmit = (data: InsertPuesto) => {
+    if (editingPuesto) {
+      updatePuestoMutation.mutate({ id: editingPuesto.id, data });
+    } else {
+      createPuestoMutation.mutate(data);
+    }
+  };
+
+  const handleFormClose = (open: boolean) => {
+    setIsFormOpen(open);
+    if (!open) {
+      setEditingPuesto(null);
+    }
   };
 
   const handleViewDetails = () => {
@@ -243,7 +303,10 @@ export default function Puestos() {
                           >
                             Ver detalles
                           </DropdownMenuItem>
-                          <DropdownMenuItem data-testid={`button-edit-${puesto.id}`}>
+                          <DropdownMenuItem 
+                            onClick={() => handleEditPuesto(puesto)}
+                            data-testid={`button-edit-${puesto.id}`}
+                          >
                             Editar
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -265,8 +328,10 @@ export default function Puestos() {
 
       <PuestoForm
         open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        onSubmit={(data) => createPuestoMutation.mutate(data)}
+        onOpenChange={handleFormClose}
+        onSubmit={handleFormSubmit}
+        mode={editingPuesto ? "edit" : "create"}
+        defaultValues={getPuestoFormValues(editingPuesto)}
       />
     </div>
   );
