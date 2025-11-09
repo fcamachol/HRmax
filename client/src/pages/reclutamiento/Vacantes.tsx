@@ -293,6 +293,8 @@ export default function Vacantes() {
                   <TableHead>Prioridad</TableHead>
                   <TableHead>Rango Salarial</TableHead>
                   <TableHead>Fecha Límite</TableHead>
+                  <TableHead>Fecha Solicitud</TableHead>
+                  <TableHead>Última Modificación</TableHead>
                   <TableHead>Estatus</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
@@ -300,13 +302,13 @@ export default function Vacantes() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       Cargando vacantes...
                     </TableCell>
                   </TableRow>
                 ) : filteredVacantes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <Briefcase className="h-8 w-8 text-muted-foreground/50" />
                         <p>No se encontraron vacantes</p>
@@ -357,6 +359,26 @@ export default function Vacantes() {
                           </div>
                         ) : (
                           <span className="text-muted-foreground text-sm">Sin límite</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {vacante.fechaSolicitud ? (
+                          <div className="flex items-center gap-1 text-sm" data-testid={`text-fecha-solicitud-${vacante.id}`}>
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(vacante.fechaSolicitud)}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">–</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {vacante.updatedAt && vacante.createdAt && new Date(vacante.updatedAt).getTime() > new Date(vacante.createdAt).getTime() ? (
+                          <div className="flex items-center gap-1 text-sm" data-testid={`text-fecha-modificacion-${vacante.id}`}>
+                            <Calendar className="h-3 w-3" />
+                            {formatDate(vacante.updatedAt)}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">–</span>
                         )}
                       </TableCell>
                       <TableCell>{getStatusBadge(vacante.estatus as VacanteStatus)}</TableCell>
