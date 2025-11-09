@@ -100,6 +100,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
         tiempoComida: undefined,
         horarioComidaInicio: "",
         horarioComidaFin: "",
+        horasGuardias: undefined,
       },
       compensacionYPrestaciones: {
         prestaciones: BENEFICIOS_LEY,
@@ -1058,6 +1059,32 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                               data-testid="textarea-guardias"
                             />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="condicionesLaborales.horasGuardias"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Horas de Guardia (Opcional)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="0"
+                              min="0"
+                              step="0.5"
+                              {...field}
+                              onChange={e => field.onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                              value={field.value ?? ""}
+                              data-testid="input-horas-guardias"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Número de horas de guardia por semana o mes
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

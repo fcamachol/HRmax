@@ -130,12 +130,13 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
           horaEntrada: (vacante.condicionesLaborales as any)?.horaEntrada || "",
           horaSalida: (vacante.condicionesLaborales as any)?.horaSalida || "",
           descripcionHorario: (vacante.condicionesLaborales as any)?.descripcionHorario || "",
-          horasSemanales: (vacante.condicionesLaborales as any)?.horasSemanales || "",
+          horasSemanales: (vacante.condicionesLaborales as any)?.horasSemanales !== undefined ? (vacante.condicionesLaborales as any).horasSemanales : undefined,
           tiempoComida: (vacante.condicionesLaborales as any)?.tiempoComida !== undefined ? (vacante.condicionesLaborales as any).tiempoComida : undefined,
           horarioComidaInicio: (vacante.condicionesLaborales as any)?.horarioComidaInicio || "",
           horarioComidaFin: (vacante.condicionesLaborales as any)?.horarioComidaFin || "",
           modalidad: (vacante.condicionesLaborales as any)?.modalidad || "",
           guardias: (vacante.condicionesLaborales as any)?.guardias || "",
+          horasGuardias: (vacante.condicionesLaborales as any)?.horasGuardias !== undefined ? (vacante.condicionesLaborales as any).horasGuardias : undefined,
           nivelEsfuerzoFisico: (vacante.condicionesLaborales as any)?.nivelEsfuerzoFisico || "",
           ambienteTrabajo: (vacante.condicionesLaborales as any)?.ambienteTrabajo || "",
         },
@@ -158,12 +159,13 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
           horaEntrada: "",
           horaSalida: "",
           descripcionHorario: "",
-          horasSemanales: "",
+          horasSemanales: undefined,
           tiempoComida: undefined,
           horarioComidaInicio: "",
           horarioComidaFin: "",
           modalidad: "",
           guardias: "",
+          horasGuardias: undefined,
           nivelEsfuerzoFisico: "",
           ambienteTrabajo: "",
         },
@@ -1177,6 +1179,32 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
                         data-testid="textarea-guardias"
                       />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="condicionesLaborales.horasGuardias"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Horas de Guardia (Opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="0"
+                        min="0"
+                        step="0.5"
+                        {...field}
+                        onChange={e => field.onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        value={field.value ?? ""}
+                        data-testid="input-horas-guardias"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Número de horas de guardia por semana o mes
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
