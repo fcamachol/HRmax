@@ -2374,6 +2374,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== HELPER ENDPOINT - INICIALIZAR ETAPAS DE SELECCIÓN ====================
+  
+  app.post("/api/etapas-seleccion/inicializar", async (req, res) => {
+    try {
+      const etapasExistentes = await storage.getEtapasSeleccion();
+      
+      // Si ya existen etapas, no hacer nada
+      if (etapasExistentes.length > 0) {
+        return res.json({ 
+          message: "Las etapas de selección ya están inicializadas",
+          etapas: etapasExistentes 
+        });
+      }
+
+      // Crear etapas predeterminadas
+      const etapasPredeterminadas = [
+        {
+          nombre: "Nueva aplicación",
+          descripcion: "Candidato recién aplicado a la vacante",
+          orden: 1,
+          color: "#6366f1",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Revisión de CV",
+          descripcion: "Revisión inicial del curriculum vitae",
+          orden: 2,
+          color: "#8b5cf6",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Entrevista RH",
+          descripcion: "Entrevista con recursos humanos",
+          orden: 3,
+          color: "#3b82f6",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Entrevista Técnica",
+          descripcion: "Evaluación técnica con el área solicitante",
+          orden: 4,
+          color: "#06b6d4",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Evaluación Final",
+          descripcion: "Evaluación con gerencia o dirección",
+          orden: 5,
+          color: "#10b981",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Oferta Laboral",
+          descripcion: "Generación y envío de oferta laboral",
+          orden: 6,
+          color: "#14b8a6",
+          esEtapaFinal: false,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Contratado",
+          descripcion: "Candidato contratado exitosamente",
+          orden: 7,
+          color: "#22c55e",
+          esEtapaFinal: true,
+          esPositiva: true,
+          activa: true,
+        },
+        {
+          nombre: "Descartado",
+          descripcion: "Candidato descartado del proceso",
+          orden: 8,
+          color: "#ef4444",
+          esEtapaFinal: true,
+          esPositiva: false,
+          activa: true,
+        },
+      ];
+
+      const etapasCreadas = [];
+      for (const etapa of etapasPredeterminadas) {
+        const created = await storage.createEtapaSeleccion(etapa);
+        etapasCreadas.push(created);
+      }
+
+      res.status(201).json({
+        message: "Etapas de selección inicializadas exitosamente",
+        etapas: etapasCreadas
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;
