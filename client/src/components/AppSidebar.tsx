@@ -83,6 +83,11 @@ const payrollSubItems = [
     url: "/payroll/grupos",
     icon: Users,
   },
+  {
+    title: "Créditos y Descuentos",
+    url: "/creditos",
+    icon: CreditCard,
+  },
 ];
 
 const mainMenuItems = [
@@ -90,11 +95,6 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Créditos y Descuentos",
-    url: "/creditos",
-    icon: CreditCard,
   },
   {
     title: "Centros de Trabajo",
@@ -136,7 +136,7 @@ const mainMenuItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const isEmployeesActive = location.startsWith("/employees");
-  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance");
+  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance") || location.startsWith("/creditos");
 
   return (
     <Sidebar>
