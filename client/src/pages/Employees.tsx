@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmployeeTable } from "@/components/EmployeeTable";
+import { EmployeeQuickView } from "@/components/EmployeeQuickView";
+import { EmployeeDetailView } from "@/components/EmployeeDetailView";
 import { Plus, Search, Upload } from "lucide-react";
 import {
   Dialog,
@@ -15,10 +17,14 @@ import { CSVEmployeeUploader } from "@/components/CSVEmployeeUploader";
 import { useQuery } from "@tanstack/react-query";
 import type { Employee } from "@shared/schema";
 
+type ViewMode = "list" | "quick" | "detail";
+
 export default function Employees() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCSVDialogOpen, setIsCSVDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -32,6 +38,28 @@ export default function Employees() {
       (emp.rfc?.toLowerCase() || "").includes(searchQuery.toLowerCase()) ||
       emp.numeroEmpleado.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const selectedEmployee = selectedEmployeeId 
+    ? employees.find(emp => emp.id === selectedEmployeeId)
+    : null;
+
+  const handleViewEmployee = (id: string) => {
+    setSelectedEmployeeId(id);
+    setViewMode("quick");
+  };
+
+  const handleViewDetails = () => {
+    setViewMode("detail");
+  };
+
+  const handleBackToQuickView = () => {
+    setViewMode("quick");
+  };
+
+  const handleCloseViews = () => {
+    setViewMode("list");
+    setSelectedEmployeeId(null);
+  };
 
   return (
     <div className="space-y-6">
@@ -91,10 +119,28 @@ export default function Employees() {
 
       <EmployeeTable
         employees={filteredEmployees}
-        onView={(id) => console.log("View employee:", id)}
+        onView={handleViewEmployee}
         onEdit={(id) => console.log("Edit employee:", id)}
         onDelete={(id) => console.log("Delete employee:", id)}
       />
+
+      {/* Vista rápida del empleado */}
+      {viewMode === "quick" && selectedEmployee && (
+        <EmployeeQuickView
+          employee={selectedEmployee}
+          onViewDetails={handleViewDetails}
+          onClose={handleCloseViews}
+        />
+      )}
+
+      {/* Vista detallada del empleado */}
+      {viewMode === "detail" && selectedEmployee && (
+        <EmployeeDetailView
+          employee={selectedEmployee}
+          onBack={handleBackToQuickView}
+          onEdit={() => console.log("Edit employee:", selectedEmployee.id)}
+        />
+      )}
     </div>
   );
 }
