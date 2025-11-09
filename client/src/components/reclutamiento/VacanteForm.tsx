@@ -131,6 +131,9 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
           horaSalida: (vacante.condicionesLaborales as any)?.horaSalida || "",
           descripcionHorario: (vacante.condicionesLaborales as any)?.descripcionHorario || "",
           horasSemanales: (vacante.condicionesLaborales as any)?.horasSemanales || "",
+          tiempoComida: (vacante.condicionesLaborales as any)?.tiempoComida !== undefined ? (vacante.condicionesLaborales as any).tiempoComida : undefined,
+          horarioComidaInicio: (vacante.condicionesLaborales as any)?.horarioComidaInicio || "",
+          horarioComidaFin: (vacante.condicionesLaborales as any)?.horarioComidaFin || "",
           modalidad: (vacante.condicionesLaborales as any)?.modalidad || "",
           guardias: (vacante.condicionesLaborales as any)?.guardias || "",
           nivelEsfuerzoFisico: (vacante.condicionesLaborales as any)?.nivelEsfuerzoFisico || "",
@@ -156,6 +159,9 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
           horaSalida: "",
           descripcionHorario: "",
           horasSemanales: "",
+          tiempoComida: undefined,
+          horarioComidaInicio: "",
+          horarioComidaFin: "",
           modalidad: "",
           guardias: "",
           nivelEsfuerzoFisico: "",
@@ -1072,6 +1078,71 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="condicionesLaborales.tiempoComida"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tiempo de Comida (horas)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        placeholder="1"
+                        min="0.5"
+                        step="0.5"
+                        {...field}
+                        onChange={e => field.onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        value={field.value ?? ""}
+                        data-testid="input-tiempo-comida"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Mínimo 0.5 horas (30 minutos)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="condicionesLaborales.horarioComidaInicio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Horario de Comida - Inicio (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          value={field.value || ""}
+                          data-testid="input-horario-comida-inicio"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="condicionesLaborales.horarioComidaFin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Horario de Comida - Fin (Opcional)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          value={field.value || ""}
+                          data-testid="input-horario-comida-fin"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}

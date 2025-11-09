@@ -97,6 +97,9 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       certificaciones: [],
       condicionesLaborales: {
         tipoHorario: "fijo",
+        tiempoComida: undefined,
+        horarioComidaInicio: "",
+        horarioComidaFin: "",
       },
       compensacionYPrestaciones: {
         prestaciones: BENEFICIOS_LEY,
@@ -973,6 +976,71 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         </FormItem>
                       )}
                     />
+
+                    <FormField
+                      control={form.control}
+                      name="condicionesLaborales.tiempoComida"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Tiempo de Comida (horas)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="1"
+                              min="0.5"
+                              step="0.5"
+                              {...field}
+                              onChange={e => field.onChange(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                              value={field.value ?? ""}
+                              data-testid="input-tiempo-comida"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Mínimo 0.5 horas (30 minutos)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.horarioComidaInicio"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Horario de Comida - Inicio (Opcional)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-horario-comida-inicio"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.horarioComidaFin"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Horario de Comida - Fin (Opcional)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="time"
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="input-horario-comida-fin"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <FormField

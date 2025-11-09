@@ -1226,12 +1226,26 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
     horaSalida: z.string().optional(),
     descripcionHorario: z.string().optional(),
     horasSemanales: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+    tiempoComida: z.union([z.coerce.number().min(0.5, "El tiempo de comida mínimo es 30 minutos (0.5 horas)"), z.literal("").transform(() => undefined)]).optional(),
+    horarioComidaInicio: z.string().optional(),
+    horarioComidaFin: z.string().optional(),
     guardias: z.string().optional(),
     modalidad: z.string().optional(),
     requiereViaje: z.boolean().optional(),
     nivelEsfuerzoFisico: z.string().optional(),
     ambienteTrabajo: z.string().optional(),
-  }).default({}),
+  }).default({}).refine(
+    (data) => {
+      if (data.horarioComidaInicio && data.horarioComidaFin) {
+        return data.horarioComidaFin > data.horarioComidaInicio;
+      }
+      return true;
+    },
+    {
+      message: "El horario de fin de comida debe ser posterior al horario de inicio",
+      path: ["horarioComidaFin"],
+    }
+  ),
   compensacionYPrestaciones: z.object({
     rangoSalarialMin: z.number().optional(),
     rangoSalarialMax: z.number().optional(),
@@ -1492,12 +1506,26 @@ export const insertVacanteSchema = createInsertSchema(vacantes).omit({
     horaSalida: z.string().optional(),
     descripcionHorario: z.string().optional(),
     horasSemanales: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+    tiempoComida: z.union([z.coerce.number().min(0.5, "El tiempo de comida mínimo es 30 minutos (0.5 horas)"), z.literal("").transform(() => undefined)]).optional(),
+    horarioComidaInicio: z.string().optional(),
+    horarioComidaFin: z.string().optional(),
     guardias: z.string().optional(),
     modalidad: z.string().optional(),
     requiereViaje: z.boolean().optional(),
     nivelEsfuerzoFisico: z.string().optional(),
     ambienteTrabajo: z.string().optional(),
-  }).default({}),
+  }).default({}).refine(
+    (data) => {
+      if (data.horarioComidaInicio && data.horarioComidaFin) {
+        return data.horarioComidaFin > data.horarioComidaInicio;
+      }
+      return true;
+    },
+    {
+      message: "El horario de fin de comida debe ser posterior al horario de inicio",
+      path: ["horarioComidaFin"],
+    }
+  ),
 });
 
 export const insertCandidatoSchema = createInsertSchema(candidatos).omit({
