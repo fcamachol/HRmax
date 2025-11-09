@@ -12,23 +12,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Search, UserPlus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Search, UserMinus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface AsignarEmpleadosPuestoProps {
+interface QuitarEmpleadosPuestoProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   puestoId: string;
   puestoNombre: string;
 }
 
-export function AsignarEmpleadosPuesto({
+export function QuitarEmpleadosPuesto({
   open,
   onOpenChange,
   puestoId,
   puestoNombre,
-}: AsignarEmpleadosPuestoProps) {
+}: QuitarEmpleadosPuestoProps) {
   const [search, setSearch] = useState("");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const { toast } = useToast();
@@ -46,13 +45,13 @@ export function AsignarEmpleadosPuesto({
     enabled: open,
   });
 
-  const assignMutation = useMutation({
+  const removeMutation = useMutation({
     mutationFn: async (employeeIds: string[]) => {
-      // Actualizar cada empleado con el nuevo puestoId
+      // Actualizar cada empleado para quitar el puestoId (establecer a null)
       await Promise.all(
         employeeIds.map((employeeId) =>
           apiRequest("PATCH", `/api/employees/${employeeId}`, {
-            puestoId: puestoId,
+            puestoId: null,
           })
         )
       );
@@ -62,8 +61,8 @@ export function AsignarEmpleadosPuesto({
       queryClient.invalidateQueries({ queryKey: ["/api/puestos"] });
       queryClient.invalidateQueries({ queryKey: ["/api/puestos/employees/counts"] });
       toast({
-        title: "Empleados asignados",
-        description: `${selectedEmployeeIds.length} empleado(s) asignado(s) al puesto correctamente`,
+        title: "Empleados removidos",
+        description: `${selectedEmployeeIds.length} empleado(s) removido(s) del puesto correctamente`,
       });
       setSelectedEmployeeIds([]);
       onOpenChange(false);
@@ -71,7 +70,7 @@ export function AsignarEmpleadosPuesto({
     onError: () => {
       toast({
         title: "Error",
-        description: "No se pudieron asignar los empleados",
+        description: "No se pudieron remover los empleados",
         variant: "destructive",
       });
     },
@@ -81,12 +80,12 @@ export function AsignarEmpleadosPuesto({
     if (selectedEmployeeIds.length === 0) {
       toast({
         title: "Selecciona al menos un empleado",
-        description: "Debes seleccionar al menos un empleado para asignar",
+        description: "Debes seleccionar al menos un empleado para remover",
         variant: "destructive",
       });
       return;
     }
-    assignMutation.mutate(selectedEmployeeIds);
+    removeMutation.mutate(selectedEmployeeIds);
   };
 
   const toggleEmployee = (employeeId: string) => {
@@ -97,12 +96,12 @@ export function AsignarEmpleadosPuesto({
     );
   };
 
-  // Filtrar empleados: excluir los que ya están asignados a este puesto
-  const availableEmployees = employees.filter(
-    (emp) => emp.puestoId !== puestoId
+  // Filtrar solo empleados asignados a este puesto
+  const assignedEmployees = employees.filter(
+    (emp) => emp.puestoId === puestoId
   );
 
-  const filteredEmployees = availableEmployees.filter((emp) => {
+  const filteredEmployees = assignedEmployees.filter((emp) => {
     const searchLower = search.toLowerCase();
     return (
       emp.nombre?.toLowerCase().includes(searchLower) ||
@@ -112,38 +111,17 @@ export function AsignarEmpleadosPuesto({
     );
   });
 
-  // Empleados actualmente asignados a este puesto
-  const assignedEmployees = employees.filter(
-    (emp) => emp.puestoId === puestoId
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <DialogTitle>Asignar Empleados</DialogTitle>
+          <DialogTitle>Quitar Empleados</DialogTitle>
           <DialogDescription>
             Puesto: <span className="font-semibold">{puestoNombre}</span>
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col">
-          {/* Empleados actualmente asignados */}
-          {assignedEmployees.length > 0 && (
-            <div className="mb-4 p-3 border rounded-md bg-muted/50">
-              <h4 className="text-sm font-medium mb-2">
-                Empleados Asignados Actualmente ({assignedEmployees.length})
-              </h4>
-              <div className="flex flex-wrap gap-2">
-                {assignedEmployees.map((emp) => (
-                  <Badge key={emp.id} variant="secondary">
-                    {emp.nombre} {emp.apellidoPaterno}
-                  </Badge>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="mb-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -152,7 +130,7 @@ export function AsignarEmpleadosPuesto({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
-                data-testid="input-search-employees"
+                data-testid="input-search-employees-remove"
               />
             </div>
           </div>
@@ -164,8 +142,10 @@ export function AsignarEmpleadosPuesto({
           ) : filteredEmployees.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground border rounded-md">
               {search
-                ? "No se encontraron empleados disponibles"
-                : "No hay empleados disponibles para asignar"}
+                ? "No se encontraron empleados asignados"
+                : assignedEmployees.length === 0
+                ? "No hay empleados asignados a este puesto"
+                : "No se encontraron empleados"}
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto border rounded-md">
@@ -174,12 +154,12 @@ export function AsignarEmpleadosPuesto({
                   <div
                     key={employee.id}
                     className="flex items-center gap-3 p-3 rounded-md hover-elevate"
-                    data-testid={`employee-item-${employee.id}`}
+                    data-testid={`employee-item-remove-${employee.id}`}
                   >
                     <Checkbox
                       checked={selectedEmployeeIds.includes(employee.id)}
                       onCheckedChange={() => toggleEmployee(employee.id)}
-                      data-testid={`checkbox-employee-${employee.id}`}
+                      data-testid={`checkbox-employee-remove-${employee.id}`}
                     />
                     <div className="flex-1">
                       <div className="font-medium">
@@ -191,11 +171,6 @@ export function AsignarEmpleadosPuesto({
                         {employee.departamento && ` • ${employee.departamento}`}
                       </div>
                     </div>
-                    {employee.puestoId && (
-                      <Badge variant="outline" className="text-xs">
-                        Asignado a otro puesto
-                      </Badge>
-                    )}
                   </div>
                 ))}
               </div>
@@ -203,10 +178,10 @@ export function AsignarEmpleadosPuesto({
           )}
 
           {selectedEmployeeIds.length > 0 && (
-            <div className="mt-3 p-3 bg-primary/10 rounded-md">
-              <p className="text-sm font-medium">
-                <UserPlus className="inline h-4 w-4 mr-1" />
-                {selectedEmployeeIds.length} empleado(s) seleccionado(s)
+            <div className="mt-3 p-3 bg-destructive/10 rounded-md">
+              <p className="text-sm font-medium text-destructive">
+                <UserMinus className="inline h-4 w-4 mr-1" />
+                {selectedEmployeeIds.length} empleado(s) seleccionado(s) para remover
               </p>
             </div>
           )}
@@ -217,20 +192,21 @@ export function AsignarEmpleadosPuesto({
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
-            data-testid="button-cancel-assign"
+            data-testid="button-cancel-remove"
           >
             Cancelar
           </Button>
           <Button
+            variant="destructive"
             onClick={handleSubmit}
             disabled={
-              selectedEmployeeIds.length === 0 || assignMutation.isPending
+              selectedEmployeeIds.length === 0 || removeMutation.isPending
             }
-            data-testid="button-submit-assign"
+            data-testid="button-submit-remove"
           >
-            {assignMutation.isPending
-              ? "Asignando..."
-              : `Asignar ${selectedEmployeeIds.length > 0 ? `(${selectedEmployeeIds.length})` : ""}`}
+            {removeMutation.isPending
+              ? "Removiendo..."
+              : `Quitar ${selectedEmployeeIds.length > 0 ? `(${selectedEmployeeIds.length})` : ""}`}
           </Button>
         </DialogFooter>
       </DialogContent>

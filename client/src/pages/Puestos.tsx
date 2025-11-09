@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Search, MoreVertical } from "lucide-react";
+import { Plus, Search, MoreVertical, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,6 +25,7 @@ import { PuestoQuickView } from "@/components/PuestoQuickView";
 import { PuestoDetailView } from "@/components/PuestoDetailView";
 import { PuestoForm } from "@/components/PuestoForm";
 import { AsignarEmpleadosPuesto } from "@/components/AsignarEmpleadosPuesto";
+import { QuitarEmpleadosPuesto } from "@/components/QuitarEmpleadosPuesto";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Puestos() {
@@ -34,6 +35,7 @@ export default function Puestos() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPuesto, setEditingPuesto] = useState<Puesto | null>(null);
   const [assigningPuesto, setAssigningPuesto] = useState<{ id: string; nombre: string } | null>(null);
+  const [removingPuesto, setRemovingPuesto] = useState<{ id: string; nombre: string } | null>(null);
   const { toast } = useToast();
 
   const { data: puestos = [], isLoading } = useQuery<Puesto[]>({
@@ -298,7 +300,17 @@ export default function Puestos() {
                       {puesto.nivelJerarquico || "No especificado"}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setRemovingPuesto({ id: puesto.id, nombre: puesto.nombrePuesto })}
+                          disabled={getEmployeeCount(puesto.id) === 0}
+                          data-testid={`button-remove-employees-${puesto.id}`}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
                         <Badge variant="secondary">{getEmployeeCount(puesto.id)}</Badge>
                         <Button
                           variant="ghost"
@@ -380,6 +392,13 @@ export default function Puestos() {
         onOpenChange={(open) => !open && setAssigningPuesto(null)}
         puestoId={assigningPuesto?.id || ""}
         puestoNombre={assigningPuesto?.nombre || ""}
+      />
+
+      <QuitarEmpleadosPuesto
+        open={!!removingPuesto}
+        onOpenChange={(open) => !open && setRemovingPuesto(null)}
+        puestoId={removingPuesto?.id || ""}
+        puestoNombre={removingPuesto?.nombre || ""}
       />
     </div>
   );
