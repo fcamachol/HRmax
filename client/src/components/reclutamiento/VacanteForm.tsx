@@ -125,7 +125,17 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
         competenciasConductuales: vacante.competenciasConductuales as any || [],
         idiomas: vacante.idiomas as any || [],
         certificaciones: vacante.certificaciones as any || [],
-        condicionesLaborales: vacante.condicionesLaborales as any || {},
+        condicionesLaborales: {
+          tipoHorario: (vacante.condicionesLaborales as any)?.tipoHorario || "fijo",
+          horaEntrada: (vacante.condicionesLaborales as any)?.horaEntrada || "",
+          horaSalida: (vacante.condicionesLaborales as any)?.horaSalida || "",
+          descripcionHorario: (vacante.condicionesLaborales as any)?.descripcionHorario || "",
+          horasSemanales: (vacante.condicionesLaborales as any)?.horasSemanales || "",
+          modalidad: (vacante.condicionesLaborales as any)?.modalidad || "",
+          guardias: (vacante.condicionesLaborales as any)?.guardias || "",
+          nivelEsfuerzoFisico: (vacante.condicionesLaborales as any)?.nivelEsfuerzoFisico || "",
+          ambienteTrabajo: (vacante.condicionesLaborales as any)?.ambienteTrabajo || "",
+        },
         empresaId: vacante.empresaId ?? undefined,
         creadoPor: vacante.creadoPor ?? undefined,
       }
@@ -140,7 +150,17 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
         competenciasConductuales: [],
         idiomas: [],
         certificaciones: [],
-        condicionesLaborales: { tipoHorario: "fijo" },
+        condicionesLaborales: {
+          tipoHorario: "fijo",
+          horaEntrada: "",
+          horaSalida: "",
+          descripcionHorario: "",
+          horasSemanales: "",
+          modalidad: "",
+          guardias: "",
+          nivelEsfuerzoFisico: "",
+          ambienteTrabajo: "",
+        },
       };
 
   const form = useForm<VacanteFormValues>({
