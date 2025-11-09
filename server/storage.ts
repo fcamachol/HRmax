@@ -47,6 +47,12 @@ import {
   type InsertAsignacionPersonalREPSE,
   type AvisoREPSE,
   type InsertAvisoREPSE,
+  type CreditoLegal,
+  type InsertCreditoLegal,
+  type PrestamoInterno,
+  type InsertPrestamoInterno,
+  type PagoCreditoDescuento,
+  type InsertPagoCreditoDescuento,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -70,7 +76,10 @@ import {
   registrosREPSE,
   contratosREPSE,
   asignacionesPersonalREPSE,
-  avisosREPSE
+  avisosREPSE,
+  creditosLegales,
+  prestamosInternos,
+  pagosCreditosDescuentos
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -266,6 +275,34 @@ export interface IStorage {
   deleteAvisoREPSE(id: string): Promise<void>;
   marcarAvisoPresentado(id: string, fechaPresentacion: string, numeroFolioSTPS?: string): Promise<AvisoREPSE>; // Helper para marcar como presentado
   generarAvisosTrimestrales(empresaId: string, año: number): Promise<AvisoREPSE[]>; // Generar avisos trimestrales para un año
+  
+  // Créditos Legales (INFONAVIT, FONACOT, Pensión Alimenticia, Embargo)
+  createCreditoLegal(credito: InsertCreditoLegal): Promise<CreditoLegal>;
+  getCreditoLegal(id: string): Promise<CreditoLegal | undefined>;
+  getCreditosLegales(): Promise<CreditoLegal[]>;
+  getCreditosLegalesByEmpleado(empleadoId: string): Promise<CreditoLegal[]>;
+  getCreditosLegalesActivos(): Promise<CreditoLegal[]>;
+  getCreditosLegalesByTipo(tipoCredito: string): Promise<CreditoLegal[]>;
+  updateCreditoLegal(id: string, updates: Partial<InsertCreditoLegal>): Promise<CreditoLegal>;
+  deleteCreditoLegal(id: string): Promise<void>;
+  
+  // Préstamos Internos
+  createPrestamoInterno(prestamo: InsertPrestamoInterno): Promise<PrestamoInterno>;
+  getPrestamoInterno(id: string): Promise<PrestamoInterno | undefined>;
+  getPrestamosInternos(): Promise<PrestamoInterno[]>;
+  getPrestamosInternosByEmpleado(empleadoId: string): Promise<PrestamoInterno[]>;
+  getPrestamosInternosActivos(): Promise<PrestamoInterno[]>;
+  updatePrestamoInterno(id: string, updates: Partial<InsertPrestamoInterno>): Promise<PrestamoInterno>;
+  deletePrestamoInterno(id: string): Promise<void>;
+  
+  // Pagos de Créditos y Descuentos
+  createPagoCreditoDescuento(pago: InsertPagoCreditoDescuento): Promise<PagoCreditoDescuento>;
+  getPagoCreditoDescuento(id: string): Promise<PagoCreditoDescuento | undefined>;
+  getPagosCreditosDescuentos(): Promise<PagoCreditoDescuento[]>;
+  getPagosCreditosDescuentosByEmpleado(empleadoId: string): Promise<PagoCreditoDescuento[]>;
+  getPagosCreditosDescuentosByCreditoLegal(creditoLegalId: string): Promise<PagoCreditoDescuento[]>;
+  getPagosCreditosDescuentosByPrestamoInterno(prestamoInternoId: string): Promise<PagoCreditoDescuento[]>;
+  deletePagoCreditoDescuento(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1713,6 +1750,109 @@ export class DatabaseStorage implements IStorage {
     }
 
     return avisos;
+  }
+
+  // ============================================================================
+  // CRÉDITOS Y DESCUENTOS - Implementaciones
+  // ============================================================================
+
+  // Créditos Legales
+  async createCreditoLegal(credito: InsertCreditoLegal): Promise<CreditoLegal> {
+    const [created] = await db.insert(creditosLegales).values(credito).returning();
+    return created;
+  }
+
+  async getCreditoLegal(id: string): Promise<CreditoLegal | undefined> {
+    const [credito] = await db.select().from(creditosLegales).where(eq(creditosLegales.id, id));
+    return credito;
+  }
+
+  async getCreditosLegales(): Promise<CreditoLegal[]> {
+    return db.select().from(creditosLegales).orderBy(desc(creditosLegales.createdAt));
+  }
+
+  async getCreditosLegalesByEmpleado(empleadoId: string): Promise<CreditoLegal[]> {
+    return db.select().from(creditosLegales).where(eq(creditosLegales.empleadoId, empleadoId)).orderBy(desc(creditosLegales.createdAt));
+  }
+
+  async getCreditosLegalesActivos(): Promise<CreditoLegal[]> {
+    return db.select().from(creditosLegales).where(eq(creditosLegales.estado, "ACTIVO")).orderBy(desc(creditosLegales.createdAt));
+  }
+
+  async getCreditosLegalesByTipo(tipoCredito: string): Promise<CreditoLegal[]> {
+    return db.select().from(creditosLegales).where(eq(creditosLegales.tipoCredito, tipoCredito)).orderBy(desc(creditosLegales.createdAt));
+  }
+
+  async updateCreditoLegal(id: string, updates: Partial<InsertCreditoLegal>): Promise<CreditoLegal> {
+    const [updated] = await db.update(creditosLegales).set(updates).where(eq(creditosLegales.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCreditoLegal(id: string): Promise<void> {
+    await db.delete(creditosLegales).where(eq(creditosLegales.id, id));
+  }
+
+  // Préstamos Internos
+  async createPrestamoInterno(prestamo: InsertPrestamoInterno): Promise<PrestamoInterno> {
+    const [created] = await db.insert(prestamosInternos).values(prestamo).returning();
+    return created;
+  }
+
+  async getPrestamoInterno(id: string): Promise<PrestamoInterno | undefined> {
+    const [prestamo] = await db.select().from(prestamosInternos).where(eq(prestamosInternos.id, id));
+    return prestamo;
+  }
+
+  async getPrestamosInternos(): Promise<PrestamoInterno[]> {
+    return db.select().from(prestamosInternos).orderBy(desc(prestamosInternos.createdAt));
+  }
+
+  async getPrestamosInternosByEmpleado(empleadoId: string): Promise<PrestamoInterno[]> {
+    return db.select().from(prestamosInternos).where(eq(prestamosInternos.empleadoId, empleadoId)).orderBy(desc(prestamosInternos.createdAt));
+  }
+
+  async getPrestamosInternosActivos(): Promise<PrestamoInterno[]> {
+    return db.select().from(prestamosInternos).where(eq(prestamosInternos.estado, "ACTIVO")).orderBy(desc(prestamosInternos.createdAt));
+  }
+
+  async updatePrestamoInterno(id: string, updates: Partial<InsertPrestamoInterno>): Promise<PrestamoInterno> {
+    const [updated] = await db.update(prestamosInternos).set(updates).where(eq(prestamosInternos.id, id)).returning();
+    return updated;
+  }
+
+  async deletePrestamoInterno(id: string): Promise<void> {
+    await db.delete(prestamosInternos).where(eq(prestamosInternos.id, id));
+  }
+
+  // Pagos de Créditos y Descuentos
+  async createPagoCreditoDescuento(pago: InsertPagoCreditoDescuento): Promise<PagoCreditoDescuento> {
+    const [created] = await db.insert(pagosCreditosDescuentos).values(pago).returning();
+    return created;
+  }
+
+  async getPagoCreditoDescuento(id: string): Promise<PagoCreditoDescuento | undefined> {
+    const [pago] = await db.select().from(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.id, id));
+    return pago;
+  }
+
+  async getPagosCreditosDescuentos(): Promise<PagoCreditoDescuento[]> {
+    return db.select().from(pagosCreditosDescuentos).orderBy(desc(pagosCreditosDescuentos.createdAt));
+  }
+
+  async getPagosCreditosDescuentosByEmpleado(empleadoId: string): Promise<PagoCreditoDescuento[]> {
+    return db.select().from(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.empleadoId, empleadoId)).orderBy(desc(pagosCreditosDescuentos.createdAt));
+  }
+
+  async getPagosCreditosDescuentosByCreditoLegal(creditoLegalId: string): Promise<PagoCreditoDescuento[]> {
+    return db.select().from(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.creditoLegalId, creditoLegalId)).orderBy(desc(pagosCreditosDescuentos.createdAt));
+  }
+
+  async getPagosCreditosDescuentosByPrestamoInterno(prestamoInternoId: string): Promise<PagoCreditoDescuento[]> {
+    return db.select().from(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.prestamoInternoId, prestamoInternoId)).orderBy(desc(pagosCreditosDescuentos.createdAt));
+  }
+
+  async deletePagoCreditoDescuento(id: string): Promise<void> {
+    await db.delete(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.id, id));
   }
 }
 
