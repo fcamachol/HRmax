@@ -1254,3 +1254,302 @@ export const updatePuestoSchema = insertPuestoSchema.partial();
 
 export type Puesto = typeof puestos.$inferSelect;
 export type InsertPuesto = z.infer<typeof insertPuestoSchema>;
+
+// ==================== MÓDULO DE RECLUTAMIENTO Y SELECCIÓN ====================
+
+// Estados de vacantes
+export const vacanteStatuses = ["abierta", "pausada", "cerrada", "cancelada"] as const;
+export type VacanteStatus = typeof vacanteStatuses[number];
+
+// Prioridades de vacantes
+export const vacantePriorities = ["baja", "media", "alta", "urgente"] as const;
+export type VacantePriority = typeof vacantePriorities[number];
+
+// Tabla de Vacantes (Requisiciones de Personal)
+export const vacantes = pgTable("vacantes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  titulo: varchar("titulo").notNull(),
+  puestoId: varchar("puesto_id").references(() => puestos.id, { onDelete: "set null" }),
+  departamento: varchar("departamento").notNull(),
+  numeroVacantes: integer("numero_vacantes").notNull().default(1),
+  prioridad: varchar("prioridad").notNull().default("media"), // baja, media, alta, urgente
+  fechaApertura: date("fecha_apertura").notNull().default(sql`CURRENT_DATE`),
+  fechaLimite: date("fecha_limite"),
+  estatus: varchar("estatus").notNull().default("abierta"), // abierta, pausada, cerrada, cancelada
+  tipoContrato: varchar("tipo_contrato").default("indeterminado"),
+  modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
+  ubicacion: varchar("ubicacion"),
+  rangoSalarialMin: numeric("rango_salarial_min"),
+  rangoSalarialMax: numeric("rango_salarial_max"),
+  descripcion: text("descripcion"),
+  requisitos: text("requisitos"),
+  responsabilidades: text("responsabilidades"),
+  prestaciones: text("prestaciones"),
+  empresaId: varchar("empresa_id"),
+  creadoPor: varchar("creado_por"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Fuentes de reclutamiento
+export const fuentesReclutamiento = [
+  "linkedin", "indeed", "computrabajo", "occmundial", "bumeran",
+  "referido_empleado", "bolsa_universitaria", "redes_sociales",
+  "portal_empresa", "agencia_reclutamiento", "feria_empleo",
+  "aplicacion_directa", "headhunter", "otro"
+] as const;
+export type FuenteReclutamiento = typeof fuentesReclutamiento[number];
+
+// Tabla de Candidatos
+export const candidatos = pgTable("candidatos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre").notNull(),
+  apellidoPaterno: varchar("apellido_paterno").notNull(),
+  apellidoMaterno: varchar("apellido_materno"),
+  email: varchar("email").notNull(),
+  telefono: varchar("telefono").notNull(),
+  telefonoSecundario: varchar("telefono_secundario"),
+  linkedinUrl: varchar("linkedin_url"),
+  cvUrl: varchar("cv_url"), // URL del CV en object storage
+  puestoDeseado: varchar("puesto_deseado"),
+  salarioDeseado: numeric("salario_deseado"),
+  disponibilidad: varchar("disponibilidad"), // inmediata, 15_dias, 1_mes, etc.
+  fuente: varchar("fuente").notNull().default("aplicacion_directa"), // linkedin, indeed, referido, etc.
+  referidoPor: varchar("referido_por"), // Nombre de quien lo refirió
+  empleadoReferidorId: varchar("empleado_referidor_id"), // ID del empleado que lo refirió
+  ciudad: varchar("ciudad"),
+  estado: varchar("estado"),
+  experienciaAnios: integer("experiencia_anios"),
+  nivelEducacion: varchar("nivel_educacion"), // secundaria, preparatoria, licenciatura, maestria, doctorado
+  carrera: varchar("carrera"),
+  universidad: varchar("universidad"),
+  competenciasClave: jsonb("competencias_clave").default(sql`'[]'::jsonb`), // Array de strings
+  idiomas: jsonb("idiomas").default(sql`'[]'::jsonb`), // Array de {idioma, nivel}
+  notas: text("notas"),
+  documentosAdicionales: jsonb("documentos_adicionales").default(sql`'[]'::jsonb`), // Array de {nombre, url}
+  estatus: varchar("estatus").default("activo"), // activo, contratado, descartado, inactivo
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Etapas del proceso de selección (configurables por empresa)
+export const etapasSeleccion = pgTable("etapas_seleccion", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre").notNull(),
+  descripcion: text("descripcion"),
+  orden: integer("orden").notNull(), // Orden en el pipeline
+  color: varchar("color").default("#6366f1"), // Color para el Kanban
+  esEtapaFinal: boolean("es_etapa_final").default(false), // Contratado o Descartado
+  esPositiva: boolean("es_positiva").default(true), // true = contratado, false = descartado
+  activa: boolean("activa").default(true),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Proceso de selección - Estado de cada candidato en cada vacante
+export const procesoSeleccion = pgTable("proceso_seleccion", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  candidatoId: varchar("candidato_id").notNull().references(() => candidatos.id, { onDelete: "cascade" }),
+  vacanteId: varchar("vacante_id").notNull().references(() => vacantes.id, { onDelete: "cascade" }),
+  etapaActualId: varchar("etapa_actual_id").notNull().references(() => etapasSeleccion.id, { onDelete: "restrict" }),
+  fechaAplicacion: timestamp("fecha_aplicacion").notNull().default(sql`now()`),
+  fechaUltimoMovimiento: timestamp("fecha_ultimo_movimiento").default(sql`now()`),
+  calificacionGeneral: integer("calificacion_general"), // 1-10
+  estatus: varchar("estatus").default("activo"), // activo, contratado, descartado
+  motivoDescarte: text("motivo_descarte"),
+  notas: text("notas"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+}, (table) => ({
+  // Un candidato puede aplicar a la misma vacante solo una vez
+  candidatoVacanteIdx: unique().on(table.candidatoId, table.vacanteId),
+}));
+
+// Historial de movimientos en el proceso
+export const historialProcesoSeleccion = pgTable("historial_proceso_seleccion", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
+  etapaAnteriorId: varchar("etapa_anterior_id").references(() => etapasSeleccion.id, { onDelete: "set null" }),
+  etapaNuevaId: varchar("etapa_nueva_id").notNull().references(() => etapasSeleccion.id, { onDelete: "restrict" }),
+  comentario: text("comentario"),
+  movidoPor: varchar("movido_por"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+});
+
+// Tipos de entrevistas
+export const tiposEntrevista = ["telefonica", "rh", "tecnica", "gerencia", "panel", "caso_practico", "otra"] as const;
+export type TipoEntrevista = typeof tiposEntrevista[number];
+
+// Entrevistas programadas
+export const entrevistas = pgTable("entrevistas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
+  tipo: varchar("tipo").notNull().default("rh"), // telefonica, rh, tecnica, gerencia, panel
+  titulo: varchar("titulo").notNull(),
+  fechaHora: timestamp("fecha_hora").notNull(),
+  duracionMinutos: integer("duracion_minutos").default(60),
+  modalidad: varchar("modalidad").default("presencial"), // presencial, virtual, telefonica
+  ubicacion: varchar("ubicacion"), // Lugar físico o link de videollamada
+  entrevistadores: jsonb("entrevistadores").default(sql`'[]'::jsonb`), // Array de {nombre, puesto, email}
+  estatus: varchar("estatus").default("programada"), // programada, completada, cancelada, reprogramada
+  calificacion: integer("calificacion"), // 1-10
+  fortalezas: text("fortalezas"),
+  areasOportunidad: text("areas_oportunidad"),
+  recomendacion: varchar("recomendacion"), // aprobar, rechazar, siguiente_etapa
+  comentarios: text("comentarios"),
+  archivoNotas: varchar("archivo_notas"), // URL de archivo con notas de la entrevista
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Evaluaciones técnicas o psicométricas
+export const evaluaciones = pgTable("evaluaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
+  tipo: varchar("tipo").notNull(), // tecnica, psicometrica, conocimientos, idiomas, etc.
+  nombre: varchar("nombre").notNull(),
+  descripcion: text("descripcion"),
+  fechaAplicacion: timestamp("fecha_aplicacion"),
+  fechaLimite: timestamp("fecha_limite"),
+  calificacion: numeric("calificacion"),
+  calificacionMaxima: numeric("calificacion_maxima"),
+  aprobada: boolean("aprobada"),
+  archivoResultados: varchar("archivo_resultados"), // URL del archivo de resultados
+  comentarios: text("comentarios"),
+  aplicadaPor: varchar("aplicada_por"),
+  estatus: varchar("estatus").default("pendiente"), // pendiente, en_proceso, completada, vencida
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Ofertas de trabajo
+export const ofertas = pgTable("ofertas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
+  vacanteId: varchar("vacante_id").notNull().references(() => vacantes.id, { onDelete: "restrict" }),
+  candidatoId: varchar("candidato_id").notNull().references(() => candidatos.id, { onDelete: "restrict" }),
+  puesto: varchar("puesto").notNull(),
+  departamento: varchar("departamento").notNull(),
+  tipoContrato: varchar("tipo_contrato").default("indeterminado"),
+  fechaInicioPropuesta: date("fecha_inicio_propuesta"),
+  salarioBrutoMensual: numeric("salario_bruto_mensual").notNull(),
+  salarioDiario: numeric("salario_diario"),
+  prestaciones: text("prestaciones"), // Descripción de prestaciones
+  periodoPrueba: boolean("periodo_prueba").default(false),
+  duracionPruebaDias: integer("duracion_prueba_dias"),
+  modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
+  ubicacion: varchar("ubicacion"),
+  horario: varchar("horario"),
+  fechaEnvio: date("fecha_envio"),
+  fechaLimiteRespuesta: date("fecha_limite_respuesta"),
+  estatus: varchar("estatus").default("borrador"), // borrador, enviada, aceptada, rechazada, negociacion, vencida
+  documentoOferta: varchar("documento_oferta"), // URL del documento de oferta generado
+  notas: text("notas"),
+  empresaId: varchar("empresa_id"),
+  creadoPor: varchar("creado_por"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Zod schemas para validación
+
+export const insertVacanteSchema = createInsertSchema(vacantes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  numeroVacantes: z.coerce.number().int().positive().default(1),
+  rangoSalarialMin: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+  rangoSalarialMax: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+});
+
+export const insertCandidatoSchema = createInsertSchema(candidatos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  salarioDeseado: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+  experienciaAnios: z.union([z.coerce.number().int().nonnegative(), z.literal("").transform(() => undefined)]).optional(),
+  competenciasClave: z.array(z.string()).default([]),
+  idiomas: z.array(z.object({
+    idioma: z.string(),
+    nivel: z.string(),
+  })).default([]),
+  documentosAdicionales: z.array(z.object({
+    nombre: z.string(),
+    url: z.string(),
+  })).default([]),
+});
+
+export const insertEtapaSeleccionSchema = createInsertSchema(etapasSeleccion).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  orden: z.coerce.number().int().nonnegative(),
+});
+
+export const insertProcesoSeleccionSchema = createInsertSchema(procesoSeleccion).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  fechaAplicacion: true,
+  fechaUltimoMovimiento: true,
+}).extend({
+  calificacionGeneral: z.union([z.coerce.number().int().min(1).max(10), z.literal("").transform(() => undefined)]).optional(),
+});
+
+export const insertEntrevistaSchema = createInsertSchema(entrevistas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  duracionMinutos: z.coerce.number().int().positive().default(60),
+  calificacion: z.union([z.coerce.number().int().min(1).max(10), z.literal("").transform(() => undefined)]).optional(),
+  entrevistadores: z.array(z.object({
+    nombre: z.string(),
+    puesto: z.string().optional(),
+    email: z.string().email().optional(),
+  })).default([]),
+});
+
+export const insertEvaluacionSchema = createInsertSchema(evaluaciones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  calificacion: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+  calificacionMaxima: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+});
+
+export const insertOfertaSchema = createInsertSchema(ofertas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  salarioBrutoMensual: z.coerce.number().positive(),
+  salarioDiario: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+  duracionPruebaDias: z.union([z.coerce.number().int().positive(), z.literal("").transform(() => undefined)]).optional(),
+});
+
+// Export types
+export type Vacante = typeof vacantes.$inferSelect;
+export type InsertVacante = z.infer<typeof insertVacanteSchema>;
+
+export type Candidato = typeof candidatos.$inferSelect;
+export type InsertCandidato = z.infer<typeof insertCandidatoSchema>;
+
+export type EtapaSeleccion = typeof etapasSeleccion.$inferSelect;
+export type InsertEtapaSeleccion = z.infer<typeof insertEtapaSeleccionSchema>;
+
+export type ProcesoSeleccion = typeof procesoSeleccion.$inferSelect;
+export type InsertProcesoSeleccion = z.infer<typeof insertProcesoSeleccionSchema>;
+
+export type Entrevista = typeof entrevistas.$inferSelect;
+export type InsertEntrevista = z.infer<typeof insertEntrevistaSchema>;
+
+export type Evaluacion = typeof evaluaciones.$inferSelect;
+export type InsertEvaluacion = z.infer<typeof insertEvaluacionSchema>;
+
+export type Oferta = typeof ofertas.$inferSelect;
+export type InsertOferta = z.infer<typeof insertOfertaSchema>;

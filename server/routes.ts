@@ -46,7 +46,14 @@ import {
   updatePrestamoInternoSchema,
   insertPagoCreditoDescuentoSchema,
   insertPuestoSchema,
-  updatePuestoSchema
+  updatePuestoSchema,
+  insertVacanteSchema,
+  insertCandidatoSchema,
+  insertEtapaSeleccionSchema,
+  insertProcesoSeleccionSchema,
+  insertEntrevistaSchema,
+  insertEvaluacionSchema,
+  insertOfertaSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -1908,6 +1915,460 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const counts = await storage.getAllEmployeeCountsByPuesto();
       res.json(counts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - VACANTES ====================
+  
+  app.post("/api/vacantes", async (req, res) => {
+    try {
+      const validated = insertVacanteSchema.parse(req.body);
+      const vacante = await storage.createVacante(validated);
+      res.status(201).json(vacante);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacantes", async (req, res) => {
+    try {
+      const vacantes = await storage.getVacantes();
+      res.json(vacantes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacantes/activas", async (req, res) => {
+    try {
+      const vacantes = await storage.getVacantesActivas();
+      res.json(vacantes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacantes/:id", async (req, res) => {
+    try {
+      const vacante = await storage.getVacante(req.params.id);
+      if (!vacante) {
+        return res.status(404).json({ message: "Vacante no encontrada" });
+      }
+      res.json(vacante);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/vacantes/:id", async (req, res) => {
+    try {
+      const validated = insertVacanteSchema.partial().parse(req.body);
+      const vacante = await storage.updateVacante(req.params.id, validated);
+      res.json(vacante);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/vacantes/:id", async (req, res) => {
+    try {
+      await storage.deleteVacante(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - CANDIDATOS ====================
+  
+  app.post("/api/candidatos", async (req, res) => {
+    try {
+      const validated = insertCandidatoSchema.parse(req.body);
+      const candidato = await storage.createCandidato(validated);
+      res.status(201).json(candidato);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/candidatos", async (req, res) => {
+    try {
+      const candidatos = await storage.getCandidatos();
+      res.json(candidatos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/candidatos/activos", async (req, res) => {
+    try {
+      const candidatos = await storage.getCandidatosActivos();
+      res.json(candidatos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/candidatos/:id", async (req, res) => {
+    try {
+      const candidato = await storage.getCandidato(req.params.id);
+      if (!candidato) {
+        return res.status(404).json({ message: "Candidato no encontrado" });
+      }
+      res.json(candidato);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/candidatos/:id", async (req, res) => {
+    try {
+      const validated = insertCandidatoSchema.partial().parse(req.body);
+      const candidato = await storage.updateCandidato(req.params.id, validated);
+      res.json(candidato);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/candidatos/:id", async (req, res) => {
+    try {
+      await storage.deleteCandidato(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - ETAPAS DE SELECCIÓN ====================
+  
+  app.post("/api/etapas-seleccion", async (req, res) => {
+    try {
+      const validated = insertEtapaSeleccionSchema.parse(req.body);
+      const etapa = await storage.createEtapaSeleccion(validated);
+      res.status(201).json(etapa);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/etapas-seleccion", async (req, res) => {
+    try {
+      const etapas = await storage.getEtapasSeleccion();
+      res.json(etapas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/etapas-seleccion/activas", async (req, res) => {
+    try {
+      const etapas = await storage.getEtapasSeleccionActivas();
+      res.json(etapas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/etapas-seleccion/:id", async (req, res) => {
+    try {
+      const etapa = await storage.getEtapaSeleccion(req.params.id);
+      if (!etapa) {
+        return res.status(404).json({ message: "Etapa no encontrada" });
+      }
+      res.json(etapa);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/etapas-seleccion/:id", async (req, res) => {
+    try {
+      const validated = insertEtapaSeleccionSchema.partial().parse(req.body);
+      const etapa = await storage.updateEtapaSeleccion(req.params.id, validated);
+      res.json(etapa);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/etapas-seleccion/:id", async (req, res) => {
+    try {
+      await storage.deleteEtapaSeleccion(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - PROCESO DE SELECCIÓN ====================
+  
+  app.post("/api/proceso-seleccion", async (req, res) => {
+    try {
+      const validated = insertProcesoSeleccionSchema.parse(req.body);
+      const proceso = await storage.createProcesoSeleccion(validated);
+      res.status(201).json(proceso);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/proceso-seleccion", async (req, res) => {
+    try {
+      const procesos = await storage.getProcesosSeleccion();
+      res.json(procesos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/proceso-seleccion/vacante/:vacanteId", async (req, res) => {
+    try {
+      const procesos = await storage.getProcesosByVacante(req.params.vacanteId);
+      res.json(procesos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/proceso-seleccion/candidato/:candidatoId", async (req, res) => {
+    try {
+      const procesos = await storage.getProcesosByCandidato(req.params.candidatoId);
+      res.json(procesos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/proceso-seleccion/etapa/:etapaId", async (req, res) => {
+    try {
+      const procesos = await storage.getProcesosByEtapa(req.params.etapaId);
+      res.json(procesos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/proceso-seleccion/:id", async (req, res) => {
+    try {
+      const proceso = await storage.getProcesoSeleccion(req.params.id);
+      if (!proceso) {
+        return res.status(404).json({ message: "Proceso no encontrado" });
+      }
+      res.json(proceso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/proceso-seleccion/:id", async (req, res) => {
+    try {
+      const validated = insertProcesoSeleccionSchema.partial().parse(req.body);
+      const proceso = await storage.updateProcesoSeleccion(req.params.id, validated);
+      res.json(proceso);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/proceso-seleccion/:id", async (req, res) => {
+    try {
+      await storage.deleteProcesoSeleccion(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - ENTREVISTAS ====================
+  
+  app.post("/api/entrevistas", async (req, res) => {
+    try {
+      const validated = insertEntrevistaSchema.parse(req.body);
+      const entrevista = await storage.createEntrevista(validated);
+      res.status(201).json(entrevista);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/entrevistas", async (req, res) => {
+    try {
+      const entrevistas = await storage.getEntrevistas();
+      res.json(entrevistas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/entrevistas/proceso/:procesoId", async (req, res) => {
+    try {
+      const entrevistas = await storage.getEntrevistasByProceso(req.params.procesoId);
+      res.json(entrevistas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/entrevistas/:id", async (req, res) => {
+    try {
+      const entrevista = await storage.getEntrevista(req.params.id);
+      if (!entrevista) {
+        return res.status(404).json({ message: "Entrevista no encontrada" });
+      }
+      res.json(entrevista);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/entrevistas/:id", async (req, res) => {
+    try {
+      const validated = insertEntrevistaSchema.partial().parse(req.body);
+      const entrevista = await storage.updateEntrevista(req.params.id, validated);
+      res.json(entrevista);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/entrevistas/:id", async (req, res) => {
+    try {
+      await storage.deleteEntrevista(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - EVALUACIONES ====================
+  
+  app.post("/api/evaluaciones", async (req, res) => {
+    try {
+      const validated = insertEvaluacionSchema.parse(req.body);
+      const evaluacion = await storage.createEvaluacion(validated);
+      res.status(201).json(evaluacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/evaluaciones", async (req, res) => {
+    try {
+      const evaluaciones = await storage.getEvaluaciones();
+      res.json(evaluaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/evaluaciones/proceso/:procesoId", async (req, res) => {
+    try {
+      const evaluaciones = await storage.getEvaluacionesByProceso(req.params.procesoId);
+      res.json(evaluaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/evaluaciones/:id", async (req, res) => {
+    try {
+      const evaluacion = await storage.getEvaluacion(req.params.id);
+      if (!evaluacion) {
+        return res.status(404).json({ message: "Evaluación no encontrada" });
+      }
+      res.json(evaluacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/evaluaciones/:id", async (req, res) => {
+    try {
+      const validated = insertEvaluacionSchema.partial().parse(req.body);
+      const evaluacion = await storage.updateEvaluacion(req.params.id, validated);
+      res.json(evaluacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/evaluaciones/:id", async (req, res) => {
+    try {
+      await storage.deleteEvaluacion(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== RECLUTAMIENTO Y SELECCIÓN - OFERTAS ====================
+  
+  app.post("/api/ofertas", async (req, res) => {
+    try {
+      const validated = insertOfertaSchema.parse(req.body);
+      const oferta = await storage.createOferta(validated);
+      res.status(201).json(oferta);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ofertas", async (req, res) => {
+    try {
+      const ofertas = await storage.getOfertas();
+      res.json(ofertas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ofertas/vacante/:vacanteId", async (req, res) => {
+    try {
+      const ofertas = await storage.getOfertasByVacante(req.params.vacanteId);
+      res.json(ofertas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ofertas/candidato/:candidatoId", async (req, res) => {
+    try {
+      const ofertas = await storage.getOfertasByCandidato(req.params.candidatoId);
+      res.json(ofertas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/ofertas/:id", async (req, res) => {
+    try {
+      const oferta = await storage.getOferta(req.params.id);
+      if (!oferta) {
+        return res.status(404).json({ message: "Oferta no encontrada" });
+      }
+      res.json(oferta);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/ofertas/:id", async (req, res) => {
+    try {
+      const validated = insertOfertaSchema.partial().parse(req.body);
+      const oferta = await storage.updateOferta(req.params.id, validated);
+      res.json(oferta);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/ofertas/:id", async (req, res) => {
+    try {
+      await storage.deleteOferta(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

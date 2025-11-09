@@ -55,6 +55,20 @@ import {
   type InsertPagoCreditoDescuento,
   type Puesto,
   type InsertPuesto,
+  type Vacante,
+  type InsertVacante,
+  type Candidato,
+  type InsertCandidato,
+  type EtapaSeleccion,
+  type InsertEtapaSeleccion,
+  type ProcesoSeleccion,
+  type InsertProcesoSeleccion,
+  type Entrevista,
+  type InsertEntrevista,
+  type Evaluacion,
+  type InsertEvaluacion,
+  type Oferta,
+  type InsertOferta,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -82,7 +96,15 @@ import {
   creditosLegales,
   prestamosInternos,
   pagosCreditosDescuentos,
-  puestos
+  puestos,
+  vacantes,
+  candidatos,
+  etapasSeleccion,
+  procesoSeleccion,
+  historialProcesoSeleccion,
+  entrevistas,
+  evaluaciones,
+  ofertas
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -319,6 +341,66 @@ export interface IStorage {
   getEmployeeCountByPuesto(puestoId: string): Promise<number>;
   getEmployeesByPuesto(puestoId: string): Promise<Employee[]>;
   getAllEmployeeCountsByPuesto(): Promise<Record<string, number>>;
+  
+  // Reclutamiento y Selección - Vacantes
+  createVacante(vacante: InsertVacante): Promise<Vacante>;
+  getVacante(id: string): Promise<Vacante | undefined>;
+  getVacantes(): Promise<Vacante[]>;
+  getVacantesActivas(): Promise<Vacante[]>;
+  getVacantesByEstatus(estatus: string): Promise<Vacante[]>;
+  updateVacante(id: string, updates: Partial<InsertVacante>): Promise<Vacante>;
+  deleteVacante(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Candidatos
+  createCandidato(candidato: InsertCandidato): Promise<Candidato>;
+  getCandidato(id: string): Promise<Candidato | undefined>;
+  getCandidatos(): Promise<Candidato[]>;
+  getCandidatosActivos(): Promise<Candidato[]>;
+  updateCandidato(id: string, updates: Partial<InsertCandidato>): Promise<Candidato>;
+  deleteCandidato(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Etapas de Selección
+  createEtapaSeleccion(etapa: InsertEtapaSeleccion): Promise<EtapaSeleccion>;
+  getEtapaSeleccion(id: string): Promise<EtapaSeleccion | undefined>;
+  getEtapasSeleccion(): Promise<EtapaSeleccion[]>;
+  getEtapasSeleccionActivas(): Promise<EtapaSeleccion[]>;
+  updateEtapaSeleccion(id: string, updates: Partial<InsertEtapaSeleccion>): Promise<EtapaSeleccion>;
+  deleteEtapaSeleccion(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Proceso de Selección
+  createProcesoSeleccion(proceso: InsertProcesoSeleccion): Promise<ProcesoSeleccion>;
+  getProcesoSeleccion(id: string): Promise<ProcesoSeleccion | undefined>;
+  getProcesosSeleccion(): Promise<ProcesoSeleccion[]>;
+  getProcesosByVacante(vacanteId: string): Promise<ProcesoSeleccion[]>;
+  getProcesosByCandidato(candidatoId: string): Promise<ProcesoSeleccion[]>;
+  getProcesosByEtapa(etapaId: string): Promise<ProcesoSeleccion[]>;
+  updateProcesoSeleccion(id: string, updates: Partial<InsertProcesoSeleccion>): Promise<ProcesoSeleccion>;
+  deleteProcesoSeleccion(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Entrevistas
+  createEntrevista(entrevista: InsertEntrevista): Promise<Entrevista>;
+  getEntrevista(id: string): Promise<Entrevista | undefined>;
+  getEntrevistas(): Promise<Entrevista[]>;
+  getEntrevistasByProceso(procesoId: string): Promise<Entrevista[]>;
+  updateEntrevista(id: string, updates: Partial<InsertEntrevista>): Promise<Entrevista>;
+  deleteEntrevista(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Evaluaciones
+  createEvaluacion(evaluacion: InsertEvaluacion): Promise<Evaluacion>;
+  getEvaluacion(id: string): Promise<Evaluacion | undefined>;
+  getEvaluaciones(): Promise<Evaluacion[]>;
+  getEvaluacionesByProceso(procesoId: string): Promise<Evaluacion[]>;
+  updateEvaluacion(id: string, updates: Partial<InsertEvaluacion>): Promise<Evaluacion>;
+  deleteEvaluacion(id: string): Promise<void>;
+  
+  // Reclutamiento y Selección - Ofertas
+  createOferta(oferta: InsertOferta): Promise<Oferta>;
+  getOferta(id: string): Promise<Oferta | undefined>;
+  getOfertas(): Promise<Oferta[]>;
+  getOfertasByVacante(vacanteId: string): Promise<Oferta[]>;
+  getOfertasByCandidato(candidatoId: string): Promise<Oferta[]>;
+  updateOferta(id: string, updates: Partial<InsertOferta>): Promise<Oferta>;
+  deleteOferta(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1933,6 +2015,277 @@ export class DatabaseStorage implements IStorage {
     });
     
     return counts;
+  }
+
+  // ==================== Reclutamiento y Selección - Vacantes ====================
+  
+  async createVacante(vacante: InsertVacante): Promise<Vacante> {
+    const data = {
+      ...vacante,
+      rangoSalarialMin: vacante.rangoSalarialMin ? String(vacante.rangoSalarialMin) : undefined,
+      rangoSalarialMax: vacante.rangoSalarialMax ? String(vacante.rangoSalarialMax) : undefined,
+    };
+    const [created] = await db.insert(vacantes).values(data).returning();
+    return created;
+  }
+
+  async getVacante(id: string): Promise<Vacante | undefined> {
+    const [vacante] = await db.select().from(vacantes).where(eq(vacantes.id, id));
+    return vacante;
+  }
+
+  async getVacantes(): Promise<Vacante[]> {
+    return db.select().from(vacantes).orderBy(desc(vacantes.createdAt));
+  }
+
+  async getVacantesActivas(): Promise<Vacante[]> {
+    return db.select().from(vacantes).where(eq(vacantes.estatus, "abierta")).orderBy(desc(vacantes.fechaApertura));
+  }
+
+  async getVacantesByEstatus(estatus: string): Promise<Vacante[]> {
+    return db.select().from(vacantes).where(eq(vacantes.estatus, estatus)).orderBy(desc(vacantes.fechaApertura));
+  }
+
+  async updateVacante(id: string, updates: Partial<InsertVacante>): Promise<Vacante> {
+    const data = {
+      ...updates,
+      rangoSalarialMin: updates.rangoSalarialMin !== undefined ? (updates.rangoSalarialMin ? String(updates.rangoSalarialMin) : null) : undefined,
+      rangoSalarialMax: updates.rangoSalarialMax !== undefined ? (updates.rangoSalarialMax ? String(updates.rangoSalarialMax) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(vacantes).set(data).where(eq(vacantes.id, id)).returning();
+    return updated;
+  }
+
+  async deleteVacante(id: string): Promise<void> {
+    await db.delete(vacantes).where(eq(vacantes.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Candidatos ====================
+  
+  async createCandidato(candidato: InsertCandidato): Promise<Candidato> {
+    const data = {
+      ...candidato,
+      salarioDeseado: candidato.salarioDeseado ? String(candidato.salarioDeseado) : undefined,
+    };
+    const [created] = await db.insert(candidatos).values(data).returning();
+    return created;
+  }
+
+  async getCandidato(id: string): Promise<Candidato | undefined> {
+    const [candidato] = await db.select().from(candidatos).where(eq(candidatos.id, id));
+    return candidato;
+  }
+
+  async getCandidatos(): Promise<Candidato[]> {
+    return db.select().from(candidatos).orderBy(desc(candidatos.createdAt));
+  }
+
+  async getCandidatosActivos(): Promise<Candidato[]> {
+    return db.select().from(candidatos).where(eq(candidatos.estatus, "activo")).orderBy(desc(candidatos.createdAt));
+  }
+
+  async updateCandidato(id: string, updates: Partial<InsertCandidato>): Promise<Candidato> {
+    const data = {
+      ...updates,
+      salarioDeseado: updates.salarioDeseado !== undefined ? (updates.salarioDeseado ? String(updates.salarioDeseado) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(candidatos).set(data).where(eq(candidatos.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCandidato(id: string): Promise<void> {
+    await db.delete(candidatos).where(eq(candidatos.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Etapas de Selección ====================
+  
+  async createEtapaSeleccion(etapa: InsertEtapaSeleccion): Promise<EtapaSeleccion> {
+    const [created] = await db.insert(etapasSeleccion).values(etapa).returning();
+    return created;
+  }
+
+  async getEtapaSeleccion(id: string): Promise<EtapaSeleccion | undefined> {
+    const [etapa] = await db.select().from(etapasSeleccion).where(eq(etapasSeleccion.id, id));
+    return etapa;
+  }
+
+  async getEtapasSeleccion(): Promise<EtapaSeleccion[]> {
+    return db.select().from(etapasSeleccion).orderBy(etapasSeleccion.orden);
+  }
+
+  async getEtapasSeleccionActivas(): Promise<EtapaSeleccion[]> {
+    return db.select().from(etapasSeleccion).where(eq(etapasSeleccion.activa, true)).orderBy(etapasSeleccion.orden);
+  }
+
+  async updateEtapaSeleccion(id: string, updates: Partial<InsertEtapaSeleccion>): Promise<EtapaSeleccion> {
+    const [updated] = await db.update(etapasSeleccion).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(etapasSeleccion.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEtapaSeleccion(id: string): Promise<void> {
+    await db.delete(etapasSeleccion).where(eq(etapasSeleccion.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Proceso de Selección ====================
+  
+  async createProcesoSeleccion(proceso: InsertProcesoSeleccion): Promise<ProcesoSeleccion> {
+    const [created] = await db.insert(procesoSeleccion).values(proceso).returning();
+    return created;
+  }
+
+  async getProcesoSeleccion(id: string): Promise<ProcesoSeleccion | undefined> {
+    const [proceso] = await db.select().from(procesoSeleccion).where(eq(procesoSeleccion.id, id));
+    return proceso;
+  }
+
+  async getProcesosSeleccion(): Promise<ProcesoSeleccion[]> {
+    return db.select().from(procesoSeleccion).orderBy(desc(procesoSeleccion.fechaAplicacion));
+  }
+
+  async getProcesosByVacante(vacanteId: string): Promise<ProcesoSeleccion[]> {
+    return db.select().from(procesoSeleccion).where(eq(procesoSeleccion.vacanteId, vacanteId)).orderBy(desc(procesoSeleccion.fechaAplicacion));
+  }
+
+  async getProcesosByCandidato(candidatoId: string): Promise<ProcesoSeleccion[]> {
+    return db.select().from(procesoSeleccion).where(eq(procesoSeleccion.candidatoId, candidatoId)).orderBy(desc(procesoSeleccion.fechaAplicacion));
+  }
+
+  async getProcesosByEtapa(etapaId: string): Promise<ProcesoSeleccion[]> {
+    return db.select().from(procesoSeleccion).where(eq(procesoSeleccion.etapaActualId, etapaId)).orderBy(desc(procesoSeleccion.fechaUltimoMovimiento));
+  }
+
+  async updateProcesoSeleccion(id: string, updates: Partial<InsertProcesoSeleccion>): Promise<ProcesoSeleccion> {
+    const [updated] = await db.update(procesoSeleccion).set({
+      ...updates,
+      fechaUltimoMovimiento: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(procesoSeleccion.id, id)).returning();
+    return updated;
+  }
+
+  async deleteProcesoSeleccion(id: string): Promise<void> {
+    await db.delete(procesoSeleccion).where(eq(procesoSeleccion.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Entrevistas ====================
+  
+  async createEntrevista(entrevista: InsertEntrevista): Promise<Entrevista> {
+    const [created] = await db.insert(entrevistas).values(entrevista).returning();
+    return created;
+  }
+
+  async getEntrevista(id: string): Promise<Entrevista | undefined> {
+    const [entrevista] = await db.select().from(entrevistas).where(eq(entrevistas.id, id));
+    return entrevista;
+  }
+
+  async getEntrevistas(): Promise<Entrevista[]> {
+    return db.select().from(entrevistas).orderBy(desc(entrevistas.fechaHora));
+  }
+
+  async getEntrevistasByProceso(procesoId: string): Promise<Entrevista[]> {
+    return db.select().from(entrevistas).where(eq(entrevistas.procesoSeleccionId, procesoId)).orderBy(desc(entrevistas.fechaHora));
+  }
+
+  async updateEntrevista(id: string, updates: Partial<InsertEntrevista>): Promise<Entrevista> {
+    const [updated] = await db.update(entrevistas).set({
+      ...updates,
+      updatedAt: new Date(),
+    }).where(eq(entrevistas.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEntrevista(id: string): Promise<void> {
+    await db.delete(entrevistas).where(eq(entrevistas.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Evaluaciones ====================
+  
+  async createEvaluacion(evaluacion: InsertEvaluacion): Promise<Evaluacion> {
+    const data = {
+      ...evaluacion,
+      calificacion: evaluacion.calificacion ? String(evaluacion.calificacion) : undefined,
+      calificacionMaxima: evaluacion.calificacionMaxima ? String(evaluacion.calificacionMaxima) : undefined,
+    };
+    const [created] = await db.insert(evaluaciones).values(data).returning();
+    return created;
+  }
+
+  async getEvaluacion(id: string): Promise<Evaluacion | undefined> {
+    const [evaluacion] = await db.select().from(evaluaciones).where(eq(evaluaciones.id, id));
+    return evaluacion;
+  }
+
+  async getEvaluaciones(): Promise<Evaluacion[]> {
+    return db.select().from(evaluaciones).orderBy(desc(evaluaciones.createdAt));
+  }
+
+  async getEvaluacionesByProceso(procesoId: string): Promise<Evaluacion[]> {
+    return db.select().from(evaluaciones).where(eq(evaluaciones.procesoSeleccionId, procesoId)).orderBy(desc(evaluaciones.createdAt));
+  }
+
+  async updateEvaluacion(id: string, updates: Partial<InsertEvaluacion>): Promise<Evaluacion> {
+    const data = {
+      ...updates,
+      calificacion: updates.calificacion !== undefined ? (updates.calificacion ? String(updates.calificacion) : null) : undefined,
+      calificacionMaxima: updates.calificacionMaxima !== undefined ? (updates.calificacionMaxima ? String(updates.calificacionMaxima) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(evaluaciones).set(data).where(eq(evaluaciones.id, id)).returning();
+    return updated;
+  }
+
+  async deleteEvaluacion(id: string): Promise<void> {
+    await db.delete(evaluaciones).where(eq(evaluaciones.id, id));
+  }
+
+  // ==================== Reclutamiento y Selección - Ofertas ====================
+  
+  async createOferta(oferta: InsertOferta): Promise<Oferta> {
+    const data = {
+      ...oferta,
+      salarioBrutoMensual: String(oferta.salarioBrutoMensual),
+      salarioDiario: oferta.salarioDiario ? String(oferta.salarioDiario) : undefined,
+    };
+    const [created] = await db.insert(ofertas).values(data).returning();
+    return created;
+  }
+
+  async getOferta(id: string): Promise<Oferta | undefined> {
+    const [oferta] = await db.select().from(ofertas).where(eq(ofertas.id, id));
+    return oferta;
+  }
+
+  async getOfertas(): Promise<Oferta[]> {
+    return db.select().from(ofertas).orderBy(desc(ofertas.createdAt));
+  }
+
+  async getOfertasByVacante(vacanteId: string): Promise<Oferta[]> {
+    return db.select().from(ofertas).where(eq(ofertas.vacanteId, vacanteId)).orderBy(desc(ofertas.createdAt));
+  }
+
+  async getOfertasByCandidato(candidatoId: string): Promise<Oferta[]> {
+    return db.select().from(ofertas).where(eq(ofertas.candidatoId, candidatoId)).orderBy(desc(ofertas.createdAt));
+  }
+
+  async updateOferta(id: string, updates: Partial<InsertOferta>): Promise<Oferta> {
+    const data = {
+      ...updates,
+      salarioBrutoMensual: updates.salarioBrutoMensual !== undefined ? String(updates.salarioBrutoMensual) : undefined,
+      salarioDiario: updates.salarioDiario !== undefined ? (updates.salarioDiario ? String(updates.salarioDiario) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(ofertas).set(data).where(eq(ofertas.id, id)).returning();
+    return updated;
+  }
+
+  async deleteOferta(id: string): Promise<void> {
+    await db.delete(ofertas).where(eq(ofertas.id, id));
   }
 }
 
