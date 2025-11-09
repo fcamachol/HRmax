@@ -1,0 +1,109 @@
+{
+  "tabs": [
+    {
+      "title": "Información Personal",
+      "fields": [
+        { "label": "Nombre", "field": "nombre" },
+        { "label": "Apellido Paterno", "field": "apellido_paterno" },
+        { "label": "Apellido Materno", "field": "apellido_materno" },
+        { "label": "Género", "field": "genero" },
+        { "label": "Estado Civil", "field": "estado_civil" },
+        { "label": "Lugar de Nacimiento", "field": "lugar_nacimiento" },
+        { "label": "Entidad de Nacimiento", "field": "entidad_nacimiento" },
+        { "label": "Nacionalidad", "field": "nacionalidad" },
+        { "label": "Escolaridad", "field": "escolaridad" },
+        { "label": "CURP", "field": "curp" },
+        { "label": "RFC", "field": "rfc" },
+        { "label": "NSS", "field": "nss" }
+      ]
+    },
+    {
+      "title": "Domicilio y Contacto",
+      "fields": [
+        { "label": "Calle", "field": "calle" },
+        { "label": "Número Exterior", "field": "numero_exterior" },
+        { "label": "Número Interior", "field": "numero_interior" },
+        { "label": "Colonia", "field": "colonia" },
+        { "label": "Municipio", "field": "municipio" },
+        { "label": "Estado", "field": "estado" },
+        { "label": "Código Postal", "field": "codigo_postal" },
+        { "label": "Teléfono", "field": "telefono" },
+        { "label": "Correo Electrónico", "field": "email" },
+        { "label": "Contacto de Emergencia", "field": "contacto_emergencia" },
+        { "label": "Parentesco", "field": "parentesco_emergencia" },
+        { "label": "Teléfono de Emergencia", "field": "telefono_emergencia" }
+      ]
+    },
+    {
+      "title": "Datos Laborales",
+      "fields": [
+        { "label": "Número de Empleado", "field": "numero_empleado" },
+        { "label": "Puesto", "field": "puesto" },
+        { "label": "Departamento", "field": "departamento" },
+        { "label": "Cliente o Proyecto", "field": "cliente_proyecto" },
+        { "label": "Jefe Directo", "field": "jefe_directo_id" },
+        { "label": "Empresa", "field": "empresa_id" },
+        { "label": "Registro Patronal", "field": "registro_patronal_id" },
+        { "label": "Esquema de Contratación", "field": "esquema_contratacion" },
+        { "label": "Tipo de Contrato", "field": "tipo_contrato" },
+        { "label": "Modalidad de Trabajo", "field": "modalidad_trabajo" },
+        { "label": "Lugar de Trabajo", "field": "lugar_trabajo" },
+        { "label": "Funciones", "field": "funciones" },
+        { "label": "Días Laborales", "field": "dias_laborales" },
+        { "label": "Horario", "field": "horario" },
+        { "label": "Tipo de Jornada", "field": "tipo_jornada" },
+        { "label": "Tiempo para Alimentos", "field": "tiempo_para_alimentos" },
+        { "label": "Días de Descanso", "field": "dias_descanso" },
+        { "label": "Periodo de Prueba", "field": "periodo_prueba" },
+        { "label": "Duración de Prueba (días)", "field": "duracion_prueba" },
+        { "label": "Reconoce Antigüedad", "field": "reconoce_antiguedad" },
+        { "label": "Fecha de Antigüedad", "field": "fecha_antiguedad" },
+        { "label": "Fecha de Ingreso", "field": "fecha_ingreso" },
+        { "label": "Fecha Alta IMSS", "field": "fecha_alta_imss" },
+        { "label": "Fecha de Terminación", "field": "fecha_terminacion" },
+        { "label": "Estatus", "field": "estatus" }
+      ]
+    },
+    {
+      "title": "Información Salarial",
+      "fields": [
+        { "label": "Salario Bruto Mensual", "field": "salario_bruto_mensual" },
+        { "label": "Salario Diario Real", "field": "salario_diario_real" },
+        { "label": "Salario Diario Nominal", "field": "salario_diario_nominal" },
+        { "label": "Salario Diario Exento", "field": "salario_diario_exento" },
+        { "label": "Salario Base de Cotización (SBC)", "field": "sbc" },
+        { "label": "Salario Diario Integrado (SDI)", "field": "sdi" },
+        { "label": "Tabla IMSS", "field": "tabla_imss" },
+        { "label": "Tipo de Cálculo de Salario", "field": "tipo_calculo_salario" },
+        { "label": "Periodicidad de Pago", "field": "periodicidad_pago" },
+        { "label": "Día de Pago", "field": "dia_pago" },
+        { "label": "Forma de Pago", "field": "forma_pago" },
+        { "label": "Esquema de Pago", "field": "esquema_pago" },
+        { "label": "Banco", "field": "banco" },
+        { "label": "Cuenta", "field": "cuenta" },
+        { "label": "CLABE", "field": "clabe" },
+        { "label": "Sucursal", "field": "sucursal" }
+      ]
+    },
+    {
+      "title": "Prestaciones y Beneficios",
+      "fields": [
+        { "label": "Días de Vacaciones Anuales", "field": "dias_vacaciones_anuales" },
+        { "label": "Días de Vacaciones Disponibles", "field": "dias_vacaciones_disponibles" },
+        { "label": "Días de Vacaciones Usados", "field": "dias_vacaciones_usados" },
+        { "label": "Días de Vacaciones Adicionales", "field": "dias_vacaciones_adicionales" },
+        { "label": "Días de Aguinaldo Adicionales", "field": "dias_aguinaldo_adicionales" },
+        { "label": "Crédito Infonavit", "field": "credito_infonavit" },
+        { "label": "Número Fonacot", "field": "numero_fonacot" },
+        { "label": "Otros Créditos", "field": "otros_creditos" }
+      ]
+    },
+    {
+      "title": "Documentación",
+      "fields": [
+        { "label": "Contrato Laboral", "field": "documento_contrato_id" },
+        { "label": "Acta de Nacimiento", "field": "documento_acta_nacimiento" },
+        { "label": "CURP", "field": "documento_curp" },
+        { "label": "RFC", "field": "documento_rfc" },
+        { "label": "Comprobante de Domicilio", "field": "documento_comprobante_domicilio" },
+        { "label": "INE (Frente y Reverso)", "field": "documento_ine" },
