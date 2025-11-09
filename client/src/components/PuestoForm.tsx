@@ -68,6 +68,8 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
   const [newConocimiento, setNewConocimiento] = useState("");
   const [newCertificacion, setNewCertificacion] = useState("");
   const [newPrestacion, setNewPrestacion] = useState("");
+  const [newIdioma, setNewIdioma] = useState("");
+  const [newNivelIdioma, setNewNivelIdioma] = useState("basico");
 
   const form = useForm<PuestoFormValues>({
     resolver: zodResolver(puestoFormSchema),
@@ -135,6 +137,11 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
     name: "compensacionYPrestaciones.prestacionesAdicionales" as any,
   });
 
+  const { fields: idiomasFields, append: appendIdioma, remove: removeIdioma } = useFieldArray({
+    control: form.control,
+    name: "idiomas" as any,
+  });
+
   const tipoHorario = form.watch("condicionesLaborales.tipoHorario");
 
   // Reset form when defaultValues change (for edit mode)
@@ -186,6 +193,14 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
     if (newCertificacion.trim()) {
       appendCertificacion(newCertificacion.trim() as any);
       setNewCertificacion("");
+    }
+  };
+
+  const handleAddIdioma = () => {
+    if (newIdioma.trim()) {
+      appendIdioma({ idioma: newIdioma.trim(), nivel: newNivelIdioma } as any);
+      setNewIdioma("");
+      setNewNivelIdioma("basico");
     }
   };
 
@@ -739,6 +754,65 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                             </button>
                           </Badge>
                         ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Idiomas</FormLabel>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newIdioma}
+                          onChange={(e) => setNewIdioma(e.target.value)}
+                          placeholder="Ej: Inglés, Francés"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddIdioma();
+                            }
+                          }}
+                          data-testid="input-new-idioma"
+                          className="flex-1"
+                        />
+                        <Select value={newNivelIdioma} onValueChange={setNewNivelIdioma}>
+                          <SelectTrigger className="w-[180px]" data-testid="select-nivel-idioma">
+                            <SelectValue placeholder="Nivel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="basico">Básico</SelectItem>
+                            <SelectItem value="intermedio">Intermedio</SelectItem>
+                            <SelectItem value="avanzado">Avanzado</SelectItem>
+                            <SelectItem value="nativo">Nativo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={handleAddIdioma}
+                          data-testid="button-add-idioma"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {idiomasFields.map((field, index) => {
+                          const idioma = form.watch(`idiomas.${index}`) as any;
+                          return (
+                            <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-idioma-${index}`}>
+                              {idioma?.idioma} - {idioma?.nivel}
+                              <button
+                                type="button"
+                                onClick={() => removeIdioma(index)}
+                                className="ml-1 hover:text-destructive"
+                                data-testid={`button-remove-idioma-${index}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
