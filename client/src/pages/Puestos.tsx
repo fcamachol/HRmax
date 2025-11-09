@@ -24,6 +24,7 @@ import type { Puesto, InsertPuesto } from "@shared/schema";
 import { PuestoQuickView } from "@/components/PuestoQuickView";
 import { PuestoDetailView } from "@/components/PuestoDetailView";
 import { PuestoForm } from "@/components/PuestoForm";
+import { AsignarEmpleadosPuesto } from "@/components/AsignarEmpleadosPuesto";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Puestos() {
@@ -32,6 +33,7 @@ export default function Puestos() {
   const [selectedPuestoId, setSelectedPuestoId] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingPuesto, setEditingPuesto] = useState<Puesto | null>(null);
+  const [assigningPuesto, setAssigningPuesto] = useState<{ id: string; nombre: string } | null>(null);
   const { toast } = useToast();
 
   const { data: puestos = [], isLoading } = useQuery<Puesto[]>({
@@ -296,7 +298,18 @@ export default function Puestos() {
                       {puesto.nivelJerarquico || "No especificado"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="secondary">{getEmployeeCount(puesto.id)}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="secondary">{getEmployeeCount(puesto.id)}</Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setAssigningPuesto({ id: puesto.id, nombre: puesto.nombrePuesto })}
+                          data-testid={`button-assign-employees-${puesto.id}`}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {compensacion?.rangoSalarialMin && compensacion?.rangoSalarialMax
@@ -360,6 +373,13 @@ export default function Puestos() {
         onSubmit={handleFormSubmit}
         mode={editingPuesto ? "edit" : "create"}
         defaultValues={getPuestoFormValues(editingPuesto)}
+      />
+
+      <AsignarEmpleadosPuesto
+        open={!!assigningPuesto}
+        onOpenChange={(open) => !open && setAssigningPuesto(null)}
+        puestoId={assigningPuesto?.id || ""}
+        puestoNombre={assigningPuesto?.nombre || ""}
       />
     </div>
   );
