@@ -38,7 +38,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { VacanteForm } from "@/components/reclutamiento/VacanteForm";
-import type { Vacante, InsertVacante, Puesto, VacanteStatus, VacantePriority } from "@shared/schema";
+import type { Vacante, InsertVacante, Puesto, VacanteStatus, VacantePriority, CentroTrabajo } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -55,6 +55,10 @@ export default function Vacantes() {
 
   const { data: puestos = [] } = useQuery<Puesto[]>({
     queryKey: ["/api/puestos"],
+  });
+
+  const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
+    queryKey: ["/api/centros-trabajo"],
   });
 
   const createVacanteMutation = useMutation({
@@ -174,6 +178,12 @@ export default function Vacantes() {
     return puesto ? puesto.nombrePuesto : "Puesto no encontrado";
   };
 
+  const getCentroTrabajoNombre = (centroId: string | null) => {
+    if (!centroId) return "-";
+    const centro = centrosTrabajo.find(c => c.id === centroId);
+    return centro ? centro.nombre : "-";
+  };
+
   const getStatusBadge = (status: VacanteStatus) => {
     const variants: Record<VacanteStatus, { variant: "default" | "secondary" | "destructive" | "outline", label: string }> = {
       abierta: { variant: "default", label: "Abierta" },
@@ -270,6 +280,7 @@ export default function Vacantes() {
                   <TableHead>Título</TableHead>
                   <TableHead>Puesto</TableHead>
                   <TableHead>Departamento</TableHead>
+                  <TableHead>Centro de Trabajo</TableHead>
                   <TableHead className="text-center"># Vacantes</TableHead>
                   <TableHead>Prioridad</TableHead>
                   <TableHead>Rango Salarial</TableHead>
@@ -281,19 +292,19 @@ export default function Vacantes() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       Cargando vacantes...
                     </TableCell>
                   </TableRow>
                 ) : filteredVacantes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <Briefcase className="h-8 w-8 text-muted-foreground/50" />
                         <p>No se encontraron vacantes</p>
                         {search || statusFilter !== "todas" ? (
                           <Button
-                            variant="link"
+                            variant="ghost"
                             onClick={() => {
                               setSearch("");
                               setStatusFilter("todas");
@@ -316,6 +327,9 @@ export default function Vacantes() {
                         {getPuestoNombre(vacante.puestoId)}
                       </TableCell>
                       <TableCell>{vacante.departamento}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {getCentroTrabajoNombre(vacante.centroTrabajoId)}
+                      </TableCell>
                       <TableCell className="text-center">{vacante.numeroVacantes}</TableCell>
                       <TableCell>{getPriorityBadge(vacante.prioridad as VacantePriority)}</TableCell>
                       <TableCell className="text-sm">
