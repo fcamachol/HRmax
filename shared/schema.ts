@@ -1621,3 +1621,194 @@ export type InsertEvaluacion = z.infer<typeof insertEvaluacionSchema>;
 
 export type Oferta = typeof ofertas.$inferSelect;
 export type InsertOferta = z.infer<typeof insertOfertaSchema>;
+
+// ============================================================================
+// MÓDULO DE VACACIONES (Vacation Management)
+// ============================================================================
+
+export const solicitudesVacaciones = pgTable("solicitudes_vacaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin").notNull(),
+  diasSolicitados: integer("dias_solicitados").notNull(), // Días laborales solicitados
+  diasLegalesCorresponden: integer("dias_legales_corresponden"), // Días de vacaciones según LFT por antigüedad
+  primaVacacional: numeric("prima_vacacional", { precision: 12, scale: 2 }), // 25% mínimo del salario por días de vacaciones
+  estatus: varchar("estatus").notNull().default("pendiente"), // pendiente, aprobada, rechazada, cancelada
+  motivo: text("motivo"), // Motivo/descripción del empleado
+  fechaSolicitud: timestamp("fecha_solicitud").notNull().default(sql`now()`),
+  fechaRespuesta: timestamp("fecha_respuesta"),
+  aprobadoPor: varchar("aprobado_por"), // ID del supervisor/RH que aprobó - idealmente FK a employees/users
+  comentariosAprobador: text("comentarios_aprobador"), // Comentarios del aprobador
+  notasEmpleado: text("notas_empleado"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  // Index for common queries filtering by employee and date
+  empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_vacaciones_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
+  empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_vacaciones_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
+}));
+
+// ============================================================================
+// MÓDULO DE INCAPACIDADES (Sick Leave Management)
+// ============================================================================
+
+export const incapacidades = pgTable("incapacidades", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  tipo: varchar("tipo").notNull(), // enfermedad_general, riesgo_trabajo, maternidad
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin").notNull(),
+  diasIncapacidad: integer("dias_incapacidad").notNull(),
+  
+  // Certificado médico IMSS (SENSIBLE - requiere controles de acceso)
+  numeroCertificado: varchar("numero_certificado"), // Número de folio ST-2 o ST-3
+  certificadoMedicoUrl: text("certificado_medico_url"), // URL del documento en object storage (cifrado)
+  
+  // Información médica (SENSIBLE - datos de salud protegidos por LFPDPPP)
+  diagnostico: text("diagnostico"),
+  medicoNombre: varchar("medico_nombre"),
+  unidadMedica: varchar("unidad_medica"), // Clínica IMSS
+  
+  // Información de pago según reglas IMSS
+  porcentajePago: integer("porcentaje_pago"), // 60% enfermedad general, 100% riesgo trabajo/maternidad
+  pagoPatronPrimerosTresDias: boolean("pago_patron_primeros_tres_dias").default(false), // Si patrón pagó primeros 3 días (voluntario)
+  pagoIMSSDesde: date("pago_imss_desde"), // IMSS paga desde 4to día en enfermedad general, 1er día en otros
+  
+  // Control y notas
+  estatus: varchar("estatus").notNull().default("activa"), // activa, cerrada, rechazada_imss
+  notasInternas: text("notas_internas"),
+  registradoPor: varchar("registrado_por"), // ID de quien lo registró - idealmente FK a employees/users
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  // Indexes for common queries filtering by employee, type, and status
+  empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
+  empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
+  empleadoTipoIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_tipo_idx ON ${table} (empleado_id, tipo)`,
+}));
+
+// ============================================================================
+// MÓDULO DE PERMISOS (Permission Requests)
+// ============================================================================
+
+export const solicitudesPermisos = pgTable("solicitudes_permisos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Tipo y clasificación
+  tipoPermiso: varchar("tipo_permiso").notNull(), // personal, defuncion, matrimonio, paternidad, medico, tramite, otro
+  conGoce: boolean("con_goce").notNull().default(false), // Con o sin goce de sueldo
+  
+  // Fechas y duración
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin").notNull(),
+  horasPermiso: numeric("horas_permiso", { precision: 5, scale: 2 }), // Si es permiso por horas (parcial)
+  diasSolicitados: numeric("dias_solicitados", { precision: 5, scale: 2 }).notNull(), // Puede ser fraccionario (0.5 días, etc)
+  
+  // Detalles de la solicitud
+  motivo: text("motivo").notNull(), // Descripción del empleado
+  documentoSoporteUrl: text("documento_soporte_url"), // Comprobantes (acta defunción, etc)
+  
+  // Aprobación
+  estatus: varchar("estatus").notNull().default("pendiente"), // pendiente, aprobada, rechazada, cancelada
+  fechaSolicitud: timestamp("fecha_solicitud").notNull().default(sql`now()`),
+  fechaRespuesta: timestamp("fecha_respuesta"),
+  aprobadoPor: varchar("aprobado_por"), // ID del supervisor/RH que aprobó - idealmente FK a employees/users
+  comentariosAprobador: text("comentarios_aprobador"),
+  
+  // Control
+  notasInternas: text("notas_internas"), // Notas de RH
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  // Indexes for common queries filtering by employee, date, and status
+  empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
+  empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
+  empleadoTipoIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_tipo_idx ON ${table} (empleado_id, tipo_permiso)`,
+}));
+
+// ============================================================================
+// INSERT SCHEMAS Y VALIDACIONES
+// ============================================================================
+
+export const insertSolicitudVacacionesSchema = createInsertSchema(solicitudesVacaciones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  fechaSolicitud: true,
+}).extend({
+  diasSolicitados: z.coerce.number().int().positive("Debe solicitar al menos 1 día"),
+  diasLegalesCorresponden: z.union([z.coerce.number().int().positive(), z.literal("").transform(() => undefined)]).optional(),
+  primaVacacional: z.union([z.string().transform((v) => (v === "" ? undefined : v)), z.number(), z.undefined()]).optional(),
+  fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
+  fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
+  estatus: z.enum(["pendiente", "aprobada", "rechazada", "cancelada"]).default("pendiente"),
+}).refine(
+  (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
+  {
+    message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+    path: ["fechaFin"],
+  }
+);
+
+export const insertIncapacidadSchema = createInsertSchema(incapacidades).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipo: z.enum(["enfermedad_general", "riesgo_trabajo", "maternidad"], {
+    errorMap: () => ({ message: "Tipo de incapacidad inválido" }),
+  }),
+  diasIncapacidad: z.coerce.number().int().positive("Debe tener al menos 1 día de incapacidad"),
+  porcentajePago: z.union([z.coerce.number().int().min(0).max(100), z.literal("").transform(() => undefined)]).optional(),
+  fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
+  fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
+  estatus: z.enum(["activa", "cerrada", "rechazada_imss"]).default("activa"),
+}).refine(
+  (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
+  {
+    message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+    path: ["fechaFin"],
+  }
+);
+
+export const insertSolicitudPermisoSchema = createInsertSchema(solicitudesPermisos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  fechaSolicitud: true,
+}).extend({
+  tipoPermiso: z.enum(["personal", "defuncion", "matrimonio", "paternidad", "medico", "tramite", "otro"], {
+    errorMap: () => ({ message: "Tipo de permiso inválido" }),
+  }),
+  diasSolicitados: z.union([z.string().transform((v) => (v === "" ? undefined : v)), z.number(), z.undefined()]).refine(
+    (val) => val === undefined || Number(val) > 0,
+    "Debe solicitar al menos 0.5 días"
+  ),
+  horasPermiso: z.union([z.string().transform((v) => (v === "" ? undefined : v)), z.number(), z.undefined()]).optional(),
+  fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
+  fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
+  estatus: z.enum(["pendiente", "aprobada", "rechazada", "cancelada"]).default("pendiente"),
+}).refine(
+  (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
+  {
+    message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+    path: ["fechaFin"],
+  }
+);
+
+// ============================================================================
+// EXPORT TYPES
+// ============================================================================
+
+export type SolicitudVacaciones = typeof solicitudesVacaciones.$inferSelect;
+export type InsertSolicitudVacaciones = z.infer<typeof insertSolicitudVacacionesSchema>;
+
+export type Incapacidad = typeof incapacidades.$inferSelect;
+export type InsertIncapacidad = z.infer<typeof insertIncapacidadSchema>;
+
+export type SolicitudPermiso = typeof solicitudesPermisos.$inferSelect;
+export type InsertSolicitudPermiso = z.infer<typeof insertSolicitudPermisoSchema>;

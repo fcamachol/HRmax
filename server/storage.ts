@@ -69,6 +69,12 @@ import {
   type InsertEvaluacion,
   type Oferta,
   type InsertOferta,
+  type SolicitudVacaciones,
+  type InsertSolicitudVacaciones,
+  type Incapacidad,
+  type InsertIncapacidad,
+  type SolicitudPermiso,
+  type InsertSolicitudPermiso,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -104,7 +110,10 @@ import {
   historialProcesoSeleccion,
   entrevistas,
   evaluaciones,
-  ofertas
+  ofertas,
+  solicitudesVacaciones,
+  incapacidades,
+  solicitudesPermisos
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -401,6 +410,35 @@ export interface IStorage {
   getOfertasByCandidato(candidatoId: string): Promise<Oferta[]>;
   updateOferta(id: string, updates: Partial<InsertOferta>): Promise<Oferta>;
   deleteOferta(id: string): Promise<void>;
+  
+  // Vacaciones (Vacation Management)
+  createSolicitudVacaciones(solicitud: InsertSolicitudVacaciones): Promise<SolicitudVacaciones>;
+  getSolicitudVacaciones(id: string): Promise<SolicitudVacaciones | undefined>;
+  getSolicitudesVacaciones(): Promise<SolicitudVacaciones[]>;
+  getSolicitudesVacacionesByEmpleado(empleadoId: string): Promise<SolicitudVacaciones[]>;
+  getSolicitudesVacacionesByEstatus(estatus: string): Promise<SolicitudVacaciones[]>;
+  updateSolicitudVacaciones(id: string, updates: Partial<InsertSolicitudVacaciones>): Promise<SolicitudVacaciones>;
+  deleteSolicitudVacaciones(id: string): Promise<void>;
+  
+  // Incapacidades (Sick Leave Management)
+  createIncapacidad(incapacidad: InsertIncapacidad): Promise<Incapacidad>;
+  getIncapacidad(id: string): Promise<Incapacidad | undefined>;
+  getIncapacidades(): Promise<Incapacidad[]>;
+  getIncapacidadesByEmpleado(empleadoId: string): Promise<Incapacidad[]>;
+  getIncapacidadesByTipo(tipo: string): Promise<Incapacidad[]>;
+  getIncapacidadesByEstatus(estatus: string): Promise<Incapacidad[]>;
+  updateIncapacidad(id: string, updates: Partial<InsertIncapacidad>): Promise<Incapacidad>;
+  deleteIncapacidad(id: string): Promise<void>;
+  
+  // Permisos (Permission Requests)
+  createSolicitudPermiso(solicitud: InsertSolicitudPermiso): Promise<SolicitudPermiso>;
+  getSolicitudPermiso(id: string): Promise<SolicitudPermiso | undefined>;
+  getSolicitudesPermisos(): Promise<SolicitudPermiso[]>;
+  getSolicitudesPermisosByEmpleado(empleadoId: string): Promise<SolicitudPermiso[]>;
+  getSolicitudesPermisosByEstatus(estatus: string): Promise<SolicitudPermiso[]>;
+  getSolicitudesPermisosByTipo(tipoPermiso: string): Promise<SolicitudPermiso[]>;
+  updateSolicitudPermiso(id: string, updates: Partial<InsertSolicitudPermiso>): Promise<SolicitudPermiso>;
+  deleteSolicitudPermiso(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2286,6 +2324,137 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOferta(id: string): Promise<void> {
     await db.delete(ofertas).where(eq(ofertas.id, id));
+  }
+
+  // ==================== Vacaciones (Vacation Management) ====================
+  
+  async createSolicitudVacaciones(solicitud: InsertSolicitudVacaciones): Promise<SolicitudVacaciones> {
+    const data = {
+      ...solicitud,
+      primaVacacional: solicitud.primaVacacional ? String(solicitud.primaVacacional) : undefined,
+    };
+    const [created] = await db.insert(solicitudesVacaciones).values(data).returning();
+    return created;
+  }
+
+  async getSolicitudVacaciones(id: string): Promise<SolicitudVacaciones | undefined> {
+    const [solicitud] = await db.select().from(solicitudesVacaciones).where(eq(solicitudesVacaciones.id, id));
+    return solicitud;
+  }
+
+  async getSolicitudesVacaciones(): Promise<SolicitudVacaciones[]> {
+    return db.select().from(solicitudesVacaciones).orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+  }
+
+  async getSolicitudesVacacionesByEmpleado(empleadoId: string): Promise<SolicitudVacaciones[]> {
+    return db.select().from(solicitudesVacaciones).where(eq(solicitudesVacaciones.empleadoId, empleadoId)).orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+  }
+
+  async getSolicitudesVacacionesByEstatus(estatus: string): Promise<SolicitudVacaciones[]> {
+    return db.select().from(solicitudesVacaciones).where(eq(solicitudesVacaciones.estatus, estatus)).orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+  }
+
+  async updateSolicitudVacaciones(id: string, updates: Partial<InsertSolicitudVacaciones>): Promise<SolicitudVacaciones> {
+    const data = {
+      ...updates,
+      primaVacacional: updates.primaVacacional !== undefined ? (updates.primaVacacional ? String(updates.primaVacacional) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(solicitudesVacaciones).set(data).where(eq(solicitudesVacaciones.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSolicitudVacaciones(id: string): Promise<void> {
+    await db.delete(solicitudesVacaciones).where(eq(solicitudesVacaciones.id, id));
+  }
+
+  // ==================== Incapacidades (Sick Leave Management) ====================
+  
+  async createIncapacidad(incapacidad: InsertIncapacidad): Promise<Incapacidad> {
+    const [created] = await db.insert(incapacidades).values(incapacidad).returning();
+    return created;
+  }
+
+  async getIncapacidad(id: string): Promise<Incapacidad | undefined> {
+    const [incapacidad] = await db.select().from(incapacidades).where(eq(incapacidades.id, id));
+    return incapacidad;
+  }
+
+  async getIncapacidades(): Promise<Incapacidad[]> {
+    return db.select().from(incapacidades).orderBy(desc(incapacidades.createdAt));
+  }
+
+  async getIncapacidadesByEmpleado(empleadoId: string): Promise<Incapacidad[]> {
+    return db.select().from(incapacidades).where(eq(incapacidades.empleadoId, empleadoId)).orderBy(desc(incapacidades.fechaInicio));
+  }
+
+  async getIncapacidadesByTipo(tipo: string): Promise<Incapacidad[]> {
+    return db.select().from(incapacidades).where(eq(incapacidades.tipo, tipo)).orderBy(desc(incapacidades.fechaInicio));
+  }
+
+  async getIncapacidadesByEstatus(estatus: string): Promise<Incapacidad[]> {
+    return db.select().from(incapacidades).where(eq(incapacidades.estatus, estatus)).orderBy(desc(incapacidades.fechaInicio));
+  }
+
+  async updateIncapacidad(id: string, updates: Partial<InsertIncapacidad>): Promise<Incapacidad> {
+    const data = {
+      ...updates,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(incapacidades).set(data).where(eq(incapacidades.id, id)).returning();
+    return updated;
+  }
+
+  async deleteIncapacidad(id: string): Promise<void> {
+    await db.delete(incapacidades).where(eq(incapacidades.id, id));
+  }
+
+  // ==================== Permisos (Permission Requests) ====================
+  
+  async createSolicitudPermiso(solicitud: InsertSolicitudPermiso): Promise<SolicitudPermiso> {
+    const data = {
+      ...solicitud,
+      diasSolicitados: String(solicitud.diasSolicitados),
+      horasPermiso: solicitud.horasPermiso ? String(solicitud.horasPermiso) : undefined,
+    };
+    const [created] = await db.insert(solicitudesPermisos).values(data).returning();
+    return created;
+  }
+
+  async getSolicitudPermiso(id: string): Promise<SolicitudPermiso | undefined> {
+    const [solicitud] = await db.select().from(solicitudesPermisos).where(eq(solicitudesPermisos.id, id));
+    return solicitud;
+  }
+
+  async getSolicitudesPermisos(): Promise<SolicitudPermiso[]> {
+    return db.select().from(solicitudesPermisos).orderBy(desc(solicitudesPermisos.fechaSolicitud));
+  }
+
+  async getSolicitudesPermisosByEmpleado(empleadoId: string): Promise<SolicitudPermiso[]> {
+    return db.select().from(solicitudesPermisos).where(eq(solicitudesPermisos.empleadoId, empleadoId)).orderBy(desc(solicitudesPermisos.fechaSolicitud));
+  }
+
+  async getSolicitudesPermisosByEstatus(estatus: string): Promise<SolicitudPermiso[]> {
+    return db.select().from(solicitudesPermisos).where(eq(solicitudesPermisos.estatus, estatus)).orderBy(desc(solicitudesPermisos.fechaSolicitud));
+  }
+
+  async getSolicitudesPermisosByTipo(tipoPermiso: string): Promise<SolicitudPermiso[]> {
+    return db.select().from(solicitudesPermisos).where(eq(solicitudesPermisos.tipoPermiso, tipoPermiso)).orderBy(desc(solicitudesPermisos.fechaSolicitud));
+  }
+
+  async updateSolicitudPermiso(id: string, updates: Partial<InsertSolicitudPermiso>): Promise<SolicitudPermiso> {
+    const data = {
+      ...updates,
+      diasSolicitados: updates.diasSolicitados !== undefined ? String(updates.diasSolicitados) : undefined,
+      horasPermiso: updates.horasPermiso !== undefined ? (updates.horasPermiso ? String(updates.horasPermiso) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(solicitudesPermisos).set(data).where(eq(solicitudesPermisos.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSolicitudPermiso(id: string): Promise<void> {
+    await db.delete(solicitudesPermisos).where(eq(solicitudesPermisos.id, id));
   }
 }
 
