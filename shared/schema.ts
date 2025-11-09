@@ -1290,6 +1290,7 @@ export const vacantes = pgTable("vacantes", {
   prioridad: varchar("prioridad").notNull().default("media"), // baja, media, alta, urgente
   fechaApertura: date("fecha_apertura").notNull().default(sql`CURRENT_DATE`),
   fechaLimite: date("fecha_limite"),
+  fechaSolicitud: date("fecha_solicitud").notNull().default(sql`CURRENT_DATE`), // Fecha en que se solicitó la vacante
   estatus: varchar("estatus").notNull().default("abierta"), // abierta, pausada, cerrada, cancelada
   tipoContrato: varchar("tipo_contrato").default("indeterminado"),
   modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
