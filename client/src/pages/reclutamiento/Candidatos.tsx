@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import { Plus, Search, UserPlus, MoreVertical, Mail, Phone } from "lucide-react"
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { type Candidato, type InsertCandidato } from "@shared/schema";
+import { type Candidato, type InsertCandidato, type EtapaSeleccion, type InsertProcesoSeleccion, type ProcesoSeleccion, type Vacante } from "@shared/schema";
 import { CandidatoForm } from "@/components/reclutamiento/CandidatoForm";
 
 type CandidatoEstatus = "activo" | "contratado" | "descartado" | "inactivo";
@@ -50,13 +50,80 @@ export default function Candidatos() {
     queryKey: ["/api/candidatos"],
   });
 
+  // Cargar etapas de selección para obtener la etapa inicial
+  const { data: etapas = [] } = useQuery<EtapaSeleccion[]>({
+    queryKey: ["/api/etapas-seleccion"],
+  });
+
+  // Cargar procesos de selección para mostrar vacantes vinculadas
+  const { data: procesoSeleccion = [] } = useQuery<ProcesoSeleccion[]>({
+    queryKey: ["/api/proceso-seleccion"],
+  });
+
+  // Cargar vacantes para mostrar títulos
+  const { data: vacantes = [] } = useQuery<Vacante[]>({
+    queryKey: ["/api/vacantes"],
+  });
+
   const createCandidatoMutation = useMutation({
-    mutationFn: async (data: InsertCandidato) => {
-      const response = await apiRequest("POST", "/api/candidatos", data);
-      return response.json();
+    mutationFn: async (data: InsertCandidato & { vacanteId?: string }) => {
+      // Separar vacanteId del resto de los datos del candidato
+      const { vacanteId, ...candidatoData } = data;
+      
+      // Si se va a vincular a una vacante, obtener la etapa inicial ANTES de crear el candidato
+      let etapaInicialId: string | null = null;
+      if (vacanteId && vacanteId !== "") {
+        // Fetch etapas si aún no están cargadas
+        let etapasActuales = etapas;
+        if (etapasActuales.length === 0) {
+          const etapasResponse = await apiRequest("GET", "/api/etapas-seleccion", {});
+          etapasActuales = await etapasResponse.json();
+        }
+
+        const etapaInicial = etapasActuales.find(e => e.orden === 1);
+        if (!etapaInicial) {
+          throw new Error("No se encontró la etapa inicial de selección. Por favor contacta al administrador para inicializar las etapas.");
+        }
+        etapaInicialId = etapaInicial.id;
+      }
+      
+      // Crear el candidato
+      const candidatoResponse = await apiRequest("POST", "/api/candidatos", candidatoData);
+      const candidato = await candidatoResponse.json();
+
+      // Si se seleccionó una vacante, crear el procesoSeleccion
+      if (vacanteId && vacanteId !== "" && etapaInicialId) {
+        const procesoData: InsertProcesoSeleccion = {
+          candidatoId: candidato.id,
+          vacanteId: vacanteId,
+          etapaActualId: etapaInicialId,
+          estatus: "activo",
+        };
+
+        try {
+          await apiRequest("POST", "/api/proceso-seleccion", procesoData);
+        } catch (error: any) {
+          // Nota: En caso de falla aquí, el candidato ya fue creado.
+          // Para MVP esto es aceptable - el usuario puede vincular manualmente después.
+          // Para producción, considerar endpoint backend que maneje ambas operaciones en transacción.
+          
+          // Informar al usuario que el candidato fue creado pero no vinculado
+          toast({
+            title: "Candidato creado con advertencia",
+            description: "El candidato fue creado pero no se pudo vincular a la vacante. Puedes vincularlo manualmente desde la página de Vacantes.",
+            variant: "default",
+          });
+          
+          console.error("Error al crear proceso de selección:", error);
+          // No re-lanzar el error para que la creación del candidato se considere exitosa
+        }
+      }
+
+      return candidato;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/candidatos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/proceso-seleccion"] });
       setIsFormOpen(false);
       setEditingCandidato(null);
       toast({
@@ -203,6 +270,18 @@ export default function Candidatos() {
     );
   };
 
+  // Precalcular mapa de candidatoId → Vacante para evitar O(n²) en render
+  const candidatoVacanteMap = useMemo(() => {
+    const map = new Map<string, Vacante>();
+    procesoSeleccion.forEach(proceso => {
+      const vacante = vacantes.find(v => v.id === proceso.vacanteId);
+      if (vacante) {
+        map.set(proceso.candidatoId, vacante);
+      }
+    });
+    return map;
+  }, [procesoSeleccion, vacantes]);
+
   const getInitials = (nombre: string, apellidoPaterno: string) => {
     return `${nombre.charAt(0)}${apellidoPaterno.charAt(0)}`.toUpperCase();
   };
@@ -290,6 +369,7 @@ export default function Candidatos() {
                 <TableRow>
                   <TableHead>Candidato</TableHead>
                   <TableHead>Puesto Deseado</TableHead>
+                  <TableHead>Vacante Vinculada</TableHead>
                   <TableHead>Experiencia</TableHead>
                   <TableHead>Contacto</TableHead>
                   <TableHead>Fuente</TableHead>
@@ -301,13 +381,13 @@ export default function Candidatos() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       Cargando candidatos...
                     </TableCell>
                   </TableRow>
                 ) : filteredCandidatos.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <UserPlus className="h-8 w-8 text-muted-foreground/50" />
                         <p>No se encontraron candidatos</p>
@@ -353,6 +433,19 @@ export default function Candidatos() {
                         {candidato.puestoDeseado || (
                           <span className="text-muted-foreground">No especificado</span>
                         )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {(() => {
+                          const vacante = candidatoVacanteMap.get(candidato.id);
+                          return vacante ? (
+                            <div data-testid={`text-vacante-${candidato.id}`}>
+                              <div className="font-medium">{vacante.titulo}</div>
+                              <div className="text-xs text-muted-foreground">{vacante.departamento}</div>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">Sin vacante</span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-sm">
                         {candidato.experienciaAnios !== null ? (

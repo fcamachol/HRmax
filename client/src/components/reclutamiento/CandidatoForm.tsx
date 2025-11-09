@@ -30,7 +30,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { useState, useEffect, useMemo } from "react";
-import { insertCandidatoSchema, type Candidato, type InsertCandidato } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { insertCandidatoSchema, type Candidato, type InsertCandidato, type Vacante } from "@shared/schema";
 
 const candidatoFormSchema = insertCandidatoSchema.extend({
   salarioDeseado: z.union([
@@ -41,6 +42,7 @@ const candidatoFormSchema = insertCandidatoSchema.extend({
     z.coerce.number().int().nonnegative(),
     z.literal("").transform(() => undefined)
   ]).optional(),
+  vacanteId: z.string().optional(), // Campo extra para vincular a vacante
 });
 
 type CandidatoFormValues = z.infer<typeof candidatoFormSchema>;
@@ -49,7 +51,7 @@ interface CandidatoFormProps {
   candidato?: Candidato | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: InsertCandidato) => void;
+  onSubmit: (data: InsertCandidato & { vacanteId?: string }) => void;
   isPending?: boolean;
 }
 
@@ -96,6 +98,12 @@ const nivelesIdioma = [
 export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPending }: CandidatoFormProps) {
   const [newCompetencia, setNewCompetencia] = useState("");
   const [newIdioma, setNewIdioma] = useState({ idioma: "", nivel: "basico" });
+
+  // Cargar vacantes activas para el selector
+  const { data: vacantes = [] } = useQuery<Vacante[]>({
+    queryKey: ["/api/vacantes/activas"],
+    enabled: open, // Solo cargar cuando el diálogo esté abierto
+  });
 
   const buildDefaultValues = useMemo((): Partial<CandidatoFormValues> => {
     if (!candidato) {
@@ -164,17 +172,30 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
   }, [candidato, buildDefaultValues, form]);
 
   const handleSubmit = (data: CandidatoFormValues) => {
+    // Separar vacanteId antes de procesar
+    const { vacanteId, ...candidatoData } = data;
+
     const submitData = {
-      ...data,
-      salarioDeseado: data.salarioDeseado !== undefined ? String(data.salarioDeseado) : undefined,
-      experienciaAnios: data.experienciaAnios,
+      ...candidatoData,
+      salarioDeseado: candidatoData.salarioDeseado !== undefined ? String(candidatoData.salarioDeseado) : undefined,
+      experienciaAnios: candidatoData.experienciaAnios,
     };
 
-    const cleanedData = Object.fromEntries(
+    // Limpiar undefined values del candidato
+    const cleanedCandidatoData = Object.fromEntries(
       Object.entries(submitData).filter(([_, v]) => v !== undefined)
     ) as InsertCandidato;
 
-    onSubmit(cleanedData);
+    // Normalizar vacanteId: string vacía → undefined, valor real → mantener
+    const normalizedVacanteId = vacanteId && vacanteId.trim() !== "" ? vacanteId : undefined;
+
+    // Agregar vacanteId normalizado solo si tiene valor
+    const finalData: InsertCandidato & { vacanteId?: string } = {
+      ...cleanedCandidatoData,
+      ...(normalizedVacanteId && { vacanteId: normalizedVacanteId }),
+    };
+
+    onSubmit(finalData);
   };
 
   const addCompetencia = () => {
@@ -481,6 +502,42 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
                     )}
                   />
                 </div>
+
+                {/* Selector de Vacante */}
+                <FormField
+                  control={form.control}
+                  name="vacanteId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vacante (Opcional)</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value ?? ""}
+                        disabled={!!candidato} // Read-only cuando se edita
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-vacante">
+                            <SelectValue placeholder="Seleccionar vacante..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Ninguna (Candidato de banco)</SelectItem>
+                          {vacantes.map((vacante) => (
+                            <SelectItem key={vacante.id} value={vacante.id}>
+                              {vacante.titulo} - {vacante.departamento}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {candidato && (
+                        <p className="text-xs text-muted-foreground">
+                          Para cambiar la vacante vinculada, usa la página de Vacantes o Proceso de Selección
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
