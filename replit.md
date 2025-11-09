@@ -26,6 +26,9 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
 *   **Grupos de Nómina (Payroll Groups)**: Allows defining configurable payroll groups with different payment frequencies (weekly, biweekly, twice monthly, monthly). It features automatic generation of payroll periods for the current and next year, ensuring full year coverage. Employees can be assigned to specific payroll groups.
 *   **Payroll Module (Nómina)**: Provides interfaces for creating and managing payroll, dynamically selecting payroll groups, and ensuring data consistency via API integration.
 *   **Attendance Module (Asistencia)**: Redesigned for period-based tracking, allowing mass incident capture (absences, tardiness, overtime, medical leave, etc.) in an Excel-like grid. Features dual filtering by work center and payroll group, and smart period selection.
+*   **Recruitment & Selection Module (Reclutamiento y Selección)**:
+    *   **Vacantes (Job Openings)**: Full CRUD interface with dialog form capturing requisitos, salario, ubicación, fecha solicitud, and status management. Table displays key info with date tracking (fecha solicitud always shown, última modificación when updated). Features search, filters, and quick-access requisitos detail dialog.
+    *   **Candidatos (Candidates)**: Comprehensive candidate database with 4-tab form (General info, Professional profile, Education & Skills, Documents & Notes). Table displays avatar, full name, desired position, years of experience, contact info (email/phone stacked), source badge, status badge, and registration date. Features search (by name, email, phone, position), filters (status, source), and status management actions (activo, contratado, descartado, inactivo). Supports dynamic skill chips, language proficiency tracking, and referral tracking.
 
 ## External Dependencies
 
