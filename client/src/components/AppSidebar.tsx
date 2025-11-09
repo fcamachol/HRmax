@@ -68,6 +68,11 @@ const employeeSubItems = [
 
 const payrollSubItems = [
   {
+    title: "Incidencias",
+    url: "/attendance",
+    icon: Calendar,
+  },
+  {
     title: "Crear Nómina",
     url: "/payroll",
     icon: Calculator,
@@ -84,11 +89,6 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Asistencia",
-    url: "/attendance",
-    icon: Calendar,
   },
   {
     title: "Centros de Trabajo",
@@ -130,7 +130,7 @@ const mainMenuItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const isEmployeesActive = location.startsWith("/employees");
-  const isPayrollActive = location.startsWith("/payroll");
+  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance");
 
   return (
     <Sidebar>
