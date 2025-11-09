@@ -1083,7 +1083,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                             />
                           </FormControl>
                           <FormDescription>
-                            Número de horas de guardia por semana o mes
+                            Número de horas de guardia por semana
                           </FormDescription>
                           <FormMessage />
                         </FormItem>

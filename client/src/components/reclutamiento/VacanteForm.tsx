@@ -1203,7 +1203,7 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
                       />
                     </FormControl>
                     <FormDescription>
-                      Número de horas de guardia por semana o mes
+                      Número de horas de guardia por semana
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
