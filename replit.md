@@ -50,3 +50,21 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
 
 ### Object Storage
 *   **Replit Object Storage**: For document and file uploads.
+
+## Component Documentation
+
+### CreateGrupoNominaDialog - Professional Employee Selection
+**Location**: `client/src/components/CreateGrupoNominaDialog.tsx`
+
+Dual-mode component for creating and editing payroll groups with professional table-based employee selection interface.
+
+**Key Features**:
+- **Table Layout**: Similar to Payroll page with columns for Checkbox, Employee Name, and Assigned Group
+- **Employee Display**: Shows "Apellido Paterno Apellido Materno Nombre(s)" (employee number/clave not shown)
+- **Smart Ordering**: Unassigned employees first, then alphabetically by apellidos, employees assigned to other groups at the end
+- **Search Functionality**: Real-time filtering by nombre or apellidos with visual Search icon
+- **Bulk Selection**: "Seleccionar Todos" and "Deseleccionar Todos" buttons with header checkbox
+- **Selection Preservation**: Critical fix - selections persist across search filters using union-based selection (not replacement)
+- **Group Display**: Shows actual group name for employees assigned to other groups, "Este grupo" badge for current group, or "Sin asignar"
+- **Visual Feedback**: Selected rows highlighted with bg-muted/30, counter badge showing "X de Y seleccionados"
+- **Data Sources**: Loads employees from /api/employees and grupos-nomina from /api/grupos-nomina

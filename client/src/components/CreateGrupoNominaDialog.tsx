@@ -21,8 +21,16 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
-import { X } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Search } from "lucide-react";
 
 type GrupoNomina = {
   id: string;
@@ -72,10 +80,16 @@ export function CreateGrupoNominaDialog({
   const [newGroupDiasCalculo, setNewGroupDiasCalculo] = useState<number>(2);
   const [newGroupDescripcion, setNewGroupDescripcion] = useState("");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Cargar empleados
+  // Cargar empleados y grupos de nómina
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+    enabled: open,
+  });
+
+  const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
+    queryKey: ["/api/grupos-nomina"],
     enabled: open,
   });
 
@@ -89,7 +103,58 @@ export function CreateGrupoNominaDialog({
     setNewGroupDiasCalculo(2);
     setNewGroupDescripcion("");
     setSelectedEmployeeIds([]);
+    setSearchTerm("");
   };
+
+  // Filtrar y ordenar empleados
+  const filteredAndSortedEmployees = employees
+    .filter(emp => {
+      if (!searchTerm) return true;
+      const fullName = `${emp.apellidoPaterno} ${emp.apellidoMaterno || ""} ${emp.nombre}`.toLowerCase();
+      return fullName.includes(searchTerm.toLowerCase());
+    })
+    .sort((a, b) => {
+      // Primero, separar empleados asignados a otros grupos (al final)
+      const aAssignedToOther = a.grupoNominaId && a.grupoNominaId !== grupoToEdit?.id;
+      const bAssignedToOther = b.grupoNominaId && b.grupoNominaId !== grupoToEdit?.id;
+      
+      if (aAssignedToOther && !bAssignedToOther) return 1;
+      if (!aAssignedToOther && bAssignedToOther) return -1;
+      
+      // Luego ordenar por apellido paterno, materno, nombre
+      const comparePaterno = a.apellidoPaterno.localeCompare(b.apellidoPaterno, 'es');
+      if (comparePaterno !== 0) return comparePaterno;
+      
+      const compareMaterno = (a.apellidoMaterno || "").localeCompare(b.apellidoMaterno || "", 'es');
+      if (compareMaterno !== 0) return compareMaterno;
+      
+      return a.nombre.localeCompare(b.nombre, 'es');
+    });
+
+  // Funciones de selección
+  const toggleEmployee = (employeeId: string) => {
+    if (selectedEmployeeIds.includes(employeeId)) {
+      setSelectedEmployeeIds(selectedEmployeeIds.filter(id => id !== employeeId));
+    } else {
+      setSelectedEmployeeIds([...selectedEmployeeIds, employeeId]);
+    }
+  };
+
+  const selectAll = () => {
+    // Merge filtered employees with existing selections (union)
+    const filteredIds = filteredAndSortedEmployees.map(emp => emp.id);
+    const mergedIds = Array.from(new Set([...selectedEmployeeIds, ...filteredIds]));
+    setSelectedEmployeeIds(mergedIds);
+  };
+
+  const deselectAll = () => {
+    // Remove only filtered employees from selection, keep others
+    const filteredIds = new Set(filteredAndSortedEmployees.map(emp => emp.id));
+    setSelectedEmployeeIds(selectedEmployeeIds.filter(id => !filteredIds.has(id)));
+  };
+
+  const allSelected = filteredAndSortedEmployees.length > 0 && 
+    filteredAndSortedEmployees.every(emp => selectedEmployeeIds.includes(emp.id));
 
   // Cargar datos del grupo cuando está en modo edición
   useEffect(() => {
@@ -338,46 +403,121 @@ export function CreateGrupoNominaDialog({
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Label>Empleados del Grupo</Label>
-            <div className="rounded-md border p-4 max-h-60 overflow-y-auto">
+            
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar empleado por nombre o apellido..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-employee"
+              />
+            </div>
+
+            {/* Controles de selección */}
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={selectAll}
+                disabled={filteredAndSortedEmployees.length === 0}
+                data-testid="button-select-all-employees"
+              >
+                Seleccionar Todos
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={deselectAll}
+                disabled={selectedEmployeeIds.length === 0}
+                data-testid="button-deselect-all-employees"
+              >
+                Deseleccionar Todos
+              </Button>
+              <div className="flex-1" />
+              <Badge variant="secondary" data-testid="badge-selected-count">
+                {selectedEmployeeIds.length} de {employees.length} seleccionados
+              </Badge>
+            </div>
+
+            {/* Tabla de empleados */}
+            <div className="rounded-md border max-h-80 overflow-y-auto">
               {employees.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No hay empleados disponibles</p>
-              ) : (
-                <div className="space-y-2">
-                  {employees.map((employee) => (
-                    <div key={employee.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`employee-${employee.id}`}
-                        checked={selectedEmployeeIds.includes(employee.id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setSelectedEmployeeIds([...selectedEmployeeIds, employee.id]);
-                          } else {
-                            setSelectedEmployeeIds(selectedEmployeeIds.filter(id => id !== employee.id));
-                          }
-                        }}
-                        data-testid={`checkbox-employee-${employee.id}`}
-                      />
-                      <Label
-                        htmlFor={`employee-${employee.id}`}
-                        className="text-sm font-normal cursor-pointer flex-1"
-                      >
-                        {employee.numeroEmpleado} - {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ""}
-                        {employee.grupoNominaId && employee.grupoNominaId !== grupoToEdit?.id && (
-                          <Badge variant="secondary" className="ml-2 text-xs">
-                            Asignado a otro grupo
-                          </Badge>
-                        )}
-                      </Label>
-                    </div>
-                  ))}
+                <div className="p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No hay empleados disponibles</p>
                 </div>
+              ) : filteredAndSortedEmployees.length === 0 ? (
+                <div className="p-8 text-center">
+                  <p className="text-sm text-muted-foreground">No se encontraron empleados con ese criterio de búsqueda</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={allSelected}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              selectAll();
+                            } else {
+                              deselectAll();
+                            }
+                          }}
+                          data-testid="checkbox-select-all-header"
+                        />
+                      </TableHead>
+                      <TableHead>Empleado</TableHead>
+                      <TableHead>Grupo Asignado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredAndSortedEmployees.map((employee) => {
+                      const assignedGroup = employee.grupoNominaId 
+                        ? gruposNomina.find(g => g.id === employee.grupoNominaId)
+                        : null;
+                      const isAssignedToOtherGroup = assignedGroup && assignedGroup.id !== grupoToEdit?.id;
+                      
+                      return (
+                        <TableRow 
+                          key={employee.id}
+                          className={selectedEmployeeIds.includes(employee.id) ? "bg-muted/30" : ""}
+                          data-testid={`row-employee-${employee.id}`}
+                        >
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedEmployeeIds.includes(employee.id)}
+                              onCheckedChange={() => toggleEmployee(employee.id)}
+                              data-testid={`checkbox-employee-${employee.id}`}
+                            />
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {employee.apellidoPaterno} {employee.apellidoMaterno || ""} {employee.nombre}
+                          </TableCell>
+                          <TableCell>
+                            {isAssignedToOtherGroup ? (
+                              <Badge variant="secondary" className="text-xs">
+                                {assignedGroup.nombre}
+                              </Badge>
+                            ) : assignedGroup && assignedGroup.id === grupoToEdit?.id ? (
+                              <Badge variant="outline" className="text-xs">
+                                Este grupo
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Sin asignar</span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Selecciona los empleados que pertenecen a este grupo de nómina ({selectedEmployeeIds.length} seleccionados)
-            </p>
           </div>
           
           <div className="rounded-md border p-4 bg-muted/30">
