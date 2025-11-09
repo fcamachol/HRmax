@@ -1,0 +1,239 @@
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, Search, MoreVertical } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import type { Puesto } from "@shared/schema";
+import { PuestoQuickView } from "@/components/PuestoQuickView";
+import { PuestoDetailView } from "@/components/PuestoDetailView";
+
+export default function Puestos() {
+  const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "quick" | "detail">("list");
+  const [selectedPuestoId, setSelectedPuestoId] = useState<string | null>(null);
+
+  const { data: puestos = [], isLoading } = useQuery<Puesto[]>({
+    queryKey: ["/api/puestos"],
+  });
+
+  const { data: employeeCounts = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/puestos/employees/counts"],
+  });
+
+  const filteredPuestos = puestos.filter((puesto) =>
+    search === ""
+      ? true
+      : puesto.nombrePuesto.toLowerCase().includes(search.toLowerCase()) ||
+        puesto.clavePuesto.toLowerCase().includes(search.toLowerCase()) ||
+        puesto.departamento?.toLowerCase().includes(search.toLowerCase()) ||
+        puesto.area?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const selectedPuesto = puestos.find((p) => p.id === selectedPuestoId);
+
+  const handleViewPuesto = (id: string) => {
+    setSelectedPuestoId(id);
+    setViewMode("quick");
+  };
+
+  const handleViewDetails = () => {
+    setViewMode("detail");
+  };
+
+  const handleBackToQuickView = () => {
+    setViewMode("quick");
+  };
+
+  const handleCloseViews = () => {
+    setViewMode("list");
+    setSelectedPuestoId(null);
+  };
+
+  const getEmployeeCount = (puestoId: string) => {
+    return employeeCounts[puestoId] ?? 0;
+  };
+
+  const formatCurrency = (amount: number | undefined) => {
+    if (!amount) return "No especificado";
+    return new Intl.NumberFormat("es-MX", {
+      style: "currency",
+      currency: "MXN",
+    }).format(amount);
+  };
+
+  if (viewMode === "quick" && selectedPuesto) {
+    return (
+      <PuestoQuickView
+        puesto={selectedPuesto}
+        employeeCount={getEmployeeCount(selectedPuesto.id)}
+        onViewDetails={handleViewDetails}
+        onClose={handleCloseViews}
+      />
+    );
+  }
+
+  if (viewMode === "detail" && selectedPuesto) {
+    return (
+      <PuestoDetailView
+        puesto={selectedPuesto}
+        onBackToQuickView={handleBackToQuickView}
+        onClose={handleCloseViews}
+      />
+    );
+  }
+
+  return (
+    <div className="p-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold" data-testid="text-page-heading">
+          Puestos
+        </h1>
+        <p className="text-muted-foreground" data-testid="text-page-description">
+          Gestiona las descripciones de puesto de la organización
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4 flex-1 max-w-md">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre, clave, área o departamento..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              data-testid="input-search"
+            />
+          </div>
+        </div>
+        <Button data-testid="button-create-puesto">
+          <Plus className="h-4 w-4 mr-2" />
+          Nuevo Puesto
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Cargando puestos...</p>
+        </div>
+      ) : filteredPuestos.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg">
+          <p className="text-muted-foreground">
+            {search
+              ? "No se encontraron puestos con ese criterio"
+              : "No hay puestos registrados"}
+          </p>
+        </div>
+      ) : (
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Clave</TableHead>
+                <TableHead>Nombre del Puesto</TableHead>
+                <TableHead>Área / Departamento</TableHead>
+                <TableHead>Nivel Jerárquico</TableHead>
+                <TableHead># Empleados</TableHead>
+                <TableHead>Rango Salarial</TableHead>
+                <TableHead>Estatus</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredPuestos.map((puesto) => {
+                const compensacion = puesto.compensacionYPrestaciones as any;
+                return (
+                  <TableRow key={puesto.id} data-testid={`row-puesto-${puesto.id}`}>
+                    <TableCell className="font-medium">
+                      {puesto.clavePuesto}
+                    </TableCell>
+                    <TableCell>{puesto.nombrePuesto}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        {puesto.area && (
+                          <span className="text-sm">{puesto.area}</span>
+                        )}
+                        {puesto.departamento && (
+                          <span className="text-sm text-muted-foreground">
+                            {puesto.departamento}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {puesto.nivelJerarquico || "No especificado"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{getEmployeeCount(puesto.id)}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {compensacion?.rangoSalarialMin && compensacion?.rangoSalarialMax
+                        ? `${formatCurrency(compensacion.rangoSalarialMin)} - ${formatCurrency(compensacion.rangoSalarialMax)}`
+                        : "No especificado"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          puesto.estatus === "activo" ? "default" : "secondary"
+                        }
+                      >
+                        {puesto.estatus === "activo" ? "Activo" : "Inactivo"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`button-actions-${puesto.id}`}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onClick={() => handleViewPuesto(puesto.id)}
+                            data-testid={`button-view-${puesto.id}`}
+                          >
+                            Ver detalles
+                          </DropdownMenuItem>
+                          <DropdownMenuItem data-testid={`button-edit-${puesto.id}`}>
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            data-testid={`button-delete-${puesto.id}`}
+                          >
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}

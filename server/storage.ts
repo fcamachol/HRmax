@@ -53,6 +53,8 @@ import {
   type InsertPrestamoInterno,
   type PagoCreditoDescuento,
   type InsertPagoCreditoDescuento,
+  type Puesto,
+  type InsertPuesto,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -79,7 +81,8 @@ import {
   avisosREPSE,
   creditosLegales,
   prestamosInternos,
-  pagosCreditosDescuentos
+  pagosCreditosDescuentos,
+  puestos
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -303,6 +306,19 @@ export interface IStorage {
   getPagosCreditosDescuentosByCreditoLegal(creditoLegalId: string): Promise<PagoCreditoDescuento[]>;
   getPagosCreditosDescuentosByPrestamoInterno(prestamoInternoId: string): Promise<PagoCreditoDescuento[]>;
   deletePagoCreditoDescuento(id: string): Promise<void>;
+  
+  // Puestos (Organización)
+  createPuesto(puesto: InsertPuesto): Promise<Puesto>;
+  getPuesto(id: string): Promise<Puesto | undefined>;
+  getPuestos(): Promise<Puesto[]>;
+  getPuestosByClavePuesto(clavePuesto: string): Promise<Puesto | undefined>;
+  getPuestosByDepartamento(departamento: string): Promise<Puesto[]>;
+  getPuestosActivos(): Promise<Puesto[]>;
+  updatePuesto(id: string, updates: Partial<InsertPuesto>): Promise<Puesto>;
+  deletePuesto(id: string): Promise<void>;
+  getEmployeeCountByPuesto(puestoId: string): Promise<number>;
+  getEmployeesByPuesto(puestoId: string): Promise<Employee[]>;
+  getAllEmployeeCountsByPuesto(): Promise<Record<string, number>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1853,6 +1869,70 @@ export class DatabaseStorage implements IStorage {
 
   async deletePagoCreditoDescuento(id: string): Promise<void> {
     await db.delete(pagosCreditosDescuentos).where(eq(pagosCreditosDescuentos.id, id));
+  }
+
+  // Puestos (Organización)
+  async createPuesto(puesto: InsertPuesto): Promise<Puesto> {
+    const [created] = await db.insert(puestos).values(puesto).returning();
+    return created;
+  }
+
+  async getPuesto(id: string): Promise<Puesto | undefined> {
+    const [puesto] = await db.select().from(puestos).where(eq(puestos.id, id));
+    return puesto;
+  }
+
+  async getPuestos(): Promise<Puesto[]> {
+    return db.select().from(puestos).orderBy(puestos.nombrePuesto);
+  }
+
+  async getPuestosByClavePuesto(clavePuesto: string): Promise<Puesto | undefined> {
+    const [puesto] = await db.select().from(puestos).where(eq(puestos.clavePuesto, clavePuesto));
+    return puesto;
+  }
+
+  async getPuestosByDepartamento(departamento: string): Promise<Puesto[]> {
+    return db.select().from(puestos).where(eq(puestos.departamento, departamento)).orderBy(puestos.nombrePuesto);
+  }
+
+  async getPuestosActivos(): Promise<Puesto[]> {
+    return db.select().from(puestos).where(eq(puestos.estatus, "activo")).orderBy(puestos.nombrePuesto);
+  }
+
+  async updatePuesto(id: string, updates: Partial<InsertPuesto>): Promise<Puesto> {
+    const [updated] = await db.update(puestos).set({
+      ...updates,
+      ultimaActualizacion: new Date(),
+    }).where(eq(puestos.id, id)).returning();
+    return updated;
+  }
+
+  async deletePuesto(id: string): Promise<void> {
+    await db.delete(puestos).where(eq(puestos.id, id));
+  }
+
+  async getEmployeeCountByPuesto(puestoId: string): Promise<number> {
+    const empleados = await db.select().from(employees).where(eq(employees.puestoId, puestoId));
+    return empleados.length;
+  }
+
+  async getEmployeesByPuesto(puestoId: string): Promise<Employee[]> {
+    return db.select().from(employees).where(eq(employees.puestoId, puestoId));
+  }
+
+  async getAllEmployeeCountsByPuesto(): Promise<Record<string, number>> {
+    const allEmployees = await db.select({
+      puestoId: employees.puestoId
+    }).from(employees);
+
+    const counts: Record<string, number> = {};
+    allEmployees.forEach((emp) => {
+      if (emp.puestoId) {
+        counts[emp.puestoId] = (counts[emp.puestoId] || 0) + 1;
+      }
+    });
+    
+    return counts;
   }
 }
 

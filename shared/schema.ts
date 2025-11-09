@@ -76,7 +76,7 @@ export const employees = pgTable("employees", {
   documentoContratoId: varchar("documento_contrato_id"),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-  puestoId: varchar("puesto_id"),
+  puestoId: varchar("puesto_id"), // FK to puestos will be added later via migration
   esquemaContratacion: varchar("esquema_contratacion"),
   lugarNacimiento: varchar("lugar_nacimiento"),
   entidadNacimiento: varchar("entidad_nacimiento"),
@@ -1123,3 +1123,126 @@ export const insertPagoCreditoDescuentoSchema = createInsertSchema(pagosCreditos
 
 export type PagoCreditoDescuento = typeof pagosCreditosDescuentos.$inferSelect;
 export type InsertPagoCreditoDescuento = z.infer<typeof insertPagoCreditoDescuentoSchema>;
+
+// Puestos (Organización)
+export const puestos = pgTable("puestos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Identificación
+  clavePuesto: varchar("clave_puesto").notNull().unique(),
+  nombrePuesto: varchar("nombre_puesto").notNull(),
+  
+  // Ubicación Organizacional
+  area: varchar("area"),
+  departamento: varchar("departamento"),
+  ubicacion: varchar("ubicacion"),
+  nivelJerarquico: varchar("nivel_jerarquico"), // Operativo, Supervisor, Gerente, Director
+  tipoPuesto: varchar("tipo_puesto"), // Operativo, Administrativo, Directivo
+  
+  // Jerarquía
+  reportaA: varchar("reporta_a"), // ID del puesto superior (self-referencing, FK added after table definition)
+  puestosQueReportan: jsonb("puestos_que_reportan").default(sql`'[]'::jsonb`), // Array de IDs
+  
+  // Propósito y Funciones
+  propositoGeneral: text("proposito_general"),
+  funcionesPrincipales: jsonb("funciones_principales").default(sql`'[]'::jsonb`), // Array de strings
+  funcionesSecundarias: jsonb("funciones_secundarias").default(sql`'[]'::jsonb`), // Array de strings
+  autoridadYDecisiones: text("autoridad_y_decisiones"),
+  
+  // Relaciones - Array de objetos: [{ tipo, conQuien, proposito }]
+  relaciones: jsonb("relaciones").default(sql`'[]'::jsonb`),
+  
+  // Formación Académica - Objeto: { requerida, deseable }
+  formacionAcademica: jsonb("formacion_academica").default(sql`'{}'::jsonb`),
+  
+  // Experiencia Laboral - Objeto: { requerida, deseable }
+  experienciaLaboral: jsonb("experiencia_laboral").default(sql`'{}'::jsonb`),
+  
+  // Conocimientos y Competencias
+  conocimientosTecnicos: jsonb("conocimientos_tecnicos").default(sql`'[]'::jsonb`), // Array de strings
+  competenciasConductuales: jsonb("competencias_conductuales").default(sql`'[]'::jsonb`), // Array de strings
+  
+  // Idiomas - Array de objetos: [{ idioma, nivel }]
+  idiomas: jsonb("idiomas").default(sql`'[]'::jsonb`),
+  
+  // Certificaciones
+  certificaciones: jsonb("certificaciones").default(sql`'[]'::jsonb`), // Array de strings
+  
+  // Condiciones Laborales - Objeto con: horario, guardias, modalidad, requiereViaje, nivelEsfuerzoFisico, ambienteTrabajo
+  condicionesLaborales: jsonb("condiciones_laborales").default(sql`'{}'::jsonb`),
+  
+  // Compensación y Prestaciones - Objeto con: rangoSalarialMin, rangoSalarialMax, tipoPago, prestaciones[]
+  compensacionYPrestaciones: jsonb("compensacion_y_prestaciones").default(sql`'{}'::jsonb`),
+  
+  // Indicadores de Desempeño - Array de objetos: [{ indicador, metaSugerida }]
+  indicadoresDesempeno: jsonb("indicadores_desempeno").default(sql`'[]'::jsonb`),
+  
+  // Cumplimiento Legal - Objeto con: nomsAplicables[], nivelRiesgo, equipoProteccion
+  cumplimientoLegal: jsonb("cumplimiento_legal").default(sql`'{}'::jsonb`),
+  
+  // Estado
+  estatus: varchar("estatus").default("activo"), // activo, inactivo
+  
+  // Auditoría
+  fechaCreacion: timestamp("fecha_creacion").notNull().default(sql`now()`),
+  ultimaActualizacion: timestamp("ultima_actualizacion").notNull().default(sql`now()`),
+});
+
+export const insertPuestoSchema = createInsertSchema(puestos).omit({
+  id: true,
+  fechaCreacion: true,
+  ultimaActualizacion: true,
+}).extend({
+  estatus: z.enum(["activo", "inactivo"]).default("activo"),
+  puestosQueReportan: z.array(z.string()).default([]),
+  funcionesPrincipales: z.array(z.string()).default([]),
+  funcionesSecundarias: z.array(z.string()).default([]),
+  relaciones: z.array(z.object({
+    tipo: z.string(),
+    conQuien: z.string(),
+    proposito: z.string(),
+  })).default([]),
+  formacionAcademica: z.object({
+    requerida: z.string().optional(),
+    deseable: z.string().optional(),
+  }).default({}),
+  experienciaLaboral: z.object({
+    requerida: z.string().optional(),
+    deseable: z.string().optional(),
+  }).default({}),
+  conocimientosTecnicos: z.array(z.string()).default([]),
+  competenciasConductuales: z.array(z.string()).default([]),
+  idiomas: z.array(z.object({
+    idioma: z.string(),
+    nivel: z.string(),
+  })).default([]),
+  certificaciones: z.array(z.string()).default([]),
+  condicionesLaborales: z.object({
+    horario: z.string().optional(),
+    guardias: z.string().optional(),
+    modalidad: z.string().optional(),
+    requiereViaje: z.boolean().optional(),
+    nivelEsfuerzoFisico: z.string().optional(),
+    ambienteTrabajo: z.string().optional(),
+  }).default({}),
+  compensacionYPrestaciones: z.object({
+    rangoSalarialMin: z.number().optional(),
+    rangoSalarialMax: z.number().optional(),
+    tipoPago: z.string().optional(),
+    prestaciones: z.array(z.string()).optional(),
+  }).default({}),
+  indicadoresDesempeno: z.array(z.object({
+    indicador: z.string(),
+    metaSugerida: z.string(),
+  })).default([]),
+  cumplimientoLegal: z.object({
+    nomsAplicables: z.array(z.string()).optional(),
+    nivelRiesgo: z.string().optional(),
+    equipoProteccion: z.string().optional(),
+  }).default({}),
+});
+
+export const updatePuestoSchema = insertPuestoSchema.partial();
+
+export type Puesto = typeof puestos.$inferSelect;
+export type InsertPuesto = z.infer<typeof insertPuestoSchema>;

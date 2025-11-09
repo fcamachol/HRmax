@@ -44,7 +44,9 @@ import {
   updateCreditoLegalSchema,
   insertPrestamoInternoSchema,
   updatePrestamoInternoSchema,
-  insertPagoCreditoDescuentoSchema
+  insertPagoCreditoDescuentoSchema,
+  insertPuestoSchema,
+  updatePuestoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -1819,6 +1821,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deletePagoCreditoDescuento(req.params.id);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Puestos (Organización)
+  app.post("/api/puestos", async (req, res) => {
+    try {
+      const validated = insertPuestoSchema.parse(req.body);
+      const puesto = await storage.createPuesto(validated);
+      res.status(201).json(puesto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos", async (req, res) => {
+    try {
+      const puestos = await storage.getPuestos();
+      res.json(puestos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos/activos", async (req, res) => {
+    try {
+      const puestos = await storage.getPuestosActivos();
+      res.json(puestos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos/:id", async (req, res) => {
+    try {
+      const puesto = await storage.getPuesto(req.params.id);
+      if (!puesto) {
+        return res.status(404).json({ message: "Puesto no encontrado" });
+      }
+      res.json(puesto);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/puestos/:id", async (req, res) => {
+    try {
+      const validated = updatePuestoSchema.parse(req.body);
+      const puesto = await storage.updatePuesto(req.params.id, validated);
+      res.json(puesto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/puestos/:id", async (req, res) => {
+    try {
+      await storage.deletePuesto(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos/:id/employees", async (req, res) => {
+    try {
+      const employees = await storage.getEmployeesByPuesto(req.params.id);
+      res.json(employees);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos/:id/employees/count", async (req, res) => {
+    try {
+      const count = await storage.getEmployeeCountByPuesto(req.params.id);
+      res.json({ count });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/puestos/employees/counts", async (req, res) => {
+    try {
+      const counts = await storage.getAllEmployeeCountsByPuesto();
+      res.json(counts);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

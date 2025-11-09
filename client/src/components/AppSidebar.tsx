@@ -17,6 +17,7 @@ import {
   MapPin,
   ClipboardCheck,
   CreditCard,
+  Briefcase,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -90,6 +91,14 @@ const payrollSubItems = [
   },
 ];
 
+const organizacionSubItems = [
+  {
+    title: "Puestos",
+    url: "/organizacion/puestos",
+    icon: Briefcase,
+  },
+];
+
 const mainMenuItems = [
   {
     title: "Dashboard",
@@ -137,6 +146,7 @@ export function AppSidebar() {
   const [location] = useLocation();
   const isEmployeesActive = location.startsWith("/employees");
   const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance") || location.startsWith("/creditos");
+  const isOrganizacionActive = location.startsWith("/organizacion");
 
   return (
     <Sidebar>
@@ -220,6 +230,39 @@ export function AppSidebar() {
                             asChild
                             isActive={location === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isOrganizacionActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isOrganizacionActive}
+                      data-testid="link-organizacion"
+                    >
+                      <Building2 className="h-4 w-4" />
+                      <span>Organización</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {organizacionSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase()}`}
                           >
                             <Link href={subItem.url}>
                               <subItem.icon className="h-4 w-4" />
