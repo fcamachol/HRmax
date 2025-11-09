@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertPuestoSchema } from "@shared/schema";
 import { z } from "zod";
@@ -50,8 +50,23 @@ interface PuestoFormProps {
   mode?: "create" | "edit";
 }
 
+// Beneficios de ley en México
+const BENEFICIOS_LEY = [
+  "Aguinaldo (15 días mínimo)",
+  "Vacaciones (12 días primer año + prima vacacional 25%)",
+  "IMSS (Seguro Social)",
+  "Infonavit",
+  "SAR/Afore",
+  "Prima dominical (25% extra)",
+  "Días de descanso obligatorio",
+  "Utilidades (PTU)",
+];
+
 export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode = "create" }: PuestoFormProps) {
   const [currentTab, setCurrentTab] = useState("general");
+  const [newCompetencia, setNewCompetencia] = useState("");
+  const [newConocimiento, setNewConocimiento] = useState("");
+  const [newCertificacion, setNewCertificacion] = useState("");
 
   const form = useForm<PuestoFormValues>({
     resolver: zodResolver(puestoFormSchema),
@@ -77,17 +92,54 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       idiomas: [],
       certificaciones: [],
       condicionesLaborales: {},
-      compensacionYPrestaciones: {},
+      compensacionYPrestaciones: {
+        prestaciones: BENEFICIOS_LEY,
+      },
       indicadoresDesempeno: [],
       cumplimientoLegal: {},
       estatus: "activo",
     },
   });
 
+  const { fields: competenciasFields, append: appendCompetencia, remove: removeCompetencia } = useFieldArray({
+    control: form.control,
+    name: "competenciasConductuales" as any,
+  });
+
+  const { fields: conocimientosFields, append: appendConocimiento, remove: removeConocimiento } = useFieldArray({
+    control: form.control,
+    name: "conocimientosTecnicos" as any,
+  });
+
+  const { fields: certificacionesFields, append: appendCertificacion, remove: removeCertificacion } = useFieldArray({
+    control: form.control,
+    name: "certificaciones" as any,
+  });
+
+  const { fields: funcionesPrincipalesFields, append: appendFuncionPrincipal, remove: removeFuncionPrincipal } = useFieldArray({
+    control: form.control,
+    name: "funcionesPrincipales" as any,
+  });
+
+  const { fields: funcionesSecundariasFields, append: appendFuncionSecundaria, remove: removeFuncionSecundaria } = useFieldArray({
+    control: form.control,
+    name: "funcionesSecundarias" as any,
+  });
+
   // Reset form when defaultValues change (for edit mode)
   useEffect(() => {
     if (defaultValues && open) {
-      form.reset(defaultValues);
+      // Asegurar que prestaciones incluya beneficios de ley si no existen
+      const prestacionesActuales = defaultValues.compensacionYPrestaciones?.prestaciones || [];
+      const prestacionesConLey = Array.from(new Set([...BENEFICIOS_LEY, ...prestacionesActuales]));
+      
+      form.reset({
+        ...defaultValues,
+        compensacionYPrestaciones: {
+          ...defaultValues.compensacionYPrestaciones,
+          prestaciones: prestacionesConLey,
+        },
+      });
       setCurrentTab("general");
     }
   }, [defaultValues, open, form]);
@@ -98,6 +150,43 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       form.reset();
       setCurrentTab("general");
     }
+  };
+
+  const handleAddCompetencia = () => {
+    if (newCompetencia.trim()) {
+      appendCompetencia(newCompetencia.trim() as any);
+      setNewCompetencia("");
+    }
+  };
+
+  const handleAddConocimiento = () => {
+    if (newConocimiento.trim()) {
+      appendConocimiento(newConocimiento.trim() as any);
+      setNewConocimiento("");
+    }
+  };
+
+  const handleAddCertificacion = () => {
+    if (newCertificacion.trim()) {
+      appendCertificacion(newCertificacion.trim() as any);
+      setNewCertificacion("");
+    }
+  };
+
+  const toggleBeneficio = (beneficio: string) => {
+    const prestacionesActuales = form.watch("compensacionYPrestaciones.prestaciones") || [];
+    const index = prestacionesActuales.indexOf(beneficio);
+    
+    let nuevasPrestaciones: string[];
+    if (index > -1) {
+      // Remover
+      nuevasPrestaciones = prestacionesActuales.filter((_, i) => i !== index);
+    } else {
+      // Agregar
+      nuevasPrestaciones = [...prestacionesActuales, beneficio];
+    }
+    
+    form.setValue("compensacionYPrestaciones.prestaciones", nuevasPrestaciones);
   };
 
   return (
@@ -335,6 +424,100 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       </FormItem>
                     )}
                   />
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Funciones Principales</FormLabel>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => appendFuncionPrincipal("" as any)}
+                        data-testid="button-add-funcion-principal"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {funcionesPrincipalesFields.map((field, index) => (
+                        <div key={field.id} className="flex gap-2">
+                          <FormField
+                            control={form.control}
+                            name={`funcionesPrincipales.${index}`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder="Describe una función principal"
+                                    data-testid={`input-funcion-principal-${index}`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeFuncionPrincipal(index)}
+                            data-testid={`button-remove-funcion-principal-${index}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Funciones Secundarias</FormLabel>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => appendFuncionSecundaria("" as any)}
+                        data-testid="button-add-funcion-secundaria"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {funcionesSecundariasFields.map((field, index) => (
+                        <div key={field.id} className="flex gap-2">
+                          <FormField
+                            control={form.control}
+                            name={`funcionesSecundarias.${index}`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    placeholder="Describe una función secundaria"
+                                    data-testid={`input-funcion-secundaria-${index}`}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => removeFuncionSecundaria(index)}
+                            data-testid={`button-remove-funcion-secundaria-${index}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="requisitos" className="space-y-4 mt-0">
@@ -402,12 +585,142 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         />
                       </div>
                     </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Certificaciones</FormLabel>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newCertificacion}
+                          onChange={(e) => setNewCertificacion(e.target.value)}
+                          placeholder="Ej: PMP, Six Sigma"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddCertificacion();
+                            }
+                          }}
+                          data-testid="input-new-certificacion"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={handleAddCertificacion}
+                          data-testid="button-add-certificacion"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {certificacionesFields.map((field, index) => (
+                          <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-certificacion-${index}`}>
+                            {form.watch(`certificaciones.${index}`)}
+                            <button
+                              type="button"
+                              onClick={() => removeCertificacion(index)}
+                              className="ml-1 hover:text-destructive"
+                              data-testid={`button-remove-certificacion-${index}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="competencias" className="space-y-4 mt-0">
-                  <div className="text-sm text-muted-foreground">
-                    Los conocimientos técnicos, competencias conductuales, idiomas y certificaciones se pueden gestionar desde la vista de detalles completa después de crear/editar el puesto.
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Competencias Conductuales</FormLabel>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newCompetencia}
+                          onChange={(e) => setNewCompetencia(e.target.value)}
+                          placeholder="Ej: Liderazgo, Trabajo en equipo"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddCompetencia();
+                            }
+                          }}
+                          data-testid="input-new-competencia"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={handleAddCompetencia}
+                          data-testid="button-add-competencia"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {competenciasFields.map((field, index) => (
+                          <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-competencia-${index}`}>
+                            {form.watch(`competenciasConductuales.${index}`)}
+                            <button
+                              type="button"
+                              onClick={() => removeCompetencia(index)}
+                              className="ml-1 hover:text-destructive"
+                              data-testid={`button-remove-competencia-${index}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <FormLabel>Conocimientos Técnicos</FormLabel>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newConocimiento}
+                          onChange={(e) => setNewConocimiento(e.target.value)}
+                          placeholder="Ej: Excel Avanzado, SAP"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddConocimiento();
+                            }
+                          }}
+                          data-testid="input-new-conocimiento"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          onClick={handleAddConocimiento}
+                          data-testid="button-add-conocimiento"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {conocimientosFields.map((field, index) => (
+                          <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-conocimiento-${index}`}>
+                            {form.watch(`conocimientosTecnicos.${index}`)}
+                            <button
+                              type="button"
+                              onClick={() => removeConocimiento(index)}
+                              className="ml-1 hover:text-destructive"
+                              data-testid={`button-remove-conocimiento-${index}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
 
@@ -420,8 +733,35 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         <FormItem>
                           <FormLabel>Horario</FormLabel>
                           <FormControl>
-                            <Input placeholder="Ej: 9:00 - 18:00" {...field} data-testid="input-horario" />
+                            <Input placeholder="Ej: 9:00 - 18:00 o Variable" {...field} data-testid="input-horario" />
                           </FormControl>
+                          <FormDescription>
+                            Puede ser fijo o variable
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="condicionesLaborales.horasSemanales"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Horas Semanales</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="40"
+                              {...field}
+                              onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}
+                              value={field.value || ""}
+                              data-testid="input-horas-semanales"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Horas de trabajo por semana
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -584,6 +924,36 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         </FormItem>
                       )}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <FormLabel>Prestaciones y Beneficios</FormLabel>
+                    <div className="space-y-2 border rounded-md p-4">
+                      <p className="text-sm text-muted-foreground mb-2">Beneficios de Ley (marcados por defecto)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {BENEFICIOS_LEY.map((beneficio) => {
+                          const prestacionesActuales = form.watch("compensacionYPrestaciones.prestaciones") || [];
+                          const isChecked = prestacionesActuales.includes(beneficio);
+                          
+                          return (
+                            <div key={beneficio} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={beneficio}
+                                checked={isChecked}
+                                onCheckedChange={() => toggleBeneficio(beneficio)}
+                                data-testid={`checkbox-beneficio-${beneficio}`}
+                              />
+                              <label
+                                htmlFor={beneficio}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {beneficio}
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </TabsContent>
 

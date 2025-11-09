@@ -135,11 +135,14 @@ export default function Puestos() {
       competenciasConductuales: puesto.competenciasConductuales as string[],
       idiomas: puesto.idiomas as any,
       certificaciones: puesto.certificaciones as string[],
-      condicionesLaborales: puesto.condicionesLaborales as any,
+      condicionesLaborales: {
+        ...(puesto.condicionesLaborales as any),
+        horasSemanales: (puesto.condicionesLaborales as any)?.horasSemanales,
+      },
       compensacionYPrestaciones: puesto.compensacionYPrestaciones as any,
       indicadoresDesempeno: puesto.indicadoresDesempeno as any,
       cumplimientoLegal: puesto.cumplimientoLegal as any,
-      estatus: puesto.estatus,
+      estatus: (puesto.estatus as "activo" | "inactivo") ?? "activo",
     };
   };
 

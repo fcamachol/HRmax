@@ -1219,6 +1219,7 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
   certificaciones: z.array(z.string()).default([]),
   condicionesLaborales: z.object({
     horario: z.string().optional(),
+    horasSemanales: z.number().optional(),
     guardias: z.string().optional(),
     modalidad: z.string().optional(),
     requiereViaje: z.boolean().optional(),
