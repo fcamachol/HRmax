@@ -156,11 +156,11 @@ export default function Attendance() {
     
     switch (grupo.tipoPeriodo) {
       case 'semanal':
-        inicio = startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 });
+        inicio = startOfWeek(today, { weekStartsOn: (grupo.diaInicioSemana ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6 });
         fin = addDays(inicio, 6);
         break;
       case 'catorcenal':
-        inicio = startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 });
+        inicio = startOfWeek(today, { weekStartsOn: (grupo.diaInicioSemana ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6 });
         fin = addDays(inicio, 13);
         break;
       case 'quincenal':
@@ -197,11 +197,11 @@ export default function Attendance() {
     
     switch (grupo.tipoPeriodo) {
       case 'semanal':
-        fin = addDays(startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 }), -1);
+        fin = addDays(startOfWeek(today, { weekStartsOn: (grupo.diaInicioSemana ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6 }), -1);
         inicio = addDays(fin, -6);
         break;
       case 'catorcenal':
-        fin = addDays(startOfWeek(today, { weekStartsOn: grupo.diaInicioSemana || 1 }), -1);
+        fin = addDays(startOfWeek(today, { weekStartsOn: (grupo.diaInicioSemana ?? 1) as 0 | 1 | 2 | 3 | 4 | 5 | 6 }), -1);
         inicio = addDays(fin, -13);
         break;
       case 'quincenal':

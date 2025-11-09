@@ -965,3 +965,161 @@ export const updateAvisoREPSESchema = insertAvisoREPSESchema.partial();
 
 export type AvisoREPSE = typeof avisosREPSE.$inferSelect;
 export type InsertAvisoREPSE = z.infer<typeof insertAvisoREPSESchema>;
+
+// ============================================================================
+// CRÉDITOS Y DESCUENTOS
+// ============================================================================
+
+// Tipos de crédito legal
+export const tiposCreditoLegal = [
+  "INFONAVIT",
+  "FONACOT",
+  "PENSION_ALIMENTICIA",
+  "EMBARGO",
+] as const;
+
+export const tiposCalculoInfonavit = [
+  "CUOTA_FIJA",
+  "PORCENTAJE",
+  "FACTOR_DESCUENTO",
+] as const;
+
+export const estadosCredito = [
+  "ACTIVO",
+  "TERMINADO",
+  "SUSPENDIDO",
+  "CANCELADO",
+] as const;
+
+// Créditos Legales (INFONAVIT, FONACOT, Pensión Alimenticia, Embargos)
+export const creditosLegales = pgTable("creditos_legales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  tipoCredito: varchar("tipo_credito").notNull(), // INFONAVIT, FONACOT, PENSION_ALIMENTICIA, EMBARGO
+  
+  // Campos INFONAVIT
+  numeroCredito: varchar("numero_credito"), // Número de crédito INFONAVIT o FONACOT
+  tipoCalculoInfonavit: varchar("tipo_calculo_infonavit"), // CUOTA_FIJA, PORCENTAJE, FACTOR_DESCUENTO
+  valorDescuento: numeric("valor_descuento"), // Valor según tipo de cálculo (cuota, porcentaje o factor)
+  
+  // Campos generales
+  montoTotal: numeric("monto_total"), // Monto total del crédito (FONACOT, préstamos)
+  montoPorPeriodo: numeric("monto_por_periodo"), // Monto a descontar por periodo
+  saldoRestante: numeric("saldo_restante"), // Saldo pendiente
+  
+  // Fechas
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaTermino: date("fecha_termino"),
+  
+  // Pensión alimenticia / Embargo
+  beneficiario: varchar("beneficiario"), // Nombre del beneficiario
+  documentoLegal: text("documento_legal"), // Referencia al documento legal
+  archivoUrl: text("archivo_url"), // URL del archivo de evidencia
+  
+  // Control
+  estado: varchar("estado").notNull().default("ACTIVO"), // ACTIVO, TERMINADO, SUSPENDIDO, CANCELADO
+  descuentoAutomatico: boolean("descuento_automatico").default(true), // Si se descuenta automáticamente en nómina
+  notas: text("notas"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertCreditoLegalSchema = createInsertSchema(creditosLegales).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoCredito: z.enum(tiposCreditoLegal),
+  estado: z.enum(estadosCredito).default("ACTIVO"),
+  tipoCalculoInfonavit: z.enum(tiposCalculoInfonavit).optional(),
+});
+
+export const updateCreditoLegalSchema = insertCreditoLegalSchema.partial();
+
+export type CreditoLegal = typeof creditosLegales.$inferSelect;
+export type InsertCreditoLegal = z.infer<typeof insertCreditoLegalSchema>;
+
+// Préstamos Internos
+export const prestamosInternos = pgTable("prestamos_internos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Datos del préstamo
+  montoTotal: numeric("monto_total").notNull(),
+  plazo: integer("plazo").notNull(), // Plazo en periodos de pago
+  tipoPlazo: varchar("tipo_plazo").notNull().default("QUINCENAS"), // QUINCENAS, MESES
+  montoPorPeriodo: numeric("monto_por_periodo").notNull(),
+  saldoPendiente: numeric("saldo_pendiente").notNull(),
+  
+  // Fechas
+  fechaOtorgamiento: date("fecha_otorgamiento").notNull(),
+  fechaInicio: date("fecha_inicio").notNull(), // Fecha de inicio de descuentos
+  fechaEstimadaTermino: date("fecha_estimada_termino").notNull(),
+  fechaTermino: date("fecha_termino"), // Fecha real de terminación
+  
+  // Control de descuento automático
+  descuentoAutomatico: boolean("descuento_automatico").default(true),
+  
+  // Estado
+  estado: varchar("estado").notNull().default("ACTIVO"), // ACTIVO, TERMINADO, SUSPENDIDO, CANCELADO
+  
+  // Notas y detalles
+  concepto: text("concepto"),
+  notas: text("notas"),
+  autorizadoPor: varchar("autorizado_por"), // Quién autorizó el préstamo
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertPrestamoInternoSchema = createInsertSchema(prestamosInternos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  estado: z.enum(estadosCredito).default("ACTIVO"),
+  tipoPlazo: z.enum(["QUINCENAS", "MESES"]).default("QUINCENAS"),
+});
+
+export const updatePrestamoInternoSchema = insertPrestamoInternoSchema.partial();
+
+export type PrestamoInterno = typeof prestamosInternos.$inferSelect;
+export type InsertPrestamoInterno = z.infer<typeof insertPrestamoInternoSchema>;
+
+// Pagos/Abonos de Créditos y Préstamos (Histórico)
+export const pagosCreditosDescuentos = pgTable("pagos_creditos_descuentos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Referencia al crédito o préstamo
+  creditoLegalId: varchar("credito_legal_id").references(() => creditosLegales.id, { onDelete: "cascade" }),
+  prestamoInternoId: varchar("prestamo_interno_id").references(() => prestamosInternos.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Datos del pago
+  monto: numeric("monto").notNull(),
+  saldoAnterior: numeric("saldo_anterior").notNull(),
+  saldoNuevo: numeric("saldo_nuevo").notNull(),
+  
+  // Fecha y periodo
+  fechaPago: date("fecha_pago").notNull(),
+  periodoNominaId: varchar("periodo_nomina_id").references(() => payrollPeriods.id, { onDelete: "set null" }),
+  
+  // Tipo de pago
+  tipoMovimiento: varchar("tipo_movimiento").notNull().default("DESCUENTO_NOMINA"), // DESCUENTO_NOMINA, ABONO_MANUAL, LIQUIDACION
+  
+  // Observaciones
+  notas: text("notas"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertPagoCreditoDescuentoSchema = createInsertSchema(pagosCreditosDescuentos).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  tipoMovimiento: z.enum(["DESCUENTO_NOMINA", "ABONO_MANUAL", "LIQUIDACION"]).default("DESCUENTO_NOMINA"),
+});
+
+export type PagoCreditoDescuento = typeof pagosCreditosDescuentos.$inferSelect;
+export type InsertPagoCreditoDescuento = z.infer<typeof insertPagoCreditoDescuentoSchema>;
