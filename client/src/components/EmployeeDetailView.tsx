@@ -36,9 +36,10 @@ function FieldDisplay({ label, value, type = "text" }: FieldDisplayProps) {
         }).format(num as number);
       
       case "date":
-        if (typeof value === "boolean") return "No registrado";
+        if (typeof value === "boolean" || typeof value === "number") return "No registrado";
         try {
-          const d = typeof value === "string" ? new Date(value) : value instanceof Date ? value : new Date(value as string);
+          const dateValue = value as string | Date;
+          const d = typeof dateValue === "string" ? new Date(dateValue) : dateValue;
           if (isNaN(d.getTime())) return "No registrado";
           return format(d, "dd 'de' MMMM 'de' yyyy", { locale: es });
         } catch {
