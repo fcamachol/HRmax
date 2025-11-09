@@ -439,6 +439,22 @@ export interface IStorage {
   getSolicitudesPermisosByTipo(tipoPermiso: string): Promise<SolicitudPermiso[]>;
   updateSolicitudPermiso(id: string, updates: Partial<InsertSolicitudPermiso>): Promise<SolicitudPermiso>;
   deleteSolicitudPermiso(id: string): Promise<void>;
+  
+  // Helper methods for business logic and validation
+  
+  // Vacaciones helpers
+  checkVacacionesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudVacaciones[]>;
+  getPendingVacacionesApprovals(): Promise<SolicitudVacaciones[]>;
+  getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{ disponibles: number, usados: number, pendientes: number }>;
+  
+  // Incapacidades helpers - with access control
+  checkIncapacidadesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<Incapacidad[]>;
+  getIncapacidadesScopedByUser(userId: string, isAdmin: boolean): Promise<Incapacidad[]>; // Access control for sensitive data
+  getIncapacidadSecure(id: string, userId: string, isAdmin: boolean): Promise<Incapacidad | undefined>; // Masked data for non-admins
+  
+  // Permisos helpers
+  checkPermisosOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudPermiso[]>;
+  getPendingPermisosApprovals(): Promise<SolicitudPermiso[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2455,6 +2471,174 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSolicitudPermiso(id: string): Promise<void> {
     await db.delete(solicitudesPermisos).where(eq(solicitudesPermisos.id, id));
+  }
+
+  // ==================== Helper Methods for Business Logic ====================
+
+  // Vacaciones helpers
+  async checkVacacionesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudVacaciones[]> {
+    let query = db.select().from(solicitudesVacaciones).where(
+      and(
+        eq(solicitudesVacaciones.empleadoId, empleadoId),
+        not(eq(solicitudesVacaciones.estatus, "cancelada")),
+        not(eq(solicitudesVacaciones.estatus, "rechazada")),
+        // Check for date overlap: (start1 <= end2) AND (end1 >= start2)
+        lte(solicitudesVacaciones.fechaInicio, fechaFin),
+        gte(solicitudesVacaciones.fechaFin, fechaInicio)
+      )
+    );
+
+    const results = await query;
+    
+    // Exclude current record if updating
+    if (excludeId) {
+      return results.filter(r => r.id !== excludeId);
+    }
+    return results;
+  }
+
+  async getPendingVacacionesApprovals(): Promise<SolicitudVacaciones[]> {
+    return db.select().from(solicitudesVacaciones)
+      .where(eq(solicitudesVacaciones.estatus, "pendiente"))
+      .orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+  }
+
+  async getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{ disponibles: number, usados: number, pendientes: number }> {
+    // Get approved and pending vacation requests for the year
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    
+    const solicitudes = await db.select().from(solicitudesVacaciones).where(
+      and(
+        eq(solicitudesVacaciones.empleadoId, empleadoId),
+        gte(solicitudesVacaciones.fechaInicio, startDate),
+        lte(solicitudesVacaciones.fechaInicio, endDate)
+      )
+    );
+
+    const usados = solicitudes
+      .filter(s => s.estatus === "aprobada")
+      .reduce((sum, s) => sum + Number(s.diasSolicitados), 0);
+    
+    const pendientes = solicitudes
+      .filter(s => s.estatus === "pendiente")
+      .reduce((sum, s) => sum + Number(s.diasSolicitados), 0);
+
+    // Get employee info to calculate legal vacation days based on seniority
+    const [employee] = await db.select().from(employees).where(eq(employees.id, empleadoId));
+    
+    let disponibles = 12; // Default: 1 year = 12 days per LFT Art 76
+    
+    if (employee && employee.fechaIngreso) {
+      const ingreso = new Date(employee.fechaIngreso);
+      const yearsWorked = year - ingreso.getFullYear();
+      
+      // LFT Art 76 - vacation days based on years of service
+      if (yearsWorked >= 1 && yearsWorked < 2) disponibles = 12;
+      else if (yearsWorked >= 2 && yearsWorked < 3) disponibles = 14;
+      else if (yearsWorked >= 3 && yearsWorked < 4) disponibles = 16;
+      else if (yearsWorked >= 4 && yearsWorked < 5) disponibles = 18;
+      else if (yearsWorked >= 5 && yearsWorked < 10) disponibles = 20;
+      else if (yearsWorked >= 10 && yearsWorked < 15) disponibles = 22;
+      else if (yearsWorked >= 15 && yearsWorked < 20) disponibles = 24;
+      else if (yearsWorked >= 20 && yearsWorked < 25) disponibles = 26;
+      else if (yearsWorked >= 25 && yearsWorked < 30) disponibles = 28;
+      else if (yearsWorked >= 30) disponibles = 30;
+    }
+
+    return {
+      disponibles: disponibles - usados,
+      usados,
+      pendientes,
+    };
+  }
+
+  // Incapacidades helpers - with access control for sensitive medical data
+  async checkIncapacidadesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<Incapacidad[]> {
+    let query = db.select().from(incapacidades).where(
+      and(
+        eq(incapacidades.empleadoId, empleadoId),
+        not(eq(incapacidades.estatus, "rechazada_imss")),
+        // Check for date overlap
+        lte(incapacidades.fechaInicio, fechaFin),
+        gte(incapacidades.fechaFin, fechaInicio)
+      )
+    );
+
+    const results = await query;
+    
+    // Exclude current record if updating
+    if (excludeId) {
+      return results.filter(r => r.id !== excludeId);
+    }
+    return results;
+  }
+
+  async getIncapacidadesScopedByUser(userId: string, isAdmin: boolean): Promise<Incapacidad[]> {
+    if (isAdmin) {
+      // Admins see all incapacidades
+      return db.select().from(incapacidades).orderBy(desc(incapacidades.createdAt));
+    } else {
+      // Non-admins only see their own incapacidades
+      // Assuming userId maps to empleadoId (this should be joined with users table in production)
+      return db.select().from(incapacidades)
+        .where(eq(incapacidades.empleadoId, userId))
+        .orderBy(desc(incapacidades.createdAt));
+    }
+  }
+
+  async getIncapacidadSecure(id: string, userId: string, isAdmin: boolean): Promise<Incapacidad | undefined> {
+    const [incapacidad] = await db.select().from(incapacidades).where(eq(incapacidades.id, id));
+    
+    if (!incapacidad) {
+      return undefined;
+    }
+
+    // Access control: non-admins can only access their own records
+    if (!isAdmin && incapacidad.empleadoId !== userId) {
+      return undefined;
+    }
+
+    // For non-admins, mask sensitive medical information
+    if (!isAdmin) {
+      return {
+        ...incapacidad,
+        diagnostico: "[INFORMACIÓN MÉDICA CONFIDENCIAL]",
+        medicoNombre: undefined,
+        unidadMedica: undefined,
+        notasInternas: undefined,
+      };
+    }
+
+    return incapacidad;
+  }
+
+  // Permisos helpers
+  async checkPermisosOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudPermiso[]> {
+    let query = db.select().from(solicitudesPermisos).where(
+      and(
+        eq(solicitudesPermisos.empleadoId, empleadoId),
+        not(eq(solicitudesPermisos.estatus, "cancelada")),
+        not(eq(solicitudesPermisos.estatus, "rechazada")),
+        // Check for date overlap
+        lte(solicitudesPermisos.fechaInicio, fechaFin),
+        gte(solicitudesPermisos.fechaFin, fechaInicio)
+      )
+    );
+
+    const results = await query;
+    
+    // Exclude current record if updating
+    if (excludeId) {
+      return results.filter(r => r.id !== excludeId);
+    }
+    return results;
+  }
+
+  async getPendingPermisosApprovals(): Promise<SolicitudPermiso[]> {
+    return db.select().from(solicitudesPermisos)
+      .where(eq(solicitudesPermisos.estatus, "pendiente"))
+      .orderBy(desc(solicitudesPermisos.fechaSolicitud));
   }
 }
 

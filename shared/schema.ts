@@ -1626,6 +1626,10 @@ export type InsertOferta = z.infer<typeof insertOfertaSchema>;
 // MÓDULO DE VACACIONES (Vacation Management)
 // ============================================================================
 
+// Estados de solicitudes de vacaciones
+export const estatusSolicitudVacaciones = ["pendiente", "aprobada", "rechazada", "cancelada"] as const;
+export type EstatusSolicitudVacaciones = typeof estatusSolicitudVacaciones[number];
+
 export const solicitudesVacaciones = pgTable("solicitudes_vacaciones", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
@@ -1652,6 +1656,14 @@ export const solicitudesVacaciones = pgTable("solicitudes_vacaciones", {
 // ============================================================================
 // MÓDULO DE INCAPACIDADES (Sick Leave Management)
 // ============================================================================
+
+// Tipos de incapacidad según IMSS
+export const tiposIncapacidad = ["enfermedad_general", "riesgo_trabajo", "maternidad"] as const;
+export type TipoIncapacidad = typeof tiposIncapacidad[number];
+
+// Estados de incapacidades
+export const estatusIncapacidad = ["activa", "cerrada", "rechazada_imss"] as const;
+export type EstatusIncapacidad = typeof estatusIncapacidad[number];
 
 export const incapacidades = pgTable("incapacidades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1692,6 +1704,14 @@ export const incapacidades = pgTable("incapacidades", {
 // ============================================================================
 // MÓDULO DE PERMISOS (Permission Requests)
 // ============================================================================
+
+// Tipos de permiso según LFT y políticas empresa
+export const tiposPermiso = ["personal", "defuncion", "matrimonio", "paternidad", "medico", "tramite", "otro"] as const;
+export type TipoPermiso = typeof tiposPermiso[number];
+
+// Estados de solicitudes de permiso
+export const estatusSolicitudPermiso = ["pendiente", "aprobada", "rechazada", "cancelada"] as const;
+export type EstatusSolicitudPermiso = typeof estatusSolicitudPermiso[number];
 
 export const solicitudesPermisos = pgTable("solicitudes_permisos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1734,7 +1754,8 @@ export const solicitudesPermisos = pgTable("solicitudes_permisos", {
 // INSERT SCHEMAS Y VALIDACIONES
 // ============================================================================
 
-export const insertSolicitudVacacionesSchema = createInsertSchema(solicitudesVacaciones).omit({
+// Base schema for solicitudes vacaciones
+const baseSolicitudVacacionesSchema = createInsertSchema(solicitudesVacaciones).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1746,7 +1767,9 @@ export const insertSolicitudVacacionesSchema = createInsertSchema(solicitudesVac
   fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
   fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
   estatus: z.enum(["pendiente", "aprobada", "rechazada", "cancelada"]).default("pendiente"),
-}).refine(
+});
+
+export const insertSolicitudVacacionesSchema = baseSolicitudVacacionesSchema.refine(
   (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
   {
     message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
@@ -1754,7 +1777,22 @@ export const insertSolicitudVacacionesSchema = createInsertSchema(solicitudesVac
   }
 );
 
-export const insertIncapacidadSchema = createInsertSchema(incapacidades).omit({
+// Update schema with conditional cross-field validation
+export const updateSolicitudVacacionesSchema = baseSolicitudVacacionesSchema.partial().superRefine((data, ctx) => {
+  // Only validate dates if both are provided
+  if (data.fechaInicio && data.fechaFin) {
+    if (new Date(data.fechaFin) < new Date(data.fechaInicio)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+        path: ["fechaFin"],
+      });
+    }
+  }
+});
+
+// Base schema for incapacidades
+const baseIncapacidadSchema = createInsertSchema(incapacidades).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1767,7 +1805,9 @@ export const insertIncapacidadSchema = createInsertSchema(incapacidades).omit({
   fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
   fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
   estatus: z.enum(["activa", "cerrada", "rechazada_imss"]).default("activa"),
-}).refine(
+});
+
+export const insertIncapacidadSchema = baseIncapacidadSchema.refine(
   (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
   {
     message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
@@ -1775,7 +1815,22 @@ export const insertIncapacidadSchema = createInsertSchema(incapacidades).omit({
   }
 );
 
-export const insertSolicitudPermisoSchema = createInsertSchema(solicitudesPermisos).omit({
+// Update schema with conditional cross-field validation
+export const updateIncapacidadSchema = baseIncapacidadSchema.partial().superRefine((data, ctx) => {
+  // Only validate dates if both are provided
+  if (data.fechaInicio && data.fechaFin) {
+    if (new Date(data.fechaFin) < new Date(data.fechaInicio)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+        path: ["fechaFin"],
+      });
+    }
+  }
+});
+
+// Base schema for solicitudes permisos
+const baseSolicitudPermisoSchema = createInsertSchema(solicitudesPermisos).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
@@ -1792,13 +1847,29 @@ export const insertSolicitudPermisoSchema = createInsertSchema(solicitudesPermis
   fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
   fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
   estatus: z.enum(["pendiente", "aprobada", "rechazada", "cancelada"]).default("pendiente"),
-}).refine(
+});
+
+export const insertSolicitudPermisoSchema = baseSolicitudPermisoSchema.refine(
   (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
   {
     message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
     path: ["fechaFin"],
   }
 );
+
+// Update schema with conditional cross-field validation
+export const updateSolicitudPermisoSchema = baseSolicitudPermisoSchema.partial().superRefine((data, ctx) => {
+  // Only validate dates if both are provided
+  if (data.fechaInicio && data.fechaFin) {
+    if (new Date(data.fechaFin) < new Date(data.fechaInicio)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+        path: ["fechaFin"],
+      });
+    }
+  }
+});
 
 // ============================================================================
 // EXPORT TYPES

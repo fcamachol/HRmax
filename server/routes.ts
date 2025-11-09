@@ -53,7 +53,13 @@ import {
   insertProcesoSeleccionSchema,
   insertEntrevistaSchema,
   insertEvaluacionSchema,
-  insertOfertaSchema
+  insertOfertaSchema,
+  insertSolicitudVacacionesSchema,
+  updateSolicitudVacacionesSchema,
+  insertIncapacidadSchema,
+  updateIncapacidadSchema,
+  insertSolicitudPermisoSchema,
+  updateSolicitudPermisoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -2368,6 +2374,388 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/ofertas/:id", async (req, res) => {
     try {
       await storage.deleteOferta(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== MÓDULO DE VACACIONES ====================
+  
+  app.post("/api/vacaciones", async (req, res) => {
+    try {
+      const validated = insertSolicitudVacacionesSchema.parse(req.body);
+      
+      // Check for overlapping vacation requests
+      const overlaps = await storage.checkVacacionesOverlap(
+        validated.empleadoId,
+        validated.fechaInicio,
+        validated.fechaFin
+      );
+      
+      if (overlaps.length > 0) {
+        return res.status(409).json({ 
+          message: "Ya existe una solicitud de vacaciones en este período",
+          conflictos: overlaps
+        });
+      }
+      
+      const solicitud = await storage.createSolicitudVacaciones(validated);
+      res.status(201).json(solicitud);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacaciones", async (req, res) => {
+    try {
+      const solicitudes = await storage.getSolicitudesVacaciones();
+      res.json(solicitudes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacaciones/pending-approvals", async (req, res) => {
+    try {
+      const pending = await storage.getPendingVacacionesApprovals();
+      res.json(pending);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacaciones/balance/:empleadoId", async (req, res) => {
+    try {
+      const year = req.query.year ? parseInt(req.query.year as string) : new Date().getFullYear();
+      const balance = await storage.getEmpleadoVacationBalance(req.params.empleadoId, year);
+      res.json(balance);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacaciones/empleado/:empleadoId", async (req, res) => {
+    try {
+      const solicitudes = await storage.getSolicitudesVacacionesByEmpleado(req.params.empleadoId);
+      res.json(solicitudes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/vacaciones/:id", async (req, res) => {
+    try {
+      const solicitud = await storage.getSolicitudVacaciones(req.params.id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud de vacaciones no encontrada" });
+      }
+      res.json(solicitud);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/vacaciones/:id", async (req, res) => {
+    try {
+      // Step 1: Validate partial update
+      const partialUpdate = updateSolicitudVacacionesSchema.parse(req.body);
+      
+      // Step 2: Load existing record
+      const existing = await storage.getSolicitudVacaciones(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Solicitud de vacaciones no encontrada" });
+      }
+      
+      // Step 3: Merge partial update with existing record
+      const merged = {
+        ...existing,
+        ...partialUpdate,
+      };
+      
+      // Step 4: Re-validate the complete merged object with cross-field checks
+      const fullyValidated = insertSolicitudVacacionesSchema.parse(merged);
+      
+      // Step 5: Check for overlaps if dates changed
+      if (partialUpdate.fechaInicio || partialUpdate.fechaFin) {
+        const overlaps = await storage.checkVacacionesOverlap(
+          existing.empleadoId,
+          fullyValidated.fechaInicio,
+          fullyValidated.fechaFin,
+          req.params.id
+        );
+        
+        if (overlaps.length > 0) {
+          return res.status(409).json({ 
+            message: "Ya existe una solicitud de vacaciones en este período",
+            conflictos: overlaps
+          });
+        }
+      }
+      
+      // Step 6: Persist the validated update
+      const solicitud = await storage.updateSolicitudVacaciones(req.params.id, partialUpdate);
+      res.json(solicitud);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/vacaciones/:id", async (req, res) => {
+    try {
+      await storage.deleteSolicitudVacaciones(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== MÓDULO DE INCAPACIDADES ====================
+  
+  app.post("/api/incapacidades", async (req, res) => {
+    try {
+      const validated = insertIncapacidadSchema.parse(req.body);
+      
+      // Check for overlapping incapacidades
+      const overlaps = await storage.checkIncapacidadesOverlap(
+        validated.empleadoId,
+        validated.fechaInicio,
+        validated.fechaFin
+      );
+      
+      if (overlaps.length > 0) {
+        return res.status(409).json({ 
+          message: "Ya existe una incapacidad registrada en este período",
+          conflictos: overlaps
+        });
+      }
+      
+      const incapacidad = await storage.createIncapacidad(validated);
+      res.status(201).json(incapacidad);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incapacidades", async (req, res) => {
+    try {
+      // TODO: Get actual user context from req.user and check isAdmin
+      // For now, assume admin access - implement proper auth later
+      const userId = req.query.userId as string || "";
+      const isAdmin = true; // TODO: Get from req.user.isAdmin
+      
+      const incapacidades = await storage.getIncapacidadesScopedByUser(userId, isAdmin);
+      res.json(incapacidades);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incapacidades/secure/:id", async (req, res) => {
+    try {
+      // TODO: Get actual user context from req.user
+      const userId = req.query.userId as string || "";
+      const isAdmin = true; // TODO: Get from req.user.isAdmin
+      
+      const incapacidad = await storage.getIncapacidadSecure(req.params.id, userId, isAdmin);
+      if (!incapacidad) {
+        return res.status(404).json({ message: "Incapacidad no encontrada o acceso no autorizado" });
+      }
+      res.json(incapacidad);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incapacidades/empleado/:empleadoId", async (req, res) => {
+    try {
+      const incapacidades = await storage.getIncapacidadesByEmpleado(req.params.empleadoId);
+      res.json(incapacidades);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incapacidades/:id", async (req, res) => {
+    try {
+      const incapacidad = await storage.getIncapacidad(req.params.id);
+      if (!incapacidad) {
+        return res.status(404).json({ message: "Incapacidad no encontrada" });
+      }
+      res.json(incapacidad);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/incapacidades/:id", async (req, res) => {
+    try {
+      // Step 1: Validate partial update
+      const partialUpdate = updateIncapacidadSchema.parse(req.body);
+      
+      // Step 2: Load existing record
+      const existing = await storage.getIncapacidad(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Incapacidad no encontrada" });
+      }
+      
+      // Step 3: Merge partial update with existing record
+      const merged = {
+        ...existing,
+        ...partialUpdate,
+      };
+      
+      // Step 4: Re-validate the complete merged object with cross-field checks
+      const fullyValidated = insertIncapacidadSchema.parse(merged);
+      
+      // Step 5: Check for overlaps if dates changed
+      if (partialUpdate.fechaInicio || partialUpdate.fechaFin) {
+        const overlaps = await storage.checkIncapacidadesOverlap(
+          existing.empleadoId,
+          fullyValidated.fechaInicio,
+          fullyValidated.fechaFin,
+          req.params.id
+        );
+        
+        if (overlaps.length > 0) {
+          return res.status(409).json({ 
+            message: "Ya existe una incapacidad registrada en este período",
+            conflictos: overlaps
+          });
+        }
+      }
+      
+      // Step 6: Persist the validated update
+      const incapacidad = await storage.updateIncapacidad(req.params.id, partialUpdate);
+      res.json(incapacidad);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/incapacidades/:id", async (req, res) => {
+    try {
+      await storage.deleteIncapacidad(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== MÓDULO DE PERMISOS ====================
+  
+  app.post("/api/permisos", async (req, res) => {
+    try {
+      const validated = insertSolicitudPermisoSchema.parse(req.body);
+      
+      // Check for overlapping permisos
+      const overlaps = await storage.checkPermisosOverlap(
+        validated.empleadoId,
+        validated.fechaInicio,
+        validated.fechaFin
+      );
+      
+      if (overlaps.length > 0) {
+        return res.status(409).json({ 
+          message: "Ya existe una solicitud de permiso en este período",
+          conflictos: overlaps
+        });
+      }
+      
+      const solicitud = await storage.createSolicitudPermiso(validated);
+      res.status(201).json(solicitud);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/permisos", async (req, res) => {
+    try {
+      const solicitudes = await storage.getSolicitudesPermisos();
+      res.json(solicitudes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/permisos/pending-approvals", async (req, res) => {
+    try {
+      const pending = await storage.getPendingPermisosApprovals();
+      res.json(pending);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/permisos/empleado/:empleadoId", async (req, res) => {
+    try {
+      const solicitudes = await storage.getSolicitudesPermisosByEmpleado(req.params.empleadoId);
+      res.json(solicitudes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/permisos/:id", async (req, res) => {
+    try {
+      const solicitud = await storage.getSolicitudPermiso(req.params.id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud de permiso no encontrada" });
+      }
+      res.json(solicitud);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/permisos/:id", async (req, res) => {
+    try {
+      // Step 1: Validate partial update
+      const partialUpdate = updateSolicitudPermisoSchema.parse(req.body);
+      
+      // Step 2: Load existing record
+      const existing = await storage.getSolicitudPermiso(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Solicitud de permiso no encontrada" });
+      }
+      
+      // Step 3: Merge partial update with existing record
+      const merged = {
+        ...existing,
+        ...partialUpdate,
+      };
+      
+      // Step 4: Re-validate the complete merged object with cross-field checks
+      const fullyValidated = insertSolicitudPermisoSchema.parse(merged);
+      
+      // Step 5: Check for overlaps if dates changed
+      if (partialUpdate.fechaInicio || partialUpdate.fechaFin) {
+        const overlaps = await storage.checkPermisosOverlap(
+          existing.empleadoId,
+          fullyValidated.fechaInicio,
+          fullyValidated.fechaFin,
+          req.params.id
+        );
+        
+        if (overlaps.length > 0) {
+          return res.status(409).json({ 
+            message: "Ya existe una solicitud de permiso en este período",
+            conflictos: overlaps
+          });
+        }
+      }
+      
+      // Step 6: Persist the validated update
+      const solicitud = await storage.updateSolicitudPermiso(req.params.id, partialUpdate);
+      res.json(solicitud);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/permisos/:id", async (req, res) => {
+    try {
+      await storage.deleteSolicitudPermiso(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
