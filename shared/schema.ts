@@ -1159,7 +1159,7 @@ export const puestos = pgTable("puestos", {
   experienciaLaboral: jsonb("experiencia_laboral").default(sql`'{}'::jsonb`),
   
   // Conocimientos y Competencias
-  conocimientosTecnicos: jsonb("conocimientos_tecnicos").default(sql`'[]'::jsonb`), // Array de strings
+  conocimientosTecnicos: jsonb("conocimientos_tecnicos").default(sql`'[]'::jsonb`), // Array de objetos: [{ conocimiento, nivel }]
   competenciasConductuales: jsonb("competencias_conductuales").default(sql`'[]'::jsonb`), // Array de strings
   
   // Idiomas - Array de objetos: [{ idioma, nivel }]
@@ -1210,7 +1210,10 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
     requerida: z.string().optional(),
     deseable: z.string().optional(),
   }).default({}),
-  conocimientosTecnicos: z.array(z.string()).default([]),
+  conocimientosTecnicos: z.array(z.object({
+    conocimiento: z.string(),
+    nivel: z.string(),
+  })).default([]),
   competenciasConductuales: z.array(z.string()).default([]),
   idiomas: z.array(z.object({
     idioma: z.string(),

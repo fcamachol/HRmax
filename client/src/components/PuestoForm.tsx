@@ -66,6 +66,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
   const [currentTab, setCurrentTab] = useState("general");
   const [newCompetencia, setNewCompetencia] = useState("");
   const [newConocimiento, setNewConocimiento] = useState("");
+  const [newNivelConocimiento, setNewNivelConocimiento] = useState("basico");
   const [newCertificacion, setNewCertificacion] = useState("");
   const [newPrestacion, setNewPrestacion] = useState("");
   const [newIdioma, setNewIdioma] = useState("");
@@ -151,8 +152,27 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       const prestacionesActuales = defaultValues.compensacionYPrestaciones?.prestaciones || [];
       const prestacionesConLey = Array.from(new Set([...BENEFICIOS_LEY, ...prestacionesActuales]));
       
+      // Migrar conocimientos técnicos de strings a objetos si es necesario
+      const conocimientosNormalizados = (defaultValues.conocimientosTecnicos || []).map((item: any) => {
+        if (typeof item === 'string') {
+          // Convertir strings antiguos a objetos nuevos
+          return { conocimiento: item, nivel: 'basico' };
+        }
+        return item;
+      });
+
+      // Migrar idiomas de formato antiguo si es necesario
+      const idiomasNormalizados = (defaultValues.idiomas || []).map((item: any) => {
+        if (typeof item === 'string') {
+          return { idioma: item, nivel: 'basico' };
+        }
+        return item;
+      });
+      
       form.reset({
         ...defaultValues,
+        conocimientosTecnicos: conocimientosNormalizados,
+        idiomas: idiomasNormalizados,
         compensacionYPrestaciones: {
           ...defaultValues.compensacionYPrestaciones,
           prestaciones: prestacionesConLey,
@@ -184,8 +204,9 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
 
   const handleAddConocimiento = () => {
     if (newConocimiento.trim()) {
-      appendConocimiento(newConocimiento.trim() as any);
+      appendConocimiento({ conocimiento: newConocimiento.trim(), nivel: newNivelConocimiento } as any);
       setNewConocimiento("");
+      setNewNivelConocimiento("basico");
     }
   };
 
@@ -721,7 +742,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         <Input
                           value={newConocimiento}
                           onChange={(e) => setNewConocimiento(e.target.value)}
-                          placeholder="Ej: Excel Avanzado, SAP"
+                          placeholder="Ej: Excel, SAP, Python"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault();
@@ -729,7 +750,18 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                             }
                           }}
                           data-testid="input-new-conocimiento"
+                          className="flex-1"
                         />
+                        <Select value={newNivelConocimiento} onValueChange={setNewNivelConocimiento}>
+                          <SelectTrigger className="w-[180px]" data-testid="select-nivel-conocimiento">
+                            <SelectValue placeholder="Nivel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="basico">Básico</SelectItem>
+                            <SelectItem value="intermedio">Intermedio</SelectItem>
+                            <SelectItem value="avanzado">Avanzado</SelectItem>
+                          </SelectContent>
+                        </Select>
                         <Button
                           type="button"
                           size="icon"
@@ -741,19 +773,26 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                         </Button>
                       </div>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {conocimientosFields.map((field, index) => (
-                          <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-conocimiento-${index}`}>
-                            {form.watch(`conocimientosTecnicos.${index}`)}
-                            <button
-                              type="button"
-                              onClick={() => removeConocimiento(index)}
-                              className="ml-1 hover:text-destructive"
-                              data-testid={`button-remove-conocimiento-${index}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
+                        {conocimientosFields.map((field, index) => {
+                          const conocimiento = form.watch(`conocimientosTecnicos.${index}`) as any;
+                          // Manejar tanto formato antiguo (string) como nuevo (objeto)
+                          const displayText = typeof conocimiento === 'string' 
+                            ? `${conocimiento} - basico` 
+                            : `${conocimiento?.conocimiento} - ${conocimiento?.nivel}`;
+                          return (
+                            <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-conocimiento-${index}`}>
+                              {displayText}
+                              <button
+                                type="button"
+                                onClick={() => removeConocimiento(index)}
+                                className="ml-1 hover:text-destructive"
+                                data-testid={`button-remove-conocimiento-${index}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </Badge>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -799,9 +838,13 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       <div className="flex flex-wrap gap-2 mt-2">
                         {idiomasFields.map((field, index) => {
                           const idioma = form.watch(`idiomas.${index}`) as any;
+                          // Manejar tanto formato antiguo (string) como nuevo (objeto)
+                          const displayText = typeof idioma === 'string' 
+                            ? `${idioma} - basico` 
+                            : `${idioma?.idioma} - ${idioma?.nivel}`;
                           return (
                             <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-idioma-${index}`}>
-                              {idioma?.idioma} - {idioma?.nivel}
+                              {displayText}
                               <button
                                 type="button"
                                 onClick={() => removeIdioma(index)}

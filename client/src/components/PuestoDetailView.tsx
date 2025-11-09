@@ -101,7 +101,7 @@ export function PuestoDetailView({
   const indicadores = puesto.indicadoresDesempeno as any[];
   const funcionesPrincipales = puesto.funcionesPrincipales as string[];
   const funcionesSecundarias = puesto.funcionesSecundarias as string[];
-  const conocimientos = puesto.conocimientosTecnicos as string[];
+  const conocimientos = puesto.conocimientosTecnicos as any[]; // Puede ser array de strings (legacy) o array de objetos (nuevo)
   const competencias = puesto.competenciasConductuales as string[];
   const certificaciones = puesto.certificaciones as string[];
 
@@ -337,7 +337,23 @@ export function PuestoDetailView({
                 <CardTitle>Conocimientos Técnicos</CardTitle>
               </CardHeader>
               <CardContent>
-                <ListDisplay label="" items={conocimientos} />
+                {conocimientos && conocimientos.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {conocimientos.map((conocimiento, idx) => {
+                      // Manejar tanto formato antiguo (string) como nuevo (objeto)
+                      const nombre = typeof conocimiento === 'string' ? conocimiento : conocimiento?.conocimiento;
+                      const nivel = typeof conocimiento === 'string' ? 'básico' : conocimiento?.nivel;
+                      return (
+                        <div key={idx} className="p-3 border rounded-lg">
+                          <p className="text-sm font-medium">{nombre}</p>
+                          <p className="text-sm text-muted-foreground">Nivel: {nivel}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No se requieren conocimientos técnicos específicos</p>
+                )}
               </CardContent>
             </Card>
 
@@ -357,12 +373,17 @@ export function PuestoDetailView({
               <CardContent>
                 {idiomas && idiomas.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3">
-                    {idiomas.map((idioma, idx) => (
-                      <div key={idx} className="p-3 border rounded-lg">
-                        <p className="text-sm font-medium">{idioma.idioma}</p>
-                        <p className="text-sm text-muted-foreground">Nivel: {idioma.nivel}</p>
-                      </div>
-                    ))}
+                    {idiomas.map((idioma, idx) => {
+                      // Manejar tanto formato antiguo (string) como nuevo (objeto)
+                      const nombre = typeof idioma === 'string' ? idioma : idioma?.idioma;
+                      const nivel = typeof idioma === 'string' ? 'básico' : idioma?.nivel;
+                      return (
+                        <div key={idx} className="p-3 border rounded-lg">
+                          <p className="text-sm font-medium">{nombre}</p>
+                          <p className="text-sm text-muted-foreground">Nivel: {nivel}</p>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-muted-foreground italic">No se requieren idiomas adicionales</p>
