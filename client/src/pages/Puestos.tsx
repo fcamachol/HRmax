@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Search, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,14 +19,19 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import type { Puesto } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
+import type { Puesto, InsertPuesto } from "@shared/schema";
 import { PuestoQuickView } from "@/components/PuestoQuickView";
 import { PuestoDetailView } from "@/components/PuestoDetailView";
+import { PuestoForm } from "@/components/PuestoForm";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 export default function Puestos() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "quick" | "detail">("list");
   const [selectedPuestoId, setSelectedPuestoId] = useState<string | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const { toast } = useToast();
 
   const { data: puestos = [], isLoading } = useQuery<Puesto[]>({
     queryKey: ["/api/puestos"],
@@ -34,6 +39,29 @@ export default function Puestos() {
 
   const { data: employeeCounts = {} } = useQuery<Record<string, number>>({
     queryKey: ["/api/puestos/employees/counts"],
+  });
+
+  const createPuestoMutation = useMutation({
+    mutationFn: async (data: InsertPuesto) => {
+      const response = await apiRequest("POST", "/api/puestos", data);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/puestos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/puestos/employees/counts"] });
+      setIsFormOpen(false);
+      toast({
+        title: "Puesto creado",
+        description: "El puesto ha sido creado exitosamente",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const filteredPuestos = puestos.filter((puesto) =>
@@ -122,7 +150,7 @@ export default function Puestos() {
             />
           </div>
         </div>
-        <Button data-testid="button-create-puesto">
+        <Button onClick={() => setIsFormOpen(true)} data-testid="button-create-puesto">
           <Plus className="h-4 w-4 mr-2" />
           Nuevo Puesto
         </Button>
@@ -234,6 +262,12 @@ export default function Puestos() {
           </Table>
         </div>
       )}
+
+      <PuestoForm
+        open={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        onSubmit={(data) => createPuestoMutation.mutate(data)}
+      />
     </div>
   );
 }
