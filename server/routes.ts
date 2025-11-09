@@ -39,7 +39,12 @@ import {
   insertAsignacionPersonalREPSESchema,
   updateAsignacionPersonalREPSESchema,
   insertAvisoREPSESchema,
-  updateAvisoREPSESchema
+  updateAvisoREPSESchema,
+  insertCreditoLegalSchema,
+  updateCreditoLegalSchema,
+  insertPrestamoInternoSchema,
+  updatePrestamoInternoSchema,
+  insertPagoCreditoDescuentoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -1609,6 +1614,213 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(avisos);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // CRÉDITOS Y DESCUENTOS
+  // ============================================================================
+
+  // Créditos Legales
+  app.post("/api/creditos-legales", async (req, res) => {
+    try {
+      const validated = insertCreditoLegalSchema.parse(req.body);
+      const credito = await storage.createCreditoLegal(validated);
+      res.status(201).json(credito);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/creditos-legales", async (req, res) => {
+    try {
+      const creditos = await storage.getCreditosLegales();
+      res.json(creditos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/creditos-legales/activos", async (req, res) => {
+    try {
+      const creditos = await storage.getCreditosLegalesActivos();
+      res.json(creditos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/creditos-legales/tipo/:tipoCredito", async (req, res) => {
+    try {
+      const creditos = await storage.getCreditosLegalesByTipo(req.params.tipoCredito);
+      res.json(creditos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/creditos-legales/empleado/:empleadoId", async (req, res) => {
+    try {
+      const creditos = await storage.getCreditosLegalesByEmpleado(req.params.empleadoId);
+      res.json(creditos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/creditos-legales/:id", async (req, res) => {
+    try {
+      const credito = await storage.getCreditoLegal(req.params.id);
+      if (!credito) {
+        return res.status(404).json({ message: "Crédito no encontrado" });
+      }
+      res.json(credito);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/creditos-legales/:id", async (req, res) => {
+    try {
+      const validated = updateCreditoLegalSchema.parse(req.body);
+      const credito = await storage.updateCreditoLegal(req.params.id, validated);
+      res.json(credito);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/creditos-legales/:id", async (req, res) => {
+    try {
+      await storage.deleteCreditoLegal(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Préstamos Internos
+  app.post("/api/prestamos-internos", async (req, res) => {
+    try {
+      const validated = insertPrestamoInternoSchema.parse(req.body);
+      const prestamo = await storage.createPrestamoInterno(validated);
+      res.status(201).json(prestamo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/prestamos-internos", async (req, res) => {
+    try {
+      const prestamos = await storage.getPrestamosInternos();
+      res.json(prestamos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/prestamos-internos/activos", async (req, res) => {
+    try {
+      const prestamos = await storage.getPrestamosInternosActivos();
+      res.json(prestamos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/prestamos-internos/empleado/:empleadoId", async (req, res) => {
+    try {
+      const prestamos = await storage.getPrestamosInternosByEmpleado(req.params.empleadoId);
+      res.json(prestamos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/prestamos-internos/:id", async (req, res) => {
+    try {
+      const prestamo = await storage.getPrestamoInterno(req.params.id);
+      if (!prestamo) {
+        return res.status(404).json({ message: "Préstamo no encontrado" });
+      }
+      res.json(prestamo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/prestamos-internos/:id", async (req, res) => {
+    try {
+      const validated = updatePrestamoInternoSchema.parse(req.body);
+      const prestamo = await storage.updatePrestamoInterno(req.params.id, validated);
+      res.json(prestamo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/prestamos-internos/:id", async (req, res) => {
+    try {
+      await storage.deletePrestamoInterno(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Pagos de Créditos y Descuentos
+  app.post("/api/pagos-creditos-descuentos", async (req, res) => {
+    try {
+      const validated = insertPagoCreditoDescuentoSchema.parse(req.body);
+      const pago = await storage.createPagoCreditoDescuento(validated);
+      res.status(201).json(pago);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pagos-creditos-descuentos", async (req, res) => {
+    try {
+      const pagos = await storage.getPagosCreditosDescuentos();
+      res.json(pagos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pagos-creditos-descuentos/empleado/:empleadoId", async (req, res) => {
+    try {
+      const pagos = await storage.getPagosCreditosDescuentosByEmpleado(req.params.empleadoId);
+      res.json(pagos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pagos-creditos-descuentos/credito-legal/:creditoLegalId", async (req, res) => {
+    try {
+      const pagos = await storage.getPagosCreditosDescuentosByCreditoLegal(req.params.creditoLegalId);
+      res.json(pagos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/pagos-creditos-descuentos/prestamo-interno/:prestamoInternoId", async (req, res) => {
+    try {
+      const pagos = await storage.getPagosCreditosDescuentosByPrestamoInterno(req.params.prestamoInternoId);
+      res.json(pagos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/pagos-creditos-descuentos/:id", async (req, res) => {
+    try {
+      await storage.deletePagoCreditoDescuento(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
     }
   });
 
