@@ -186,8 +186,8 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
       Object.entries(submitData).filter(([_, v]) => v !== undefined)
     ) as InsertCandidato;
 
-    // Normalizar vacanteId: string vacía → undefined, valor real → mantener
-    const normalizedVacanteId = vacanteId && vacanteId.trim() !== "" ? vacanteId : undefined;
+    // Normalizar vacanteId: "NONE" o string vacía → undefined, valor real → mantener
+    const normalizedVacanteId = vacanteId && vacanteId !== "NONE" && vacanteId.trim() !== "" ? vacanteId : undefined;
 
     // Agregar vacanteId normalizado solo si tiene valor
     const finalData: InsertCandidato & { vacanteId?: string } = {
@@ -512,7 +512,7 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
                       <FormLabel>Vacante (Opcional)</FormLabel>
                       <Select 
                         onValueChange={field.onChange} 
-                        value={field.value ?? ""}
+                        value={field.value ?? "NONE"}
                         disabled={!!candidato} // Read-only cuando se edita
                       >
                         <FormControl>
@@ -521,7 +521,7 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Ninguna (Candidato de banco)</SelectItem>
+                          <SelectItem value="NONE">Ninguna (Candidato de banco)</SelectItem>
                           {vacantes.map((vacante) => (
                             <SelectItem key={vacante.id} value={vacante.id}>
                               {vacante.titulo} - {vacante.departamento}
