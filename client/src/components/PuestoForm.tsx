@@ -1042,6 +1042,27 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       />
                     </div>
 
+                    <FormField
+                      control={form.control}
+                      name="condicionesLaborales.guardias"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Guardias / Disponibilidad</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe si requiere guardias, disponibilidad de fines de semana, etc."
+                              className="resize-none"
+                              rows={3}
+                              {...field}
+                              value={field.value || ""}
+                              data-testid="textarea-guardias"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
