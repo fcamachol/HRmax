@@ -1218,7 +1218,10 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
   })).default([]),
   certificaciones: z.array(z.string()).default([]),
   condicionesLaborales: z.object({
-    horario: z.string().optional(),
+    tipoHorario: z.enum(["fijo", "variable"]).optional(),
+    horaEntrada: z.string().optional(),
+    horaSalida: z.string().optional(),
+    descripcionHorario: z.string().optional(),
     horasSemanales: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
     guardias: z.string().optional(),
     modalidad: z.string().optional(),
@@ -1231,6 +1234,7 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
     rangoSalarialMax: z.number().optional(),
     tipoPago: z.string().optional(),
     prestaciones: z.array(z.string()).optional(),
+    prestacionesAdicionales: z.array(z.string()).optional(),
   }).default({}),
   indicadoresDesempeno: z.array(z.object({
     indicador: z.string(),

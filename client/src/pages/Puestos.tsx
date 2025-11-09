@@ -137,9 +137,16 @@ export default function Puestos() {
       certificaciones: puesto.certificaciones as string[],
       condicionesLaborales: {
         ...(puesto.condicionesLaborales as any),
+        tipoHorario: (puesto.condicionesLaborales as any)?.tipoHorario,
+        horaEntrada: (puesto.condicionesLaborales as any)?.horaEntrada,
+        horaSalida: (puesto.condicionesLaborales as any)?.horaSalida,
+        descripcionHorario: (puesto.condicionesLaborales as any)?.descripcionHorario,
         horasSemanales: (puesto.condicionesLaborales as any)?.horasSemanales,
       },
-      compensacionYPrestaciones: puesto.compensacionYPrestaciones as any,
+      compensacionYPrestaciones: {
+        ...(puesto.compensacionYPrestaciones as any),
+        prestacionesAdicionales: (puesto.compensacionYPrestaciones as any)?.prestacionesAdicionales || [],
+      },
       indicadoresDesempeno: puesto.indicadoresDesempeno as any,
       cumplimientoLegal: puesto.cumplimientoLegal as any,
       estatus: (puesto.estatus as "activo" | "inactivo") ?? "activo",

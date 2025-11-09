@@ -67,6 +67,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
   const [newCompetencia, setNewCompetencia] = useState("");
   const [newConocimiento, setNewConocimiento] = useState("");
   const [newCertificacion, setNewCertificacion] = useState("");
+  const [newPrestacion, setNewPrestacion] = useState("");
 
   const form = useForm<PuestoFormValues>({
     resolver: zodResolver(puestoFormSchema),
@@ -91,9 +92,12 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       competenciasConductuales: [],
       idiomas: [],
       certificaciones: [],
-      condicionesLaborales: {},
+      condicionesLaborales: {
+        tipoHorario: "fijo",
+      },
       compensacionYPrestaciones: {
         prestaciones: BENEFICIOS_LEY,
+        prestacionesAdicionales: [],
       },
       indicadoresDesempeno: [],
       cumplimientoLegal: {},
@@ -126,6 +130,13 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
     name: "funcionesSecundarias" as any,
   });
 
+  const { fields: prestacionesAdicionalesFields, append: appendPrestacionAdicional, remove: removePrestacionAdicional } = useFieldArray({
+    control: form.control,
+    name: "compensacionYPrestaciones.prestacionesAdicionales" as any,
+  });
+
+  const tipoHorario = form.watch("condicionesLaborales.tipoHorario");
+
   // Reset form when defaultValues change (for edit mode)
   useEffect(() => {
     if (defaultValues && open) {
@@ -138,6 +149,11 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
         compensacionYPrestaciones: {
           ...defaultValues.compensacionYPrestaciones,
           prestaciones: prestacionesConLey,
+          prestacionesAdicionales: defaultValues.compensacionYPrestaciones?.prestacionesAdicionales || [],
+        },
+        condicionesLaborales: {
+          ...defaultValues.condicionesLaborales,
+          tipoHorario: (defaultValues.condicionesLaborales as any)?.tipoHorario || "fijo",
         },
       });
       setCurrentTab("general");
@@ -173,6 +189,13 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
     }
   };
 
+  const handleAddPrestacionAdicional = () => {
+    if (newPrestacion.trim()) {
+      appendPrestacionAdicional(newPrestacion.trim() as any);
+      setNewPrestacion("");
+    }
+  };
+
   const toggleBeneficio = (beneficio: string) => {
     const prestacionesActuales = form.watch("compensacionYPrestaciones.prestaciones") || [];
     const index = prestacionesActuales.indexOf(beneficio);
@@ -205,9 +228,8 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="flex flex-col flex-1 overflow-hidden">
             <Tabs value={currentTab} onValueChange={setCurrentTab} className="flex-1 flex flex-col overflow-hidden">
-              <TabsList className="grid w-full grid-cols-8">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="general" data-testid="tab-general">General</TabsTrigger>
-                <TabsTrigger value="jerarquia" data-testid="tab-jerarquia">Jerarquía</TabsTrigger>
                 <TabsTrigger value="funciones" data-testid="tab-funciones">Funciones</TabsTrigger>
                 <TabsTrigger value="requisitos" data-testid="tab-requisitos">Requisitos</TabsTrigger>
                 <TabsTrigger value="competencias" data-testid="tab-competencias">Competencias</TabsTrigger>
@@ -284,6 +306,23 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                           <FormControl>
                             <Input placeholder="Ej: Oficina Central - CDMX" {...field} value={field.value || ""} data-testid="input-ubicacion" />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="reportaA"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Reporta a</FormLabel>
+                          <FormControl>
+                            <Input placeholder="ID del puesto superior" {...field} value={field.value || ""} data-testid="input-reporta-a" />
+                          </FormControl>
+                          <FormDescription>
+                            ID del puesto al que reporta en la jerarquía
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -378,25 +417,6 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                             data-testid="textarea-proposito-general"
                           />
                         </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
-
-                <TabsContent value="jerarquia" className="space-y-4 mt-0">
-                  <FormField
-                    control={form.control}
-                    name="reportaA"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reporta a (ID del Puesto Superior)</FormLabel>
-                        <FormControl>
-                          <Input placeholder="ID del puesto al que reporta" {...field} value={field.value || ""} data-testid="input-reporta-a" />
-                        </FormControl>
-                        <FormDescription>
-                          Ingresa el ID del puesto al que este puesto reporta en la jerarquía organizacional
-                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -725,23 +745,93 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                 </TabsContent>
 
                 <TabsContent value="condiciones" className="space-y-4 mt-0">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-4">
                     <FormField
                       control={form.control}
-                      name="condicionesLaborales.horario"
+                      name="condicionesLaborales.tipoHorario"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Horario</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: 9:00 - 18:00 o Variable" {...field} data-testid="input-horario" />
-                          </FormControl>
-                          <FormDescription>
-                            Puede ser fijo o variable
-                          </FormDescription>
+                          <FormLabel>Tipo de Horario</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value ?? "fijo"}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-tipo-horario">
+                                <SelectValue placeholder="Selecciona tipo de horario" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="fijo">Horario Fijo</SelectItem>
+                              <SelectItem value="variable">Horario Variable</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+
+                    {tipoHorario === "fijo" ? (
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="condicionesLaborales.horaEntrada"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hora de Entrada</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                  value={field.value || ""}
+                                  data-testid="input-hora-entrada"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="condicionesLaborales.horaSalida"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Hora de Salida</FormLabel>
+                              <FormControl>
+                                <Input
+                                  type="time"
+                                  {...field}
+                                  value={field.value || ""}
+                                  data-testid="input-hora-salida"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.descripcionHorario"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Descripción del Horario Variable</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder="Describe las condiciones del horario variable, turnos rotativos, etc..."
+                                className="resize-none"
+                                rows={4}
+                                {...field}
+                                value={field.value || ""}
+                                data-testid="textarea-descripcion-horario"
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Especifica cómo funciona el horario variable, turnos, rotaciones, etc.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
 
                     <FormField
                       control={form.control}
@@ -754,7 +844,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                               type="number"
                               placeholder="40"
                               {...field}
-                              onChange={e => field.onChange(parseFloat(e.target.value) || undefined)}
+                              onChange={e => field.onChange(e.target.value)}
                               value={field.value || ""}
                               data-testid="input-horas-semanales"
                             />
@@ -767,95 +857,97 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       )}
                     />
 
-                    <FormField
-                      control={form.control}
-                      name="condicionesLaborales.modalidad"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Modalidad</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.modalidad"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Modalidad</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-modalidad">
+                                  <SelectValue placeholder="Selecciona modalidad" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Presencial">Presencial</SelectItem>
+                                <SelectItem value="Remoto">Remoto</SelectItem>
+                                <SelectItem value="Híbrido">Híbrido</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.nivelEsfuerzoFisico"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Nivel de Esfuerzo Físico</FormLabel>
+                            <Select onValueChange={field.onChange} value={field.value ?? undefined}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-esfuerzo-fisico">
+                                  <SelectValue placeholder="Selecciona nivel" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                <SelectItem value="Bajo">Bajo</SelectItem>
+                                <SelectItem value="Medio">Medio</SelectItem>
+                                <SelectItem value="Alto">Alto</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="condicionesLaborales.requiereViaje"
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
                             <FormControl>
-                              <SelectTrigger data-testid="select-modalidad">
-                                <SelectValue placeholder="Selecciona modalidad" />
-                              </SelectTrigger>
+                              <Checkbox
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                                data-testid="checkbox-requiere-viaje"
+                              />
                             </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Presencial">Presencial</SelectItem>
-                              <SelectItem value="Remoto">Remoto</SelectItem>
-                              <SelectItem value="Híbrido">Híbrido</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                            <div className="space-y-1 leading-none">
+                              <FormLabel>Requiere Viajes</FormLabel>
+                              <FormDescription>
+                                El puesto requiere viajar regularmente
+                              </FormDescription>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                    </div>
 
                     <FormField
                       control={form.control}
-                      name="condicionesLaborales.nivelEsfuerzoFisico"
+                      name="condicionesLaborales.ambienteTrabajo"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Nivel de Esfuerzo Físico</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value ?? undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-esfuerzo-fisico">
-                                <SelectValue placeholder="Selecciona nivel" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="Bajo">Bajo</SelectItem>
-                              <SelectItem value="Medio">Medio</SelectItem>
-                              <SelectItem value="Alto">Alto</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="condicionesLaborales.requiereViaje"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                          <FormLabel>Ambiente de Trabajo</FormLabel>
                           <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                              data-testid="checkbox-requiere-viaje"
+                            <Textarea
+                              placeholder="Describe el ambiente y condiciones de trabajo..."
+                              className="resize-none"
+                              rows={3}
+                              {...field}
+                              value={field.value || ""}
+                              data-testid="textarea-ambiente-trabajo"
                             />
                           </FormControl>
-                          <div className="space-y-1 leading-none">
-                            <FormLabel>Requiere Viajes</FormLabel>
-                            <FormDescription>
-                              El puesto requiere viajar regularmente
-                            </FormDescription>
-                          </div>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
-
-                  <FormField
-                    control={form.control}
-                    name="condicionesLaborales.ambienteTrabajo"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Ambiente de Trabajo</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Describe el ambiente y condiciones de trabajo..."
-                            className="resize-none"
-                            rows={3}
-                            {...field}
-                            value={field.value || ""}
-                            data-testid="textarea-ambiente-trabajo"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </TabsContent>
 
                 <TabsContent value="compensacion" className="space-y-4 mt-0">
@@ -927,9 +1019,9 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                   </div>
 
                   <div className="space-y-2">
-                    <FormLabel>Prestaciones y Beneficios</FormLabel>
+                    <FormLabel>Prestaciones de Ley</FormLabel>
                     <div className="space-y-2 border rounded-md p-4">
-                      <p className="text-sm text-muted-foreground mb-2">Beneficios de Ley (marcados por defecto)</p>
+                      <p className="text-sm text-muted-foreground mb-2">Marcadas por defecto</p>
                       <div className="grid grid-cols-2 gap-2">
                         {BENEFICIOS_LEY.map((beneficio) => {
                           const prestacionesActuales = form.watch("compensacionYPrestaciones.prestaciones") || [];
@@ -953,6 +1045,50 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                           );
                         })}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <FormLabel>Prestaciones Adicionales</FormLabel>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newPrestacion}
+                        onChange={(e) => setNewPrestacion(e.target.value)}
+                        placeholder="Ej: Vales de despensa, Seguro de gastos médicos mayores"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddPrestacionAdicional();
+                          }
+                        }}
+                        data-testid="input-new-prestacion"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="outline"
+                        onClick={handleAddPrestacionAdicional}
+                        data-testid="button-add-prestacion"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {prestacionesAdicionalesFields.map((field, index) => (
+                        <Badge key={field.id} variant="secondary" className="gap-1" data-testid={`badge-prestacion-${index}`}>
+                          {form.watch(`compensacionYPrestaciones.prestacionesAdicionales.${index}`)}
+                          <button
+                            type="button"
+                            onClick={() => removePrestacionAdicional(index)}
+                            className="ml-1 hover:text-destructive"
+                            data-testid={`button-remove-prestacion-${index}`}
+                            >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
                   </div>
                 </TabsContent>
