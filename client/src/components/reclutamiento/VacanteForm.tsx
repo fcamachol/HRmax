@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -101,80 +101,92 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
     queryKey: ["/api/centros-trabajo"],
   });
 
-  const defaultValues: Partial<VacanteFormValues> = vacante
-    ? {
-        titulo: vacante.titulo,
-        puestoId: vacante.puestoId ?? undefined,
-        departamento: vacante.departamento,
-        numeroVacantes: vacante.numeroVacantes,
-        prioridad: vacante.prioridad,
-        fechaApertura: vacante.fechaApertura ?? undefined,
-        fechaLimite: vacante.fechaLimite ?? undefined,
-        estatus: vacante.estatus,
-        tipoContrato: vacante.tipoContrato ?? undefined,
-        modalidadTrabajo: vacante.modalidadTrabajo ?? undefined,
-        ubicacion: vacante.ubicacion ?? undefined,
-        centroTrabajoId: vacante.centroTrabajoId ?? undefined,
-        rangoSalarialMin: vacante.rangoSalarialMin ? parseFloat(vacante.rangoSalarialMin) : undefined,
-        rangoSalarialMax: vacante.rangoSalarialMax ? parseFloat(vacante.rangoSalarialMax) : undefined,
-        descripcion: vacante.descripcion ?? undefined,
-        requisitos: vacante.requisitos ?? undefined,
-        responsabilidades: vacante.responsabilidades ?? undefined,
-        prestaciones: vacante.prestaciones ?? undefined,
-        conocimientosTecnicos: vacante.conocimientosTecnicos as any || [],
-        competenciasConductuales: vacante.competenciasConductuales as any || [],
-        idiomas: vacante.idiomas as any || [],
-        certificaciones: vacante.certificaciones as any || [],
-        condicionesLaborales: {
-          tipoHorario: (vacante.condicionesLaborales as any)?.tipoHorario || "fijo",
-          horaEntrada: (vacante.condicionesLaborales as any)?.horaEntrada || "",
-          horaSalida: (vacante.condicionesLaborales as any)?.horaSalida || "",
-          descripcionHorario: (vacante.condicionesLaborales as any)?.descripcionHorario || "",
-          horasSemanales: (vacante.condicionesLaborales as any)?.horasSemanales !== undefined ? (vacante.condicionesLaborales as any).horasSemanales : undefined,
-          tiempoComida: (vacante.condicionesLaborales as any)?.tiempoComida !== undefined ? (vacante.condicionesLaborales as any).tiempoComida : undefined,
-          horarioComidaInicio: (vacante.condicionesLaborales as any)?.horarioComidaInicio || "",
-          horarioComidaFin: (vacante.condicionesLaborales as any)?.horarioComidaFin || "",
-          modalidad: (vacante.condicionesLaborales as any)?.modalidad || "",
-          guardias: (vacante.condicionesLaborales as any)?.guardias || "",
-          horasGuardias: (vacante.condicionesLaborales as any)?.horasGuardias !== undefined ? (vacante.condicionesLaborales as any).horasGuardias : undefined,
-          nivelEsfuerzoFisico: (vacante.condicionesLaborales as any)?.nivelEsfuerzoFisico || "",
-          ambienteTrabajo: (vacante.condicionesLaborales as any)?.ambienteTrabajo || "",
-        },
-        empresaId: vacante.empresaId ?? undefined,
-        creadoPor: vacante.creadoPor ?? undefined,
+  // Memoized helper to build default values
+  const buildDefaultValues = useMemo(() => {
+    return (vacanteData: Vacante | null): Partial<VacanteFormValues> => {
+      if (vacanteData) {
+        return {
+          titulo: vacanteData.titulo,
+          puestoId: vacanteData.puestoId ?? undefined,
+          departamento: vacanteData.departamento,
+          numeroVacantes: vacanteData.numeroVacantes,
+          prioridad: vacanteData.prioridad,
+          fechaApertura: vacanteData.fechaApertura ?? undefined,
+          fechaLimite: vacanteData.fechaLimite ?? undefined,
+          estatus: vacanteData.estatus,
+          tipoContrato: vacanteData.tipoContrato ?? undefined,
+          modalidadTrabajo: vacanteData.modalidadTrabajo ?? undefined,
+          ubicacion: vacanteData.ubicacion ?? undefined,
+          centroTrabajoId: vacanteData.centroTrabajoId ?? undefined,
+          rangoSalarialMin: vacanteData.rangoSalarialMin ? parseFloat(vacanteData.rangoSalarialMin) : undefined,
+          rangoSalarialMax: vacanteData.rangoSalarialMax ? parseFloat(vacanteData.rangoSalarialMax) : undefined,
+          descripcion: vacanteData.descripcion ?? undefined,
+          requisitos: vacanteData.requisitos ?? undefined,
+          responsabilidades: vacanteData.responsabilidades ?? undefined,
+          prestaciones: vacanteData.prestaciones ?? undefined,
+          conocimientosTecnicos: vacanteData.conocimientosTecnicos as any || [],
+          competenciasConductuales: vacanteData.competenciasConductuales as any || [],
+          idiomas: vacanteData.idiomas as any || [],
+          certificaciones: vacanteData.certificaciones as any || [],
+          condicionesLaborales: {
+            tipoHorario: (vacanteData.condicionesLaborales as any)?.tipoHorario || "fijo",
+            horaEntrada: (vacanteData.condicionesLaborales as any)?.horaEntrada || "",
+            horaSalida: (vacanteData.condicionesLaborales as any)?.horaSalida || "",
+            descripcionHorario: (vacanteData.condicionesLaborales as any)?.descripcionHorario || "",
+            horasSemanales: (vacanteData.condicionesLaborales as any)?.horasSemanales !== undefined ? (vacanteData.condicionesLaborales as any).horasSemanales : undefined,
+            tiempoComida: (vacanteData.condicionesLaborales as any)?.tiempoComida !== undefined ? (vacanteData.condicionesLaborales as any).tiempoComida : undefined,
+            horarioComidaInicio: (vacanteData.condicionesLaborales as any)?.horarioComidaInicio || "",
+            horarioComidaFin: (vacanteData.condicionesLaborales as any)?.horarioComidaFin || "",
+            modalidad: (vacanteData.condicionesLaborales as any)?.modalidad || "",
+            guardias: (vacanteData.condicionesLaborales as any)?.guardias || "",
+            horasGuardias: (vacanteData.condicionesLaborales as any)?.horasGuardias !== undefined ? (vacanteData.condicionesLaborales as any).horasGuardias : undefined,
+            nivelEsfuerzoFisico: (vacanteData.condicionesLaborales as any)?.nivelEsfuerzoFisico || "",
+            ambienteTrabajo: (vacanteData.condicionesLaborales as any)?.ambienteTrabajo || "",
+          },
+          empresaId: vacanteData.empresaId ?? undefined,
+          creadoPor: vacanteData.creadoPor ?? undefined,
+        };
+      } else {
+        return {
+          numeroVacantes: 1,
+          prioridad: "media",
+          fechaApertura: new Date().toISOString().split('T')[0],
+          estatus: "abierta",
+          tipoContrato: "indeterminado",
+          modalidadTrabajo: "presencial",
+          conocimientosTecnicos: [],
+          competenciasConductuales: [],
+          idiomas: [],
+          certificaciones: [],
+          condicionesLaborales: {
+            tipoHorario: "fijo",
+            horaEntrada: "",
+            horaSalida: "",
+            descripcionHorario: "",
+            horasSemanales: undefined,
+            tiempoComida: undefined,
+            horarioComidaInicio: "",
+            horarioComidaFin: "",
+            modalidad: "",
+            guardias: "",
+            horasGuardias: undefined,
+            nivelEsfuerzoFisico: "",
+            ambienteTrabajo: "",
+          },
+        };
       }
-    : {
-        numeroVacantes: 1,
-        prioridad: "media",
-        fechaApertura: new Date().toISOString().split('T')[0],
-        estatus: "abierta",
-        tipoContrato: "indeterminado",
-        modalidadTrabajo: "presencial",
-        conocimientosTecnicos: [],
-        competenciasConductuales: [],
-        idiomas: [],
-        certificaciones: [],
-        condicionesLaborales: {
-          tipoHorario: "fijo",
-          horaEntrada: "",
-          horaSalida: "",
-          descripcionHorario: "",
-          horasSemanales: undefined,
-          tiempoComida: undefined,
-          horarioComidaInicio: "",
-          horarioComidaFin: "",
-          modalidad: "",
-          guardias: "",
-          horasGuardias: undefined,
-          nivelEsfuerzoFisico: "",
-          ambienteTrabajo: "",
-        },
-      };
+    };
+  }, []);
 
   const form = useForm<VacanteFormValues>({
     resolver: zodResolver(vacanteFormSchema),
-    defaultValues,
+    defaultValues: buildDefaultValues(vacante),
   });
+
+  // Reset form when vacante prop changes
+  useEffect(() => {
+    form.reset(buildDefaultValues(vacante));
+  }, [vacante, form, buildDefaultValues]);
 
   const { fields: competenciasFields, append: appendCompetencia, remove: removeCompetencia } = useFieldArray({
     control: form.control,
@@ -293,13 +305,22 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
 
   const handleSubmit = (values: VacanteFormValues) => {
     // Convert salary numbers to strings for backend numeric fields
-    const submitData: InsertVacante = {
+    const submitData: any = {
       ...values,
       rangoSalarialMin: values.rangoSalarialMin !== undefined ? String(values.rangoSalarialMin) : undefined,
       rangoSalarialMax: values.rangoSalarialMax !== undefined ? String(values.rangoSalarialMax) : undefined,
-    } as InsertVacante;
+    };
     
-    onSubmit(submitData);
+    // Remove undefined values to prevent overwriting existing data with null during PATCH
+    const cleanedData: any = {};
+    Object.keys(submitData).forEach(key => {
+      const value = submitData[key];
+      if (value !== undefined) {
+        cleanedData[key] = value;
+      }
+    });
+    
+    onSubmit(cleanedData as InsertVacante);
   };
 
   return (
@@ -424,7 +445,7 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
                     <FormLabel>Prioridad<span className="text-destructive"> *</span></FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      value={field.value}
+                      value={field.value ?? "media"}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-prioridad">
@@ -534,7 +555,7 @@ export function VacanteForm({ vacante, puestos, onSubmit, onCancel, isSubmitting
                     <FormLabel>Estatus<span className="text-destructive"> *</span></FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      value={field.value}
+                      value={field.value ?? "abierta"}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-estatus">

@@ -38,6 +38,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { VacanteForm } from "@/components/reclutamiento/VacanteForm";
+import { VacanteRequisitosDialog } from "@/components/reclutamiento/VacanteRequisitosDialog";
 import type { Vacante, InsertVacante, Puesto, VacanteStatus, VacantePriority, CentroTrabajo } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -47,6 +48,8 @@ export default function Vacantes() {
   const [statusFilter, setStatusFilter] = useState<VacanteStatus | "todas">("todas");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingVacante, setEditingVacante] = useState<Vacante | null>(null);
+  const [requisitosVacante, setRequisitosVacante] = useState<Vacante | null>(null);
+  const [isRequisitosOpen, setIsRequisitosOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: vacantes = [], isLoading } = useQuery<Vacante[]>({
@@ -170,6 +173,11 @@ export default function Vacantes() {
       id, 
       data: { estatus: newStatus } 
     });
+  };
+
+  const handleViewRequisitos = (vacante: Vacante) => {
+    setRequisitosVacante(vacante);
+    setIsRequisitosOpen(true);
   };
 
   const getPuestoNombre = (puestoId: string | null) => {
@@ -366,6 +374,12 @@ export default function Vacantes() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                             <DropdownMenuItem
+                              onClick={() => handleViewRequisitos(vacante)}
+                              data-testid={`button-view-requisitos-${vacante.id}`}
+                            >
+                              Ver Requisitos
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
                               onClick={() => handleEditVacante(vacante)}
                               data-testid={`button-edit-${vacante.id}`}
                             >
@@ -448,6 +462,12 @@ export default function Vacantes() {
           />
         </DialogContent>
       </Dialog>
+
+      <VacanteRequisitosDialog
+        vacante={requisitosVacante}
+        open={isRequisitosOpen}
+        onOpenChange={setIsRequisitosOpen}
+      />
     </div>
   );
 }
