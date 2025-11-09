@@ -97,6 +97,11 @@ const organizacionSubItems = [
     url: "/organizacion/puestos",
     icon: Briefcase,
   },
+  {
+    title: "Centros de Trabajo",
+    url: "/organizacion/centros-trabajo",
+    icon: MapPin,
+  },
 ];
 
 const mainMenuItems = [
@@ -104,11 +109,6 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Centros de Trabajo",
-    url: "/centros-trabajo",
-    icon: MapPin,
   },
   {
     title: "Reportes",

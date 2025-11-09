@@ -41,12 +41,12 @@ function Router() {
       <Route path="/payroll/grupos" component={GruposNomina} />
       <Route path="/attendance" component={Attendance} />
       <Route path="/reloj-checador" component={RelojChecador} />
-      <Route path="/centros-trabajo" component={CentrosTrabajo} />
+      <Route path="/organizacion/puestos" component={Puestos} />
+      <Route path="/organizacion/centros-trabajo" component={CentrosTrabajo} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/repse" component={REPSE} />
       <Route path="/creditos" component={Creditos} />
-      <Route path="/organizacion/puestos" component={Puestos} />
       <Route path="/configuration" component={Configuration} />
       <Route path="/empresas" component={Empresas} />
       <Route path="/settings" component={Settings} />
