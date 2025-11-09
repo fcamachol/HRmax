@@ -1279,12 +1279,23 @@ export const vacantes = pgTable("vacantes", {
   tipoContrato: varchar("tipo_contrato").default("indeterminado"),
   modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
   ubicacion: varchar("ubicacion"),
+  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }),
   rangoSalarialMin: numeric("rango_salarial_min"),
   rangoSalarialMax: numeric("rango_salarial_max"),
   descripcion: text("descripcion"),
   requisitos: text("requisitos"),
   responsabilidades: text("responsabilidades"),
   prestaciones: text("prestaciones"),
+  
+  // Competencias (copiadas del puesto o personalizadas)
+  conocimientosTecnicos: jsonb("conocimientos_tecnicos").default(sql`'[]'::jsonb`), // Array de {conocimiento, nivel}
+  competenciasConductuales: jsonb("competencias_conductuales").default(sql`'[]'::jsonb`), // Array de strings
+  idiomas: jsonb("idiomas").default(sql`'[]'::jsonb`), // Array de {idioma, nivel}
+  certificaciones: jsonb("certificaciones").default(sql`'[]'::jsonb`), // Array de strings
+  
+  // Condiciones Laborales
+  condicionesLaborales: jsonb("condiciones_laborales").default(sql`'{}'::jsonb`),
+  
   empresaId: varchar("empresa_id"),
   creadoPor: varchar("creado_por"),
   createdAt: timestamp("created_at").default(sql`now()`),
@@ -1461,6 +1472,32 @@ export const insertVacanteSchema = createInsertSchema(vacantes).omit({
   numeroVacantes: z.coerce.number().int().positive().default(1),
   rangoSalarialMin: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
   rangoSalarialMax: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+  
+  // Competencias (compartidas con Puestos)
+  conocimientosTecnicos: z.array(z.object({
+    conocimiento: z.string(),
+    nivel: z.string(),
+  })).default([]),
+  competenciasConductuales: z.array(z.string()).default([]),
+  idiomas: z.array(z.object({
+    idioma: z.string(),
+    nivel: z.string(),
+  })).default([]),
+  certificaciones: z.array(z.string()).default([]),
+  
+  // Condiciones Laborales (compartidas con Puestos)
+  condicionesLaborales: z.object({
+    tipoHorario: z.enum(["fijo", "variable"]).optional(),
+    horaEntrada: z.string().optional(),
+    horaSalida: z.string().optional(),
+    descripcionHorario: z.string().optional(),
+    horasSemanales: z.union([z.coerce.number().positive(), z.literal("").transform(() => undefined)]).optional(),
+    guardias: z.string().optional(),
+    modalidad: z.string().optional(),
+    requiereViaje: z.boolean().optional(),
+    nivelEsfuerzoFisico: z.string().optional(),
+    ambienteTrabajo: z.string().optional(),
+  }).default({}),
 });
 
 export const insertCandidatoSchema = createInsertSchema(candidatos).omit({
