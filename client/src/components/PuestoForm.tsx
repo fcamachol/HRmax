@@ -157,7 +157,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues }: Pues
                     <FormLabel>Nivel Jerárquico</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value || undefined}
+                      value={field.value ?? undefined}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-nivel-jerarquico">
@@ -186,7 +186,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues }: Pues
                     <FormLabel>Estatus</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value || "activo"}
+                      value={field.value ?? "activo"}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-estatus">
