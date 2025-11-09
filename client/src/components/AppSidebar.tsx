@@ -16,6 +16,7 @@ import {
   LayoutList,
   MapPin,
   ClipboardCheck,
+  CreditCard,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -89,6 +90,11 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
+  },
+  {
+    title: "Créditos y Descuentos",
+    url: "/creditos",
+    icon: CreditCard,
   },
   {
     title: "Centros de Trabajo",
