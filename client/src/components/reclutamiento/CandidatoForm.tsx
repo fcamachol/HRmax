@@ -417,6 +417,42 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
                     </FormItem>
                   )}
                 />
+
+                {/* Selector de Vacante */}
+                <FormField
+                  control={form.control}
+                  name="vacanteId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vacante Vinculada (Opcional)</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value ?? "NONE"}
+                        disabled={!!candidato}
+                      >
+                        <FormControl>
+                          <SelectTrigger data-testid="select-vacante">
+                            <SelectValue placeholder="Seleccionar vacante..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="NONE">Ninguna (Candidato de banco)</SelectItem>
+                          {vacantes.map((vacante) => (
+                            <SelectItem key={vacante.id} value={vacante.id}>
+                              {vacante.titulo} - {vacante.departamento}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {candidato && (
+                        <p className="text-xs text-muted-foreground">
+                          Para cambiar la vacante vinculada, usa la página de Vacantes o Proceso de Selección
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </TabsContent>
 
               <TabsContent value="perfil" className="space-y-4 mt-4">
@@ -502,42 +538,6 @@ export function CandidatoForm({ candidato, open, onOpenChange, onSubmit, isPendi
                     )}
                   />
                 </div>
-
-                {/* Selector de Vacante */}
-                <FormField
-                  control={form.control}
-                  name="vacanteId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Vacante (Opcional)</FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value ?? "NONE"}
-                        disabled={!!candidato} // Read-only cuando se edita
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-vacante">
-                            <SelectValue placeholder="Seleccionar vacante..." />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="NONE">Ninguna (Candidato de banco)</SelectItem>
-                          {vacantes.map((vacante) => (
-                            <SelectItem key={vacante.id} value={vacante.id}>
-                              {vacante.titulo} - {vacante.departamento}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      {candidato && (
-                        <p className="text-xs text-muted-foreground">
-                          Para cambiar la vacante vinculada, usa la página de Vacantes o Proceso de Selección
-                        </p>
-                      )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
