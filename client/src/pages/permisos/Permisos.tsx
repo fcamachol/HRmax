@@ -21,7 +21,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Clock, CheckCircle, XCircle, Calendar, Users, FileText } from "lucide-react";
 import { PermisoForm } from "@/components/permisos/PermisoForm";
-import type { SolicitudPermiso } from "@shared/schema";
+import type { SolicitudPermiso, SolicitudPermisoWithEmpleado } from "@shared/schema";
 
 export default function Permisos() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -30,7 +30,7 @@ export default function Permisos() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPermiso, setSelectedPermiso] = useState<SolicitudPermiso | undefined>();
 
-  const { data: permisos = [], isLoading } = useQuery<SolicitudPermiso[]>({
+  const { data: permisos = [], isLoading } = useQuery<SolicitudPermisoWithEmpleado[]>({
     queryKey: ["/api/permisos"],
   });
 
@@ -42,8 +42,12 @@ export default function Permisos() {
   });
 
   const filteredPermisos = permisos.filter((permiso) => {
+    const empleadoNombre = permiso.empleado 
+      ? `${permiso.empleado.nombre} ${permiso.empleado.apellidoPaterno} ${permiso.empleado.apellidoMaterno || ''}`.trim()
+      : '';
     const matchesSearch = permiso.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         permiso.empleadoId?.toLowerCase().includes(searchTerm.toLowerCase());
+                         empleadoNombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         permiso.empleado?.numeroEmpleado?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesTipo = tipoFilter === "all" || permiso.tipoPermiso === tipoFilter;
     const matchesEstatus = estatusFilter === "all" || permiso.estatus === estatusFilter;
     return matchesSearch && matchesTipo && matchesEstatus;
@@ -125,7 +129,7 @@ export default function Permisos() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por ID o empleado..."
+            placeholder="Buscar por nombre o número de empleado..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -191,14 +195,23 @@ export default function Permisos() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredPermisos.map((permiso) => (
-                <TableRow key={permiso.id} data-testid={`row-permiso-${permiso.id}`}>
-                  <TableCell className="font-medium max-w-[100px] truncate" data-testid={`text-permiso-id-${permiso.id}`}>
-                    {permiso.id}
-                  </TableCell>
-                  <TableCell data-testid={`text-empleado-id-${permiso.id}`}>
-                    {permiso.empleadoId}
-                  </TableCell>
+              filteredPermisos.map((permiso) => {
+                const empleadoNombre = permiso.empleado 
+                  ? `${permiso.empleado.nombre} ${permiso.empleado.apellidoPaterno} ${permiso.empleado.apellidoMaterno || ''}`.trim()
+                  : 'Empleado no encontrado';
+                return (
+                  <TableRow key={permiso.id} data-testid={`row-permiso-${permiso.id}`}>
+                    <TableCell className="font-medium max-w-[100px] truncate" data-testid={`text-permiso-id-${permiso.id}`}>
+                      {permiso.id}
+                    </TableCell>
+                    <TableCell data-testid={`text-empleado-id-${permiso.id}`}>
+                      <div>
+                        <div>{empleadoNombre}</div>
+                        {permiso.empleado && (
+                          <div className="text-xs text-muted-foreground">{permiso.empleado.numeroEmpleado}</div>
+                        )}
+                      </div>
+                    </TableCell>
                   <TableCell>{getTipoBadge(permiso.tipoPermiso)}</TableCell>
                   <TableCell>{getEstatusBadge(permiso.estatus)}</TableCell>
                   <TableCell>
@@ -245,7 +258,8 @@ export default function Permisos() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
