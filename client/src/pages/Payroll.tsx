@@ -226,6 +226,7 @@ export default function Payroll() {
     { id: "premio-asistencia", name: "Premio Asistencia", type: "percepcion" },
     { id: "faltas", name: "Faltas", type: "deduccion" },
     { id: "retardos", name: "Retardos", type: "deduccion" },
+    { id: "vacaciones", name: "Vacaciones", type: "deduccion" },
     { id: "prestamo", name: "Préstamo", type: "deduccion" },
   ]);
 
