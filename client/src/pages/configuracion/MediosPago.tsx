@@ -12,8 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Search, Edit, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { MedioPagoForm } from "@/components/configuracion/MedioPagoForm";
+import { ConceptosMedioPagoTable } from "@/components/configuracion/ConceptosMedioPagoTable";
 import type { MedioPago } from "@shared/schema";
 
 export default function MediosPago() {
@@ -70,33 +72,51 @@ export default function MediosPago() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Medios de Pago</h1>
-          <p className="text-muted-foreground">
-            Configuración de plataformas de pago (monederos electrónicos, sindicatos)
-          </p>
-        </div>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-nuevo-medio-pago">
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Medio de Pago
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold">Medios de Pago</h1>
+        <p className="text-muted-foreground mt-2">
+          Configuración de plataformas de pago y conceptos asociados
+        </p>
       </div>
 
-      <div className="flex gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-          <Input
-            placeholder="Buscar por nombre, descripción o cuenta..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9"
-            data-testid="input-search-medios-pago"
-          />
-        </div>
-      </div>
+      <Tabs defaultValue="medios-pago" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="medios-pago" data-testid="tab-medios-pago">
+            Medios de Pago
+          </TabsTrigger>
+          <TabsTrigger value="conceptos" data-testid="tab-conceptos">
+            Conceptos
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="border rounded-lg">
+        <TabsContent value="medios-pago" className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold">Plataformas de Pago</h2>
+              <p className="text-muted-foreground text-sm">
+                Monederos electrónicos, sindicatos y otros medios de dispersión
+              </p>
+            </div>
+            <Button onClick={() => setDialogOpen(true)} data-testid="button-nuevo-medio-pago">
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo Medio de Pago
+            </Button>
+          </div>
+
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Buscar por nombre, descripción o cuenta..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-medios-pago"
+              />
+            </div>
+          </div>
+
+          <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
@@ -175,6 +195,12 @@ export default function MediosPago() {
           </TableBody>
         </Table>
       </div>
+        </TabsContent>
+
+        <TabsContent value="conceptos" className="space-y-6">
+          <ConceptosMedioPagoTable />
+        </TabsContent>
+      </Tabs>
 
       <MedioPagoForm
         open={dialogOpen}

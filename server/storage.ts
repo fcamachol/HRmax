@@ -37,6 +37,9 @@ import {
   type InsertGrupoNomina,
   type MedioPago,
   type InsertMedioPago,
+  type ConceptoMedioPago,
+  type InsertConceptoMedioPago,
+  type ConceptoMedioPagoWithRelations,
   type PayrollPeriod,
   type InsertPayrollPeriod,
   type ClienteREPSE,
@@ -98,6 +101,8 @@ import {
   incidenciasAsistencia,
   gruposNomina,
   mediosPago,
+  conceptosMedioPago,
+  conceptosMediosPagoRel,
   payrollPeriods,
   clientesREPSE,
   registrosREPSE,
@@ -260,6 +265,13 @@ export interface IStorage {
   getMediosPago(): Promise<MedioPago[]>;
   updateMedioPago(id: string, updates: Partial<InsertMedioPago>): Promise<MedioPago>;
   deleteMedioPago(id: string): Promise<void>;
+
+  // Conceptos de Medios de Pago
+  createConceptoMedioPago(concepto: InsertConceptoMedioPago): Promise<ConceptoMedioPagoWithRelations>;
+  getConceptoMedioPago(id: string): Promise<ConceptoMedioPagoWithRelations | undefined>;
+  getConceptosMedioPago(): Promise<ConceptoMedioPagoWithRelations[]>;
+  updateConceptoMedioPago(id: string, updates: Partial<InsertConceptoMedioPago>): Promise<ConceptoMedioPagoWithRelations>;
+  deleteConceptoMedioPago(id: string): Promise<void>;
   
   // Payroll Periods
   createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
@@ -1348,6 +1360,129 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(mediosPago)
       .where(eq(mediosPago.id, id));
+  }
+
+  // Conceptos de Medios de Pago
+  async createConceptoMedioPago(concepto: InsertConceptoMedioPago): Promise<ConceptoMedioPagoWithRelations> {
+    const { mediosPagoIds, ...conceptoData } = concepto;
+    
+    return await db.transaction(async (tx) => {
+      // Crear el concepto
+      const [newConcepto] = await tx
+        .insert(conceptosMedioPago)
+        .values(conceptoData)
+        .returning();
+      
+      // Crear las relaciones si hay medios de pago
+      if (mediosPagoIds && mediosPagoIds.length > 0) {
+        await tx
+          .insert(conceptosMediosPagoRel)
+          .values(
+            mediosPagoIds.map((medioPagoId) => ({
+              conceptoId: newConcepto!.id,
+              medioPagoId,
+            }))
+          );
+      }
+      
+      return {
+        ...newConcepto!,
+        mediosPagoIds: mediosPagoIds || [],
+      };
+    });
+  }
+
+  async getConceptoMedioPago(id: string): Promise<ConceptoMedioPagoWithRelations | undefined> {
+    // Obtener el concepto
+    const [concepto] = await db
+      .select()
+      .from(conceptosMedioPago)
+      .where(eq(conceptosMedioPago.id, id));
+    
+    if (!concepto) return undefined;
+    
+    // Obtener las relaciones
+    const relaciones = await db
+      .select({ medioPagoId: conceptosMediosPagoRel.medioPagoId })
+      .from(conceptosMediosPagoRel)
+      .where(eq(conceptosMediosPagoRel.conceptoId, id));
+    
+    return {
+      ...concepto,
+      mediosPagoIds: relaciones.map((r) => r.medioPagoId),
+    };
+  }
+
+  async getConceptosMedioPago(): Promise<ConceptoMedioPagoWithRelations[]> {
+    // Obtener todos los conceptos
+    const conceptos = await db
+      .select()
+      .from(conceptosMedioPago)
+      .orderBy(conceptosMedioPago.nombre);
+    
+    // Obtener todas las relaciones de una vez
+    const todasRelaciones = await db
+      .select()
+      .from(conceptosMediosPagoRel);
+    
+    // Mapear las relaciones a cada concepto
+    return conceptos.map((concepto) => ({
+      ...concepto,
+      mediosPagoIds: todasRelaciones
+        .filter((r) => r.conceptoId === concepto.id)
+        .map((r) => r.medioPagoId),
+    }));
+  }
+
+  async updateConceptoMedioPago(id: string, updates: Partial<InsertConceptoMedioPago>): Promise<ConceptoMedioPagoWithRelations> {
+    const { mediosPagoIds, ...conceptoUpdates } = updates;
+    
+    return await db.transaction(async (tx) => {
+      // Actualizar el concepto
+      const [updatedConcepto] = await tx
+        .update(conceptosMedioPago)
+        .set({ ...conceptoUpdates, updatedAt: new Date() })
+        .where(eq(conceptosMedioPago.id, id))
+        .returning();
+      
+      // Si se proporcionaron mediosPagoIds, actualizar las relaciones
+      if (mediosPagoIds !== undefined) {
+        // Eliminar todas las relaciones existentes
+        await tx
+          .delete(conceptosMediosPagoRel)
+          .where(eq(conceptosMediosPagoRel.conceptoId, id));
+        
+        // Insertar las nuevas relaciones
+        if (mediosPagoIds.length > 0) {
+          await tx
+            .insert(conceptosMediosPagoRel)
+            .values(
+              mediosPagoIds.map((medioPagoId) => ({
+                conceptoId: id,
+                medioPagoId,
+              }))
+            );
+        }
+      }
+      
+      // Obtener las relaciones actuales
+      const relaciones = await tx
+        .select({ medioPagoId: conceptosMediosPagoRel.medioPagoId })
+        .from(conceptosMediosPagoRel)
+        .where(eq(conceptosMediosPagoRel.conceptoId, id));
+      
+      return {
+        ...updatedConcepto!,
+        mediosPagoIds: relaciones.map((r) => r.medioPagoId),
+      };
+    });
+  }
+
+  async deleteConceptoMedioPago(id: string): Promise<void> {
+    await db
+      .delete(conceptosMedioPago)
+      .where(eq(conceptosMedioPago.id, id));
+    // Las relaciones se eliminan en cascada
   }
 
   // Payroll Periods

@@ -63,7 +63,9 @@ import {
   insertActaAdministrativaSchema,
   updateActaAdministrativaSchema,
   insertMedioPagoSchema,
-  updateMedioPagoSchema
+  updateMedioPagoSchema,
+  insertConceptoMedioPagoSchema,
+  updateConceptoMedioPagoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -1147,6 +1149,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/medios-pago/:id", async (req, res) => {
     try {
       await storage.deleteMedioPago(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Conceptos de Medios de Pago
+  app.post("/api/conceptos-medio-pago", async (req, res) => {
+    try {
+      const validatedData = insertConceptoMedioPagoSchema.parse(req.body);
+      const concepto = await storage.createConceptoMedioPago(validatedData);
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/conceptos-medio-pago", async (req, res) => {
+    try {
+      const conceptos = await storage.getConceptosMedioPago();
+      res.json(conceptos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/conceptos-medio-pago/:id", async (req, res) => {
+    try {
+      const concepto = await storage.getConceptoMedioPago(req.params.id);
+      if (!concepto) {
+        return res.status(404).json({ message: "Concepto no encontrado" });
+      }
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/conceptos-medio-pago/:id", async (req, res) => {
+    try {
+      // Step 1: Validate partial data
+      const partialData = updateConceptoMedioPagoSchema.parse(req.body);
+      
+      // Step 2: Load existing concepto
+      const existing = await storage.getConceptoMedioPago(req.params.id);
+      
+      // Step 3: Return 404 if missing
+      if (!existing) {
+        return res.status(404).json({ message: "Concepto no encontrado" });
+      }
+      
+      // Step 4: Merge existing with partial (strip metadata first)
+      const { id, createdAt, updatedAt, mediosPagoIds: existingMedios, ...existingClean } = existing;
+      const merged = { ...existingClean, ...partialData };
+      
+      // Step 5: Re-validate with full schema
+      const validatedData = insertConceptoMedioPagoSchema.parse(merged);
+      
+      // Step 6: Persist
+      const concepto = await storage.updateConceptoMedioPago(req.params.id, validatedData);
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/conceptos-medio-pago/:id", async (req, res) => {
+    try {
+      await storage.deleteConceptoMedioPago(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

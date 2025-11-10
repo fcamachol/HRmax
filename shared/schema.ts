@@ -134,6 +134,33 @@ export const mediosPago = pgTable("medios_pago", {
   updatedAt: timestamp("updated_at").default(sql`now()`),
 });
 
+export const tiposConcepto = ["percepcion", "deduccion"] as const;
+export type TipoConcepto = typeof tiposConcepto[number];
+
+export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre", { length: 200 }).notNull().unique(),
+  tipo: varchar("tipo", { length: 20 }).notNull(), // percepcion, deduccion
+  formula: text("formula").notNull(),
+  limiteExento: text("limite_exento"), // Puede ser fórmula (ej: "3*UMA") o cantidad
+  gravableISR: boolean("gravable_isr").notNull().default(true),
+  integraSBC: boolean("integra_sbc").notNull().default(false),
+  limiteAnual: text("limite_anual"), // Puede ser fórmula o cantidad
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+// Tabla de relación muchos a muchos entre conceptos y medios de pago
+export const conceptosMediosPagoRel = pgTable("conceptos_medios_pago_rel", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conceptoId: varchar("concepto_id").notNull().references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
+  medioPagoId: varchar("medio_pago_id").notNull().references(() => mediosPago.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").default(sql`now()`),
+}, (table) => ({
+  uniqueRelation: unique().on(table.conceptoId, table.medioPagoId),
+}));
+
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
@@ -366,6 +393,17 @@ export const insertMedioPagoSchema = createInsertSchema(mediosPago).omit({
 
 export const updateMedioPagoSchema = insertMedioPagoSchema.partial();
 
+export const insertConceptoMedioPagoSchema = createInsertSchema(conceptosMedioPago).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipo: z.enum(tiposConcepto),
+  mediosPagoIds: z.array(z.string()).optional(), // IDs de medios de pago a vincular
+});
+
+export const updateConceptoMedioPagoSchema = insertConceptoMedioPagoSchema.partial();
+
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
 });
@@ -493,6 +531,14 @@ export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
 export type MedioPago = typeof mediosPago.$inferSelect;
 export type InsertMedioPago = z.infer<typeof insertMedioPagoSchema>;
+export type ConceptoMedioPago = typeof conceptosMedioPago.$inferSelect;
+export type InsertConceptoMedioPago = z.infer<typeof insertConceptoMedioPagoSchema>;
+export type ConceptoMedioPagoRel = typeof conceptosMediosPagoRel.$inferSelect;
+
+// Tipo extendido con relaciones para frontend
+export type ConceptoMedioPagoWithRelations = ConceptoMedioPago & {
+  mediosPagoIds: string[];
+};
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 export type IncidenciaAsistencia = typeof incidenciasAsistencia.$inferSelect;
