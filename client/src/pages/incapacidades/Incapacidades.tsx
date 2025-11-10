@@ -30,7 +30,7 @@ import { Plus, Search, MoreVertical, FileText, Heart, Baby } from "lucide-react"
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { type Incapacidad, type InsertIncapacidad } from "@shared/schema";
+import { type Incapacidad, type InsertIncapacidad, type IncapacidadWithEmpleado } from "@shared/schema";
 import { IncapacidadForm } from "@/components/incapacidades/IncapacidadForm";
 
 const tipoLabels = {
@@ -54,7 +54,7 @@ export default function Incapacidades() {
   const [editingIncapacidad, setEditingIncapacidad] = useState<Incapacidad | null>(null);
   const { toast } = useToast();
 
-  const { data: incapacidades = [], isLoading } = useQuery<Incapacidad[]>({
+  const { data: incapacidades = [], isLoading } = useQuery<IncapacidadWithEmpleado[]>({
     queryKey: ["/api/incapacidades"],
   });
 
@@ -126,9 +126,13 @@ export default function Incapacidades() {
 
   const filteredIncapacidades = incapacidades.filter((incapacidad) => {
     const searchLower = search.toLowerCase();
+    const empleadoNombre = incapacidad.empleado 
+      ? `${incapacidad.empleado.nombre} ${incapacidad.empleado.apellidoPaterno} ${incapacidad.empleado.apellidoMaterno || ''}`.trim()
+      : '';
     const matchesSearch =
       !search ||
-      incapacidad.empleadoId.toLowerCase().includes(searchLower) ||
+      empleadoNombre.toLowerCase().includes(searchLower) ||
+      incapacidad.empleado?.numeroEmpleado.toLowerCase().includes(searchLower) ||
       incapacidad.numeroCertificado?.toLowerCase().includes(searchLower);
 
     const matchesTipo = tipoFilter === "todos" || incapacidad.tipo === tipoFilter;
@@ -185,11 +189,11 @@ export default function Incapacidades() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4" />
                 <Input
-                  placeholder="Buscar por ID de empleado o número de certificado..."
+                  placeholder="Buscar por nombre, número de empleado o certificado..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10"
-                  data-testid="input-search"
+                  data-testid="input-buscar-incapacidades"
                 />
               </div>
               <Select value={tipoFilter} onValueChange={(value) => setTipoFilter(value as TipoIncapacidad | "todos")}>
@@ -229,7 +233,7 @@ export default function Incapacidades() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Empleado ID</TableHead>
+                    <TableHead>Empleado</TableHead>
                     <TableHead>Tipo</TableHead>
                     <TableHead>Fecha Inicio</TableHead>
                     <TableHead>Fecha Fin</TableHead>
@@ -243,11 +247,19 @@ export default function Incapacidades() {
                   {filteredIncapacidades.map((incapacidad) => {
                     const tipo = incapacidad.tipo as TipoIncapacidad;
                     const TipoIcon = tipoIcons[tipo];
+                    const empleadoNombre = incapacidad.empleado 
+                      ? `${incapacidad.empleado.nombre} ${incapacidad.empleado.apellidoPaterno} ${incapacidad.empleado.apellidoMaterno || ''}`.trim()
+                      : 'Empleado no encontrado';
                     
                     return (
                       <TableRow key={incapacidad.id} data-testid={`row-incapacidad-${incapacidad.id}`}>
                         <TableCell className="font-medium" data-testid={`text-empleado-${incapacidad.id}`}>
-                          {incapacidad.empleadoId}
+                          <div>
+                            <div>{empleadoNombre}</div>
+                            {incapacidad.empleado && (
+                              <div className="text-xs text-muted-foreground">{incapacidad.empleado.numeroEmpleado}</div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <Badge variant="secondary" data-testid={`badge-tipo-${incapacidad.id}`}>
