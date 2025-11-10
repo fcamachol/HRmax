@@ -1094,6 +1094,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Medios de Pago
+  app.post("/api/medios-pago", async (req, res) => {
+    try {
+      const validatedData = insertMedioPagoSchema.parse(req.body);
+      const medioPago = await storage.createMedioPago(validatedData);
+      res.json(medioPago);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/medios-pago", async (req, res) => {
+    try {
+      const mediosPago = await storage.getMediosPago();
+      res.json(mediosPago);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/medios-pago/:id", async (req, res) => {
+    try {
+      const medioPago = await storage.getMedioPago(req.params.id);
+      if (!medioPago) {
+        return res.status(404).json({ message: "Medio de pago no encontrado" });
+      }
+      res.json(medioPago);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/medios-pago/:id", async (req, res) => {
+    try {
+      const partialData = updateMedioPagoSchema.parse(req.body);
+      const existing = await storage.getMedioPago(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Medio de pago no encontrado" });
+      }
+      const merged = { ...existing, ...partialData };
+      const validatedData = insertMedioPagoSchema.parse(merged);
+      const medioPago = await storage.updateMedioPago(req.params.id, validatedData);
+      res.json(medioPago);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/medios-pago/:id", async (req, res) => {
+    try {
+      await storage.deleteMedioPago(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Payroll Periods
   app.get("/api/payroll-periods/:grupoNominaId", async (req, res) => {
     try {
