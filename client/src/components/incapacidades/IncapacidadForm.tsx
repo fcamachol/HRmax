@@ -32,6 +32,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { insertIncapacidadSchema, type InsertIncapacidad, type Incapacidad } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Info, Upload, FileText, ExternalLink } from "lucide-react";
+import { EmployeeCombobox } from "@/components/EmployeeCombobox";
 
 interface IncapacidadFormProps {
   open: boolean;
@@ -166,12 +167,12 @@ export function IncapacidadForm({
                 name="empleadoId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ID Empleado *</FormLabel>
+                    <FormLabel>Empleado *</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Ej: EMP001"
-                        data-testid="input-empleado-id"
+                      <EmployeeCombobox
+                        value={field.value}
+                        onChange={field.onChange}
+                        testId="combobox-empleado"
                       />
                     </FormControl>
                     <FormMessage />
