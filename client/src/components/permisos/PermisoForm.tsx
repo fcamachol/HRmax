@@ -33,6 +33,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Info } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { EmployeeCombobox } from "@/components/EmployeeCombobox";
 
 interface PermisoFormProps {
   open: boolean;
@@ -163,12 +164,12 @@ export function PermisoForm({ open, onOpenChange, initialData }: PermisoFormProp
                 name="empleadoId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ID del Empleado *</FormLabel>
+                    <FormLabel>Empleado *</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Ingresa el ID del empleado"
-                        data-testid="input-empleado-id"
+                      <EmployeeCombobox
+                        value={field.value}
+                        onChange={field.onChange}
+                        testId="combobox-empleado"
                       />
                     </FormControl>
                     <FormMessage />
