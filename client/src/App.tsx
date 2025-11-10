@@ -32,6 +32,7 @@ import Vacaciones from "@/pages/vacaciones/Vacaciones";
 import Incapacidades from "@/pages/incapacidades/Incapacidades";
 import Permisos from "@/pages/permisos/Permisos";
 import ActasAdministrativas from "@/pages/actas-administrativas/ActasAdministrativas";
+import MediosPago from "@/pages/configuracion/MediosPago";
 import RelojChecador from "@/components/RelojChecador";
 import NotFound from "@/pages/not-found";
 
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/incapacidades" component={Incapacidades} />
       <Route path="/permisos" component={Permisos} />
       <Route path="/actas-administrativas" component={ActasAdministrativas} />
+      <Route path="/configuration/medios-pago" component={MediosPago} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/repse" component={REPSE} />

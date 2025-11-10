@@ -26,6 +26,7 @@ import {
   Clock,
   UserCog,
   FileWarning,
+  Wallet,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -153,6 +154,19 @@ const gestionPersonalSubItems = [
   },
 ];
 
+const configuracionSubItems = [
+  {
+    title: "General",
+    url: "/configuration",
+    icon: Settings,
+  },
+  {
+    title: "Medios de Pago",
+    url: "/configuration/medios-pago",
+    icon: Wallet,
+  },
+];
+
 const mainMenuItems = [
   {
     title: "Dashboard",
@@ -175,11 +189,6 @@ const mainMenuItems = [
     icon: ClipboardCheck,
   },
   {
-    title: "Configuración",
-    url: "/configuration",
-    icon: Calculator,
-  },
-  {
     title: "Empresas",
     url: "/empresas",
     icon: Building2,
@@ -198,6 +207,7 @@ export function AppSidebar() {
   const isOrganizacionActive = location.startsWith("/organizacion");
   const isReclutamientoActive = location.startsWith("/reclutamiento");
   const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos");
+  const isConfiguracionActive = location.startsWith("/configuration");
 
   return (
     <Sidebar>
@@ -380,6 +390,39 @@ export function AppSidebar() {
                             asChild
                             isActive={location === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isConfiguracionActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isConfiguracionActive}
+                      data-testid="link-configuracion"
+                    >
+                      <Calculator className="h-4 w-4" />
+                      <span>Configuración</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {configuracionSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
                             <Link href={subItem.url}>
                               <subItem.icon className="h-4 w-4" />
