@@ -26,7 +26,9 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  Eye
+  Eye,
+  ChevronDown,
+  ChevronRight
 } from "lucide-react";
 import {
   Table,
@@ -110,6 +112,9 @@ export default function Payroll() {
   // New concept form
   const [newConceptName, setNewConceptName] = useState("");
   const [newConceptType, setNewConceptType] = useState<"percepcion" | "deduccion">("percepcion");
+  
+  // Expandable incidencias columns
+  const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
   
   // Mock payroll data for multiple employees
   const allEmployees = [
@@ -224,9 +229,10 @@ export default function Payroll() {
     { id: "comisiones", name: "Comisiones", type: "percepcion" },
     { id: "tiempo-extra", name: "Tiempo Extra", type: "percepcion" },
     { id: "premio-asistencia", name: "Premio Asistencia", type: "percepcion" },
+    { id: "vacaciones", name: "Vacaciones", type: "percepcion" },
+    { id: "prima-vacacional", name: "Prima Vacacional (25%)", type: "percepcion" },
     { id: "faltas", name: "Faltas", type: "deduccion" },
     { id: "retardos", name: "Retardos", type: "deduccion" },
-    { id: "vacaciones", name: "Vacaciones", type: "deduccion" },
     { id: "prestamo", name: "Préstamo", type: "deduccion" },
   ]);
 
@@ -418,6 +424,18 @@ export default function Payroll() {
     toast({
       title: "Concepto eliminado",
       description: `"${concept?.name}" ha sido eliminado`,
+    });
+  };
+
+  const toggleConceptExpansion = (conceptId: string) => {
+    setExpandedConcepts((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(conceptId)) {
+        newSet.delete(conceptId);
+      } else {
+        newSet.add(conceptId);
+      }
+      return newSet;
     });
   };
 
