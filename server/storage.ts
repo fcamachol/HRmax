@@ -35,6 +35,8 @@ import {
   type InsertIncidenciaAsistencia,
   type GrupoNomina,
   type InsertGrupoNomina,
+  type MedioPago,
+  type InsertMedioPago,
   type PayrollPeriod,
   type InsertPayrollPeriod,
   type ClienteREPSE,
@@ -95,6 +97,7 @@ import {
   attendance,
   incidenciasAsistencia,
   gruposNomina,
+  mediosPago,
   payrollPeriods,
   clientesREPSE,
   registrosREPSE,
@@ -250,6 +253,13 @@ export interface IStorage {
   updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina>;
   deleteGrupoNomina(id: string): Promise<void>;
   assignEmployeesToGrupoNomina(grupoNominaId: string, employeeIds: string[]): Promise<void>;
+  
+  // Medios de Pago
+  createMedioPago(medioPago: InsertMedioPago): Promise<MedioPago>;
+  getMedioPago(id: string): Promise<MedioPago | undefined>;
+  getMediosPago(): Promise<MedioPago[]>;
+  updateMedioPago(id: string, updates: Partial<InsertMedioPago>): Promise<MedioPago>;
+  deleteMedioPago(id: string): Promise<void>;
   
   // Payroll Periods
   createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
@@ -1299,6 +1309,45 @@ export class DatabaseStorage implements IStorage {
         .set({ grupoNominaId })
         .where(inArray(employees.id, employeeIds));
     }
+  }
+
+  // Medios de Pago
+  async createMedioPago(medioPago: InsertMedioPago): Promise<MedioPago> {
+    const [newMedioPago] = await db
+      .insert(mediosPago)
+      .values(medioPago)
+      .returning();
+    return newMedioPago!;
+  }
+
+  async getMedioPago(id: string): Promise<MedioPago | undefined> {
+    const [medioPago] = await db
+      .select()
+      .from(mediosPago)
+      .where(eq(mediosPago.id, id));
+    return medioPago;
+  }
+
+  async getMediosPago(): Promise<MedioPago[]> {
+    return await db
+      .select()
+      .from(mediosPago)
+      .orderBy(mediosPago.nombre);
+  }
+
+  async updateMedioPago(id: string, updates: Partial<InsertMedioPago>): Promise<MedioPago> {
+    const [updated] = await db
+      .update(mediosPago)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(mediosPago.id, id))
+      .returning();
+    return updated!;
+  }
+
+  async deleteMedioPago(id: string): Promise<void> {
+    await db
+      .delete(mediosPago)
+      .where(eq(mediosPago.id, id));
   }
 
   // Payroll Periods
