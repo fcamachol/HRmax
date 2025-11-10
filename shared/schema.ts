@@ -1883,3 +1883,28 @@ export type InsertIncapacidad = z.infer<typeof insertIncapacidadSchema>;
 
 export type SolicitudPermiso = typeof solicitudesPermisos.$inferSelect;
 export type InsertSolicitudPermiso = z.infer<typeof insertSolicitudPermisoSchema>;
+
+// ============================================================================
+// ENRICHED TYPES WITH EMPLOYEE DATA
+// ============================================================================
+
+export interface EmpleadoBasicInfo {
+  nombre: string;
+  apellidoPaterno: string;
+  apellidoMaterno: string | null;
+  numeroEmpleado: string;
+  puesto: string;
+  departamento: string;
+}
+
+export interface SolicitudVacacionesWithEmpleado extends SolicitudVacaciones {
+  empleado: EmpleadoBasicInfo;
+}
+
+export interface IncapacidadWithEmpleado extends Incapacidad {
+  empleado: EmpleadoBasicInfo;
+}
+
+export interface SolicitudPermisoWithEmpleado extends SolicitudPermiso {
+  empleado: EmpleadoBasicInfo;
+}

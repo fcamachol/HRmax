@@ -30,7 +30,7 @@ import { Plus, Search, MoreVertical, Calendar, CheckCircle, XCircle, Clock } fro
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { type SolicitudVacaciones, type InsertSolicitudVacaciones } from "@shared/schema";
+import { type SolicitudVacaciones, type InsertSolicitudVacaciones, type SolicitudVacacionesWithEmpleado } from "@shared/schema";
 import { VacacionesForm } from "@/components/vacaciones/VacacionesForm";
 
 const statusLabels = {
@@ -63,7 +63,7 @@ export default function Vacaciones() {
   const [editingSolicitud, setEditingSolicitud] = useState<SolicitudVacaciones | null>(null);
   const { toast } = useToast();
 
-  const { data: solicitudes = [], isLoading } = useQuery<SolicitudVacaciones[]>({
+  const { data: solicitudes = [], isLoading } = useQuery<SolicitudVacacionesWithEmpleado[]>({
     queryKey: ["/api/vacaciones"],
   });
 
@@ -177,9 +177,13 @@ export default function Vacaciones() {
 
   const filteredSolicitudes = solicitudes.filter((solicitud) => {
     const searchLower = search.toLowerCase();
+    const empleadoNombre = solicitud.empleado 
+      ? `${solicitud.empleado.nombre} ${solicitud.empleado.apellidoPaterno} ${solicitud.empleado.apellidoMaterno || ''}`.trim()
+      : '';
     const matchesSearch =
       !search ||
-      solicitud.empleadoId.toLowerCase().includes(searchLower);
+      empleadoNombre.toLowerCase().includes(searchLower) ||
+      solicitud.empleado?.numeroEmpleado.toLowerCase().includes(searchLower);
 
     const matchesStatus = statusFilter === "todos" || solicitud.estatus === statusFilter;
 
@@ -268,11 +272,11 @@ export default function Vacaciones() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4" />
                 <Input
-                  placeholder="Buscar por ID de empleado..."
+                  placeholder="Buscar por nombre o número de empleado..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-10"
-                  data-testid="input-search"
+                  data-testid="input-buscar-vacaciones"
                 />
               </div>
               <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as EstatusSolicitud | "todos")}>
@@ -313,7 +317,7 @@ export default function Vacaciones() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Empleado ID</TableHead>
+                    <TableHead>Empleado</TableHead>
                     <TableHead>Fecha Inicio</TableHead>
                     <TableHead>Fecha Fin</TableHead>
                     <TableHead>Días</TableHead>
@@ -327,11 +331,19 @@ export default function Vacaciones() {
                     const estatus = solicitud.estatus as EstatusSolicitud;
                     const StatusIcon = statusIcons[estatus];
                     const dias = calculateDias(solicitud.fechaInicio, solicitud.fechaFin);
+                    const empleadoNombre = solicitud.empleado 
+                      ? `${solicitud.empleado.nombre} ${solicitud.empleado.apellidoPaterno} ${solicitud.empleado.apellidoMaterno || ''}`.trim()
+                      : 'Empleado no encontrado';
                     
                     return (
                       <TableRow key={solicitud.id} data-testid={`row-solicitud-${solicitud.id}`}>
                         <TableCell className="font-medium" data-testid={`text-empleado-${solicitud.id}`}>
-                          {solicitud.empleadoId}
+                          <div>
+                            <div>{empleadoNombre}</div>
+                            {solicitud.empleado && (
+                              <div className="text-xs text-muted-foreground">{solicitud.empleado.numeroEmpleado}</div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell data-testid={`text-fecha-inicio-${solicitud.id}`}>
                           {format(new Date(solicitud.fechaInicio), "dd/MM/yyyy", { locale: es })}

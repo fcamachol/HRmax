@@ -2359,7 +2359,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSolicitudesVacaciones(): Promise<SolicitudVacaciones[]> {
-    return db.select().from(solicitudesVacaciones).orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+    const results = await db
+      .select({
+        solicitud: solicitudesVacaciones,
+        empleado: {
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          numeroEmpleado: employees.numeroEmpleado,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        },
+      })
+      .from(solicitudesVacaciones)
+      .leftJoin(employees, eq(solicitudesVacaciones.empleadoId, employees.id))
+      .orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+
+    return results.map((r) => ({
+      ...r.solicitud,
+      empleado: r.empleado as any,
+    })) as any;
   }
 
   async getSolicitudesVacacionesByEmpleado(empleadoId: string): Promise<SolicitudVacaciones[]> {
@@ -2397,7 +2416,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getIncapacidades(): Promise<Incapacidad[]> {
-    return db.select().from(incapacidades).orderBy(desc(incapacidades.createdAt));
+    const results = await db
+      .select({
+        incapacidad: incapacidades,
+        empleado: {
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          numeroEmpleado: employees.numeroEmpleado,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        },
+      })
+      .from(incapacidades)
+      .leftJoin(employees, eq(incapacidades.empleadoId, employees.id))
+      .orderBy(desc(incapacidades.createdAt));
+
+    return results.map((r) => ({
+      ...r.incapacidad,
+      empleado: r.empleado as any,
+    })) as any;
   }
 
   async getIncapacidadesByEmpleado(empleadoId: string): Promise<Incapacidad[]> {
@@ -2443,7 +2481,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSolicitudesPermisos(): Promise<SolicitudPermiso[]> {
-    return db.select().from(solicitudesPermisos).orderBy(desc(solicitudesPermisos.fechaSolicitud));
+    const results = await db
+      .select({
+        solicitud: solicitudesPermisos,
+        empleado: {
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          numeroEmpleado: employees.numeroEmpleado,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        },
+      })
+      .from(solicitudesPermisos)
+      .leftJoin(employees, eq(solicitudesPermisos.empleadoId, employees.id))
+      .orderBy(desc(solicitudesPermisos.fechaSolicitud));
+
+    return results.map((r) => ({
+      ...r.solicitud,
+      empleado: r.empleado as any,
+    })) as any;
   }
 
   async getSolicitudesPermisosByEmpleado(empleadoId: string): Promise<SolicitudPermiso[]> {
@@ -2604,9 +2661,9 @@ export class DatabaseStorage implements IStorage {
       return {
         ...incapacidad,
         diagnostico: "[INFORMACIÓN MÉDICA CONFIDENCIAL]",
-        medicoNombre: undefined,
-        unidadMedica: undefined,
-        notasInternas: undefined,
+        medicoNombre: null,
+        unidadMedica: null,
+        notasInternas: null,
       };
     }
 
