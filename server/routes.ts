@@ -59,7 +59,9 @@ import {
   insertIncapacidadSchema,
   updateIncapacidadSchema,
   insertSolicitudPermisoSchema,
-  updateSolicitudPermisoSchema
+  updateSolicitudPermisoSchema,
+  insertActaAdministrativaSchema,
+  updateActaAdministrativaSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -2756,6 +2758,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/permisos/:id", async (req, res) => {
     try {
       await storage.deleteSolicitudPermiso(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== MÓDULO DE ACTAS ADMINISTRATIVAS ====================
+  
+  app.post("/api/actas-administrativas", async (req, res) => {
+    try {
+      const validated = insertActaAdministrativaSchema.parse(req.body);
+      const acta = await storage.createActaAdministrativa(validated);
+      res.status(201).json(acta);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/actas-administrativas", async (req, res) => {
+    try {
+      const actas = await storage.getActasAdministrativas();
+      res.json(actas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/actas-administrativas/empleado/:empleadoId", async (req, res) => {
+    try {
+      const actas = await storage.getActasAdministrativasByEmpleado(req.params.empleadoId);
+      res.json(actas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/actas-administrativas/estatus/:estatus", async (req, res) => {
+    try {
+      const actas = await storage.getActasAdministrativasByEstatus(req.params.estatus);
+      res.json(actas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/actas-administrativas/:id", async (req, res) => {
+    try {
+      const acta = await storage.getActaAdministrativa(req.params.id);
+      if (!acta) {
+        return res.status(404).json({ message: "Acta administrativa no encontrada" });
+      }
+      res.json(acta);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/actas-administrativas/:id", async (req, res) => {
+    try {
+      // Step 1: Validate partial update
+      const partialUpdate = updateActaAdministrativaSchema.parse(req.body);
+      
+      // Step 2: Load existing record
+      const existing = await storage.getActaAdministrativa(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Acta administrativa no encontrada" });
+      }
+      
+      // Step 3: Merge partial update with existing record
+      const merged = {
+        ...existing,
+        ...partialUpdate,
+      };
+      
+      // Step 4: Re-validate the complete merged object with cross-field checks
+      const fullyValidated = insertActaAdministrativaSchema.parse(merged);
+      
+      // Step 5: Persist the validated update
+      const acta = await storage.updateActaAdministrativa(req.params.id, partialUpdate);
+      res.json(acta);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/actas-administrativas/:id", async (req, res) => {
+    try {
+      await storage.deleteActaAdministrativa(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });

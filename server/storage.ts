@@ -75,6 +75,8 @@ import {
   type InsertIncapacidad,
   type SolicitudPermiso,
   type InsertSolicitudPermiso,
+  type ActaAdministrativa,
+  type InsertActaAdministrativa,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -113,7 +115,8 @@ import {
   ofertas,
   solicitudesVacaciones,
   incapacidades,
-  solicitudesPermisos
+  solicitudesPermisos,
+  actasAdministrativas
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -439,6 +442,15 @@ export interface IStorage {
   getSolicitudesPermisosByTipo(tipoPermiso: string): Promise<SolicitudPermiso[]>;
   updateSolicitudPermiso(id: string, updates: Partial<InsertSolicitudPermiso>): Promise<SolicitudPermiso>;
   deleteSolicitudPermiso(id: string): Promise<void>;
+  
+  // Actas Administrativas
+  createActaAdministrativa(acta: InsertActaAdministrativa): Promise<ActaAdministrativa>;
+  getActaAdministrativa(id: string): Promise<ActaAdministrativa | undefined>;
+  getActasAdministrativas(): Promise<ActaAdministrativa[]>;
+  getActasAdministrativasByEmpleado(empleadoId: string): Promise<ActaAdministrativa[]>;
+  getActasAdministrativasByEstatus(estatus: string): Promise<ActaAdministrativa[]>;
+  updateActaAdministrativa(id: string, updates: Partial<InsertActaAdministrativa>): Promise<ActaAdministrativa>;
+  deleteActaAdministrativa(id: string): Promise<void>;
   
   // Helper methods for business logic and validation
   
@@ -2528,6 +2540,69 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSolicitudPermiso(id: string): Promise<void> {
     await db.delete(solicitudesPermisos).where(eq(solicitudesPermisos.id, id));
+  }
+
+  // ==================== Actas Administrativas ====================
+  
+  async createActaAdministrativa(acta: InsertActaAdministrativa): Promise<ActaAdministrativa> {
+    const data = {
+      ...acta,
+      diasSuspension: acta.diasSuspension !== undefined ? acta.diasSuspension : null,
+      montoDescuento: acta.montoDescuento !== undefined ? String(acta.montoDescuento) : null,
+    };
+    const [created] = await db.insert(actasAdministrativas).values(data).returning();
+    return created;
+  }
+
+  async getActaAdministrativa(id: string): Promise<ActaAdministrativa | undefined> {
+    const [acta] = await db.select().from(actasAdministrativas).where(eq(actasAdministrativas.id, id));
+    return acta;
+  }
+
+  async getActasAdministrativas(): Promise<ActaAdministrativa[]> {
+    const results = await db
+      .select({
+        acta: actasAdministrativas,
+        empleado: {
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          numeroEmpleado: employees.numeroEmpleado,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        },
+      })
+      .from(actasAdministrativas)
+      .leftJoin(employees, eq(actasAdministrativas.empleadoId, employees.id))
+      .orderBy(desc(actasAdministrativas.fechaElaboracion));
+
+    return results.map((r) => ({
+      ...r.acta,
+      empleado: r.empleado as any,
+    })) as any;
+  }
+
+  async getActasAdministrativasByEmpleado(empleadoId: string): Promise<ActaAdministrativa[]> {
+    return db.select().from(actasAdministrativas).where(eq(actasAdministrativas.empleadoId, empleadoId)).orderBy(desc(actasAdministrativas.fechaElaboracion));
+  }
+
+  async getActasAdministrativasByEstatus(estatus: string): Promise<ActaAdministrativa[]> {
+    return db.select().from(actasAdministrativas).where(eq(actasAdministrativas.estatus, estatus)).orderBy(desc(actasAdministrativas.fechaElaboracion));
+  }
+
+  async updateActaAdministrativa(id: string, updates: Partial<InsertActaAdministrativa>): Promise<ActaAdministrativa> {
+    const data = {
+      ...updates,
+      diasSuspension: updates.diasSuspension !== undefined ? (updates.diasSuspension || null) : undefined,
+      montoDescuento: updates.montoDescuento !== undefined ? (updates.montoDescuento ? String(updates.montoDescuento) : null) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(actasAdministrativas).set(data).where(eq(actasAdministrativas.id, id)).returning();
+    return updated;
+  }
+
+  async deleteActaAdministrativa(id: string): Promise<void> {
+    await db.delete(actasAdministrativas).where(eq(actasAdministrativas.id, id));
   }
 
   // ==================== Helper Methods for Business Logic ====================

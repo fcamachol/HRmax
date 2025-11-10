@@ -25,6 +25,7 @@ import {
   Shield,
   Clock,
   UserCog,
+  FileWarning,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -144,6 +145,11 @@ const gestionPersonalSubItems = [
     title: "Permisos",
     url: "/permisos",
     icon: Clock,
+  },
+  {
+    title: "Actas Administrativas",
+    url: "/actas-administrativas",
+    icon: FileWarning,
   },
 ];
 

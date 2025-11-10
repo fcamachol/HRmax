@@ -1873,6 +1873,63 @@ export const updateSolicitudPermisoSchema = baseSolicitudPermisoSchema.partial()
 });
 
 // ============================================================================
+// ACTAS ADMINISTRATIVAS
+// ============================================================================
+
+export const actasAdministrativas = pgTable("actas_administrativas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Información del acta
+  numeroActa: varchar("numero_acta").notNull().unique(), // Número correlativo del acta
+  fechaElaboracion: date("fecha_elaboracion").notNull(), // Fecha en que se elabora el acta
+  tipoFalta: varchar("tipo_falta").notNull(), // leve, grave, muy_grave
+  
+  // Descripción de los hechos
+  descripcionHechos: text("descripcion_hechos").notNull(), // Descripción detallada de la falta o incidente
+  fechaIncidente: date("fecha_incidente").notNull(), // Fecha en que ocurrió el incidente
+  horaIncidente: varchar("hora_incidente"), // Hora del incidente (opcional)
+  lugarIncidente: text("lugar_incidente"), // Lugar donde ocurrió
+  
+  // Testigos (opcional)
+  testigos: text("testigos"), // Nombres de testigos, separados por comas o JSON
+  
+  // Sanción aplicada
+  sancionAplicada: varchar("sancion_aplicada"), // suspension, amonestacion, descuento, despido, ninguna
+  diasSuspension: integer("dias_suspension"), // Número de días de suspensión (si aplica)
+  montoDescuento: numeric("monto_descuento", { precision: 10, scale: 2 }), // Monto del descuento (si aplica)
+  detallesSancion: text("detalles_sancion"), // Detalles adicionales de la sanción
+  
+  // Fechas de aplicación
+  fechaAplicacionSancion: date("fecha_aplicacion_sancion"), // Cuándo se aplicará la sanción
+  fechaCumplimientoSancion: date("fecha_cumplimiento_sancion"), // Cuándo se cumplió/terminó la sanción
+  
+  // Estado y seguimiento
+  estatus: varchar("estatus").notNull().default("pendiente"), // pendiente, aplicada, apelada, anulada, archivada
+  apelacionPresentada: boolean("apelacion_presentada").default(false),
+  detallesApelacion: text("detalles_apelacion"),
+  fechaApelacion: date("fecha_apelacion"),
+  resolucionApelacion: text("resolucion_apelacion"),
+  
+  // Responsables
+  elaboradoPor: varchar("elaborado_por").notNull(), // ID del usuario que elaboró el acta
+  aprobadoPor: varchar("aprobado_por"), // ID del superior que aprobó
+  
+  // Documentos y notas
+  documentosAdjuntos: jsonb("documentos_adjuntos").default(sql`'[]'::jsonb`), // URLs de documentos
+  notasInternas: text("notas_internas"), // Notas privadas de RH
+  
+  // Firmas (opcional para futuras integraciones digitales)
+  firmadoEmpleado: boolean("firmado_empleado").default(false),
+  fechaFirmaEmpleado: timestamp("fecha_firma_empleado"),
+  firmadoTestigo1: boolean("firmado_testigo1").default(false),
+  firmadoTestigo2: boolean("firmado_testigo2").default(false),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+// ============================================================================
 // EXPORT TYPES
 // ============================================================================
 
@@ -1884,6 +1941,31 @@ export type InsertIncapacidad = z.infer<typeof insertIncapacidadSchema>;
 
 export type SolicitudPermiso = typeof solicitudesPermisos.$inferSelect;
 export type InsertSolicitudPermiso = z.infer<typeof insertSolicitudPermisoSchema>;
+
+export type ActaAdministrativa = typeof actasAdministrativas.$inferSelect;
+
+// Base schema for actas administrativas
+const baseActaAdministrativaSchema = createInsertSchema(actasAdministrativas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoFalta: z.enum(["leve", "grave", "muy_grave"], {
+    errorMap: () => ({ message: "Tipo de falta inválido" }),
+  }),
+  sancionAplicada: z.enum(["ninguna", "amonestacion", "suspension", "descuento", "despido"], {
+    errorMap: () => ({ message: "Tipo de sanción inválido" }),
+  }).optional(),
+  estatus: z.enum(["pendiente", "aplicada", "apelada", "anulada", "archivada"]).default("pendiente"),
+  fechaElaboracion: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de elaboración inválida"),
+  fechaIncidente: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de incidente inválida"),
+  diasSuspension: z.union([z.string().transform((v) => (v === "" ? undefined : v)), z.number(), z.undefined()]).optional(),
+  montoDescuento: z.union([z.string().transform((v) => (v === "" ? undefined : v)), z.number(), z.undefined()]).optional(),
+});
+
+export const insertActaAdministrativaSchema = baseActaAdministrativaSchema;
+export const updateActaAdministrativaSchema = baseActaAdministrativaSchema.partial();
+export type InsertActaAdministrativa = z.infer<typeof insertActaAdministrativaSchema>;
 
 // ============================================================================
 // ENRICHED TYPES WITH EMPLOYEE DATA
@@ -1907,5 +1989,9 @@ export interface IncapacidadWithEmpleado extends Incapacidad {
 }
 
 export interface SolicitudPermisoWithEmpleado extends SolicitudPermiso {
+  empleado: EmpleadoBasicInfo;
+}
+
+export interface ActaAdministrativaWithEmpleado extends ActaAdministrativa {
   empleado: EmpleadoBasicInfo;
 }
