@@ -182,112 +182,17 @@ export default function Payroll() {
     }
   };
   
-  // Mock payroll data for multiple employees
-  const allEmployees = [
-    {
-      id: "1",
-      name: "María García López",
-      rfc: "GACM850101AB1",
-      department: "Ventas",
-      salary: 15000,
-    },
-    {
-      id: "2",
-      name: "Juan Pérez Martínez",
-      rfc: "PEXJ900215CD2",
-      department: "IT",
-      salary: 12000,
-    },
-    {
-      id: "3",
-      name: "Ana Martínez Sánchez",
-      rfc: "MASA920310EF3",
-      department: "RRHH",
-      salary: 18000,
-    },
-    {
-      id: "4",
-      name: "Carlos López Rodríguez",
-      rfc: "LORC880520GH4",
-      department: "Finanzas",
-      salary: 16000,
-    },
-    {
-      id: "5",
-      name: "Laura Hernández Torres",
-      rfc: "HETL950705IJ5",
-      department: "Operaciones",
-      salary: 10000,
-    },
-    {
-      id: "6",
-      name: "Roberto Sánchez Villa",
-      rfc: "SAVR870830KL6",
-      department: "Ventas",
-      salary: 13000,
-    },
-  ];
+  // Transform API employees to format needed by the component
+  const allEmployees = employees.map(emp => ({
+    id: emp.id!,
+    name: `${emp.nombre} ${emp.apellidoPaterno} ${emp.apellidoMaterno || ''}`.trim(),
+    rfc: emp.rfc || '',
+    department: emp.departamento,
+    salary: parseFloat(emp.salarioBrutoMensual || '0'),
+  }));
 
-  // Existing nominas
-  const [nominas, setNominas] = useState<Nomina[]>([
-    {
-      id: "1",
-      type: "ordinaria",
-      period: "1-15 Nov 2025",
-      frequency: "quincenal",
-      employeeIds: ["1", "2", "3", "4", "5", "6"],
-      status: "paid",
-      createdAt: new Date("2025-11-15"),
-      totalNet: 87430,
-      employeeCount: 6,
-    },
-    {
-      id: "2",
-      type: "extraordinaria",
-      period: "Aguinaldo 2025",
-      frequency: "extraordinaria",
-      extraordinaryType: "aguinaldo",
-      employeeIds: ["1", "2", "3", "4", "5", "6"],
-      status: "paid",
-      createdAt: new Date("2025-12-15"),
-      totalNet: 124500,
-      employeeCount: 6,
-    },
-    {
-      id: "3",
-      type: "ordinaria",
-      period: "16-31 Oct 2025",
-      frequency: "quincenal",
-      employeeIds: ["1", "2", "3", "4", "5", "6"],
-      status: "paid",
-      createdAt: new Date("2025-10-31"),
-      totalNet: 85200,
-      employeeCount: 6,
-    },
-    {
-      id: "4",
-      type: "extraordinaria",
-      period: "Bono Productividad Q3",
-      frequency: "extraordinaria",
-      extraordinaryType: "bono",
-      employeeIds: ["1", "6"],
-      status: "approved",
-      createdAt: new Date("2025-09-30"),
-      totalNet: 35000,
-      employeeCount: 2,
-    },
-    {
-      id: "5",
-      type: "ordinaria",
-      period: "1-15 Oct 2025",
-      frequency: "quincenal",
-      employeeIds: ["1", "2", "3", "4"],
-      status: "approved",
-      createdAt: new Date("2025-10-15"),
-      totalNet: 58100,
-      employeeCount: 4,
-    },
-  ]);
+  // Existing nominas (will be populated from API in the future)
+  const [nominas, setNominas] = useState<Nomina[]>([]);
 
   // Predefined concepts (like columns in Excel)
   const [concepts, setConcepts] = useState<Concept[]>([
@@ -303,11 +208,7 @@ export default function Payroll() {
   ]);
 
   // Values for each employee-concept combination
-  const [conceptValues, setConceptValues] = useState<ConceptValue[]>([
-    { employeeId: "1", conceptId: "bono-productividad", amount: 2500 },
-    { employeeId: "2", conceptId: "tiempo-extra", amount: 1200 },
-    { employeeId: "5", conceptId: "faltas", amount: 380 },
-  ]);
+  const [conceptValues, setConceptValues] = useState<ConceptValue[]>([]);
 
 
   const [selectedEmployees, setSelectedEmployees] = useState<Set<string>>(new Set());
