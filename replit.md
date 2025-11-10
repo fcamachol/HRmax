@@ -41,6 +41,16 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
     *   **Form Validation**: Comprehensive validation using Zod schemas with cross-field conditional logic (e.g., diasSuspension required when sancionAplicada = 'suspension')
     *   **PATCH Pattern**: Implements 5-step merge-and-validate workflow matching other personal management modules for data integrity
     *   **Internal Controls**: Supports elaborado_por, aprobado_por fields, internal notes, and detailed sanction descriptions for audit trail
+*   **Configuration - Medios de Pago (Payment Methods)**: Manages payment platforms for payroll disbursement, specifically monederos electrónicos (electronic wallets like Saldazo, Spin) and sindicatos (union-managed payment systems). Features include:
+    *   **Platform Management**: CRUD operations for payment method records (nombre, descripción, tipo comprobante, cuenta depósito)
+    *   **Document Type**: Supports two receipt types (factura, recibo sin IVA) for tax compliance
+    *   **Active Status**: Toggle to enable/disable payment methods without deletion for audit trail preservation
+    *   **Search & Filters**: Real-time search by payment method name with visual badge indicators for active/inactive status
+    *   **Form Validation**: Comprehensive validation using Zod schemas ensuring unique payment method names and proper field requirements
+    *   **PATCH Pattern**: Implements 5-step merge-and-validate workflow for data integrity matching other configuration modules
+    *   **Sidebar Integration**: Organized under collapsible "Configuración" section with route path /configuration/medios-pago
+    *   **Testing Coverage**: Complete data-testid attributes on all interactive elements for automated e2e testing
+    *   **Scope**: Exclusively for payment platforms (monederos, sindicatos) - NOT for regular transfers, cash, or checks
 
 ## External Dependencies
 
