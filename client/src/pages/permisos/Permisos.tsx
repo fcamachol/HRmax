@@ -19,42 +19,43 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Clock, CheckCircle, XCircle, User, Calendar } from "lucide-react";
+import { Plus, Search, Clock, CheckCircle, XCircle, Calendar, Users, FileText } from "lucide-react";
 import { PermisoForm } from "@/components/permisos/PermisoForm";
-import type { Permiso } from "@shared/schema";
+import type { SolicitudPermiso } from "@shared/schema";
 
 export default function Permisos() {
   const [searchTerm, setSearchTerm] = useState("");
   const [tipoFilter, setTipoFilter] = useState<string>("all");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [estatusFilter, setEstatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [selectedPermiso, setSelectedPermiso] = useState<Permiso | undefined>();
+  const [selectedPermiso, setSelectedPermiso] = useState<SolicitudPermiso | undefined>();
 
-  const { data: permisos = [], isLoading } = useQuery<Permiso[]>({
+  const { data: permisos = [], isLoading } = useQuery<SolicitudPermiso[]>({
     queryKey: ["/api/permisos"],
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/permisos/${id}`),
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/permisos/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/permisos"] });
     },
   });
 
   const filteredPermisos = permisos.filter((permiso) => {
-    const matchesSearch = permiso.id?.toString().includes(searchTerm.toLowerCase());
-    const matchesTipo = tipoFilter === "all" || permiso.tipo === tipoFilter;
-    const matchesStatus = statusFilter === "all" || permiso.status === statusFilter;
-    return matchesSearch && matchesTipo && matchesStatus;
+    const matchesSearch = permiso.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         permiso.empleadoId?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesTipo = tipoFilter === "all" || permiso.tipoPermiso === tipoFilter;
+    const matchesEstatus = estatusFilter === "all" || permiso.estatus === estatusFilter;
+    return matchesSearch && matchesTipo && matchesEstatus;
   });
 
-  const handleEdit = (permiso: Permiso) => {
+  const handleEdit = (permiso: SolicitudPermiso) => {
     setSelectedPermiso(permiso);
     setDialogOpen(true);
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("¿Estás seguro de eliminar este permiso?")) {
+  const handleDelete = (id: string) => {
+    if (confirm("¿Estás seguro de eliminar esta solicitud de permiso?")) {
       deleteMutation.mutate(id);
     }
   };
@@ -65,12 +66,16 @@ export default function Permisos() {
   };
 
   const getTipoBadge = (tipo: string) => {
-    const tipoMap = {
-      permiso_personal: { label: "Personal", icon: User },
-      permiso_medico: { label: "Médico", icon: Clock },
-      permiso_oficial: { label: "Oficial", icon: Calendar },
+    const tipoMap: Record<string, { label: string; icon: any }> = {
+      personal: { label: "Personal", icon: Users },
+      defuncion: { label: "Defunción", icon: Calendar },
+      matrimonio: { label: "Matrimonio", icon: Calendar },
+      paternidad: { label: "Paternidad", icon: Users },
+      medico: { label: "Médico", icon: FileText },
+      tramite: { label: "Trámite", icon: FileText },
+      otro: { label: "Otro", icon: FileText },
     };
-    const config = tipoMap[tipo as keyof typeof tipoMap] || { label: tipo, icon: Clock };
+    const config = tipoMap[tipo] || { label: tipo, icon: FileText };
     const Icon = config.icon;
     return (
       <Badge variant="outline" className="gap-1">
@@ -80,14 +85,15 @@ export default function Permisos() {
     );
   };
 
-  const getStatusBadge = (status: string) => {
-    const statusMap = {
+  const getEstatusBadge = (estatus: string) => {
+    const estatusMap: Record<string, { label: string; icon: any; variant: any }> = {
       pendiente: { label: "Pendiente", icon: Clock, variant: "secondary" as const },
-      aprobado: { label: "Aprobado", icon: CheckCircle, variant: "default" as const },
-      rechazado: { label: "Rechazado", icon: XCircle, variant: "destructive" as const },
+      aprobada: { label: "Aprobada", icon: CheckCircle, variant: "default" as const },
+      rechazada: { label: "Rechazada", icon: XCircle, variant: "destructive" as const },
+      cancelada: { label: "Cancelada", icon: XCircle, variant: "outline" as const },
     };
-    const config = statusMap[status as keyof typeof statusMap] || {
-      label: status,
+    const config = estatusMap[estatus] || {
+      label: estatus,
       icon: Clock,
       variant: "secondary" as const,
     };
@@ -111,7 +117,7 @@ export default function Permisos() {
         </div>
         <Button onClick={() => setDialogOpen(true)} data-testid="button-nuevo-permiso">
           <Plus className="h-4 w-4 mr-2" />
-          Nuevo Permiso
+          Nueva Solicitud
         </Button>
       </div>
 
@@ -119,7 +125,7 @@ export default function Permisos() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Buscar por ID..."
+            placeholder="Buscar por ID o empleado..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -132,20 +138,25 @@ export default function Permisos() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los tipos</SelectItem>
-            <SelectItem value="permiso_personal">Personal</SelectItem>
-            <SelectItem value="permiso_medico">Médico</SelectItem>
-            <SelectItem value="permiso_oficial">Oficial</SelectItem>
+            <SelectItem value="personal">Personal</SelectItem>
+            <SelectItem value="defuncion">Defunción</SelectItem>
+            <SelectItem value="matrimonio">Matrimonio</SelectItem>
+            <SelectItem value="paternidad">Paternidad</SelectItem>
+            <SelectItem value="medico">Médico</SelectItem>
+            <SelectItem value="tramite">Trámite</SelectItem>
+            <SelectItem value="otro">Otro</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" data-testid="select-status-filter">
+        <Select value={estatusFilter} onValueChange={setEstatusFilter}>
+          <SelectTrigger className="w-48" data-testid="select-estatus-filter">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="pendiente">Pendiente</SelectItem>
-            <SelectItem value="aprobado">Aprobado</SelectItem>
-            <SelectItem value="rechazado">Rechazado</SelectItem>
+            <SelectItem value="aprobada">Aprobada</SelectItem>
+            <SelectItem value="rechazada">Rechazada</SelectItem>
+            <SelectItem value="cancelada">Cancelada</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -160,7 +171,8 @@ export default function Permisos() {
               <TableHead>Estado</TableHead>
               <TableHead>Fecha Inicio</TableHead>
               <TableHead>Fecha Fin</TableHead>
-              <TableHead>Horas</TableHead>
+              <TableHead>Días</TableHead>
+              <TableHead>Con Goce</TableHead>
               <TableHead>Motivo</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
             </TableRow>
@@ -168,46 +180,47 @@ export default function Permisos() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
-                  Cargando permisos...
+                <TableCell colSpan={10} className="text-center py-8">
+                  Cargando solicitudes...
                 </TableCell>
               </TableRow>
             ) : filteredPermisos.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                  No se encontraron permisos
+                <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  No se encontraron solicitudes de permiso
                 </TableCell>
               </TableRow>
             ) : (
               filteredPermisos.map((permiso) => (
                 <TableRow key={permiso.id} data-testid={`row-permiso-${permiso.id}`}>
-                  <TableCell className="font-medium" data-testid={`text-permiso-id-${permiso.id}`}>
+                  <TableCell className="font-medium max-w-[100px] truncate" data-testid={`text-permiso-id-${permiso.id}`}>
                     {permiso.id}
                   </TableCell>
                   <TableCell data-testid={`text-empleado-id-${permiso.id}`}>
                     {permiso.empleadoId}
                   </TableCell>
-                  <TableCell>{getTipoBadge(permiso.tipo)}</TableCell>
-                  <TableCell>{getStatusBadge(permiso.status)}</TableCell>
+                  <TableCell>{getTipoBadge(permiso.tipoPermiso)}</TableCell>
+                  <TableCell>{getEstatusBadge(permiso.estatus)}</TableCell>
                   <TableCell>
-                    {new Date(permiso.fechaHoraInicio).toLocaleDateString('es-MX', {
+                    {new Date(permiso.fechaInicio).toLocaleDateString('es-MX', {
                       year: 'numeric',
                       month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
+                      day: 'numeric'
                     })}
                   </TableCell>
                   <TableCell>
-                    {new Date(permiso.fechaHoraFin).toLocaleDateString('es-MX', {
+                    {new Date(permiso.fechaFin).toLocaleDateString('es-MX', {
                       year: 'numeric',
                       month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
+                      day: 'numeric'
                     })}
                   </TableCell>
-                  <TableCell>{permiso.horasSolicitadas || 0}h</TableCell>
+                  <TableCell>{permiso.diasSolicitados || 0} días</TableCell>
+                  <TableCell>
+                    <Badge variant={permiso.conGoce ? "default" : "outline"}>
+                      {permiso.conGoce ? "Sí" : "No"}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="max-w-xs truncate" data-testid={`text-motivo-${permiso.id}`}>
                     {permiso.motivo || "-"}
                   </TableCell>

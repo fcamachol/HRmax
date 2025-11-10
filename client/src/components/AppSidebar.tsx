@@ -21,6 +21,10 @@ import {
   UserSearch,
   Clipboard,
   FileCheck,
+  Umbrella,
+  Shield,
+  Clock,
+  UserCog,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -125,6 +129,24 @@ const reclutamientoSubItems = [
   },
 ];
 
+const gestionPersonalSubItems = [
+  {
+    title: "Vacaciones",
+    url: "/vacaciones",
+    icon: Umbrella,
+  },
+  {
+    title: "Incapacidades",
+    url: "/incapacidades",
+    icon: Shield,
+  },
+  {
+    title: "Permisos",
+    url: "/permisos",
+    icon: Clock,
+  },
+];
+
 const mainMenuItems = [
   {
     title: "Dashboard",
@@ -169,6 +191,7 @@ export function AppSidebar() {
   const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance") || location.startsWith("/creditos");
   const isOrganizacionActive = location.startsWith("/organizacion");
   const isReclutamientoActive = location.startsWith("/reclutamiento");
+  const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos");
 
   return (
     <Sidebar>
@@ -318,6 +341,39 @@ export function AppSidebar() {
                             asChild
                             isActive={location === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isGestionPersonalActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isGestionPersonalActive}
+                      data-testid="link-gestion-personal"
+                    >
+                      <UserCog className="h-4 w-4" />
+                      <span>Gestión de Personal</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {gestionPersonalSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase()}`}
                           >
                             <Link href={subItem.url}>
                               <subItem.icon className="h-4 w-4" />
