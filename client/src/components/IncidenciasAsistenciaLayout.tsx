@@ -99,8 +99,7 @@ export function IncidenciasAsistenciaLayout({
     mutationFn: async (row: IncidenciaRow) => {
       const data: InsertIncidenciaAsistencia = {
         employeeId: row.employeeId,
-        fechaInicio,
-        fechaFin,
+        fecha: fechaInicio, // Use single date for the incidence record
         centroTrabajoId: centroTrabajoId || null,
         faltas: row.faltas || 0,
         retardos: row.retardos || 0,

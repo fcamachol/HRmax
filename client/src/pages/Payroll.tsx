@@ -52,8 +52,10 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { GrupoNomina } from "@shared/schema";
+import type { GrupoNomina, Employee, IncidenciaAsistencia } from "@shared/schema";
 import { CreateGrupoNominaDialog } from "@/components/CreateGrupoNominaDialog";
+import { IncidenciasAsistenciaGrid } from "@/components/IncidenciasAsistenciaGrid";
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays } from "date-fns";
 
 interface NominaGroup {
   id: string;
@@ -96,6 +98,16 @@ export default function Payroll() {
   const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
     queryKey: ["/api/grupos-nomina"],
   });
+
+  // Fetch real employees from API
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  // Fetch incidencias de asistencia from API
+  const { data: incidenciasAsistencia = [] } = useQuery<IncidenciaAsistencia[]>({
+    queryKey: ["/api/incidencias-asistencia"],
+  });
   
   // Form state
   const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
@@ -115,6 +127,60 @@ export default function Payroll() {
   
   // Expandable incidencias columns
   const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
+  
+  // Date range for incidencias period
+  const getPeriodDateRange = (): { start: string; end: string } => {
+    if (!selectedPeriod) {
+      const today = new Date();
+      return {
+        start: format(today, "yyyy-MM-dd"),
+        end: format(today, "yyyy-MM-dd"),
+      };
+    }
+
+    // Parse period string like "1-15 Nov 2025" or "16-30 Nov 2025"
+    const periodMatch = selectedPeriod.match(/(\d+)-(\d+)\s+(\w+)\s+(\d+)/);
+    if (periodMatch) {
+      const [, startDay, endDay, monthStr, year] = periodMatch;
+      const monthMap: Record<string, string> = {
+        'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04',
+        'May': '05', 'Jun': '06', 'Jul': '07', 'Ago': '08',
+        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
+      };
+      const month = monthMap[monthStr];
+      return {
+        start: `${year}-${month}-${startDay.padStart(2, '0')}`,
+        end: `${year}-${month}-${endDay.padStart(2, '0')}`,
+      };
+    }
+
+    // Default fallback
+    const today = new Date();
+    if (selectedFrequency === "semanal") {
+      return {
+        start: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+        end: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+      };
+    } else if (selectedFrequency === "quincenal") {
+      const day = today.getDate();
+      if (day <= 15) {
+        return {
+          start: format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd"),
+          end: format(new Date(today.getFullYear(), today.getMonth(), 15), "yyyy-MM-dd"),
+        };
+      } else {
+        return {
+          start: format(new Date(today.getFullYear(), today.getMonth(), 16), "yyyy-MM-dd"),
+          end: format(endOfMonth(today), "yyyy-MM-dd"),
+        };
+      }
+    } else {
+      return {
+        start: format(startOfMonth(today), "yyyy-MM-dd"),
+        end: format(endOfMonth(today), "yyyy-MM-dd"),
+      };
+    }
+  };
   
   // Mock payroll data for multiple employees
   const allEmployees = [
@@ -963,90 +1029,27 @@ export default function Payroll() {
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="sticky left-0 bg-background z-10 min-w-48">Empleado</TableHead>
-                      {percepciones.map((concept) => (
-                        <TableHead key={concept.id} className="text-right min-w-36">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-primary">{concept.name}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => deleteConcept(concept.id)}
-                              data-testid={`button-delete-concept-${concept.id}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableHead>
-                      ))}
-                      {deducciones.map((concept) => (
-                        <TableHead key={concept.id} className="text-right min-w-36">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs text-destructive">{concept.name}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={() => deleteConcept(concept.id)}
-                              data-testid={`button-delete-concept-${concept.id}`}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedEmployeesData.map((employee) => (
-                      <TableRow key={employee.id} data-testid={`row-incidencia-grid-${employee.id}`}>
-                        <TableCell className="sticky left-0 bg-background z-10 font-medium">
-                          {employee.name}
-                        </TableCell>
-                        {percepciones.map((concept) => (
-                          <TableCell key={concept.id} className="text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              className="text-right font-mono"
-                              value={getConceptValue(employee.id, concept.id) || ""}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 0;
-                                updateConceptValue(employee.id, concept.id, value);
-                              }}
-                              data-testid={`input-${employee.id}-${concept.id}`}
-                            />
-                          </TableCell>
-                        ))}
-                        {deducciones.map((concept) => (
-                          <TableCell key={concept.id} className="text-right">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              placeholder="0.00"
-                              className="text-right font-mono"
-                              value={getConceptValue(employee.id, concept.id) || ""}
-                              onChange={(e) => {
-                                const value = parseFloat(e.target.value) || 0;
-                                updateConceptValue(employee.id, concept.id, value);
-                              }}
-                              data-testid={`input-${employee.id}-${concept.id}`}
-                            />
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              {(() => {
+                const dateRange = getPeriodDateRange();
+                const selectedEmployeesArray = employees.filter(emp => 
+                  selectedEmployees.has(emp.id!)
+                );
+                
+                // Filter incidencias that match the period
+                const periodIncidencias = incidenciasAsistencia.filter(inc => 
+                  inc.fecha >= dateRange.start && inc.fecha <= dateRange.end
+                );
+
+                return (
+                  <IncidenciasAsistenciaGrid
+                    fechaInicio={dateRange.start}
+                    fechaFin={dateRange.end}
+                    employees={selectedEmployeesArray}
+                    incidenciasAsistencia={periodIncidencias}
+                    isLoading={false}
+                  />
+                );
+              })()}
             </div>
           )}
 
