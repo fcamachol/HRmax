@@ -47,7 +47,7 @@ export function EmployeeCombobox({
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
-    enabled: open,
+    enabled: open || !!value,
   });
 
   const selectedEmployee = employees.find((emp) => emp.id === value);
