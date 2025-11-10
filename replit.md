@@ -30,6 +30,17 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
     *   **Vacantes (Job Openings)**: Full CRUD interface with dialog form capturing requisitos, salario, ubicación, fecha solicitud, and status management. Table displays key info with date tracking (fecha solicitud always shown, última modificación when updated). Features search, filters, and quick-access requisitos detail dialog.
     *   **Candidatos (Candidates)**: Comprehensive candidate database with 4-tab form (General info, Professional profile, Education & Skills, Documents & Notes). Table displays avatar, full name, desired position, years of experience, contact info (email/phone stacked), source badge, status badge, and registration date. Features search (by name, email, phone, position), filters (status, source), and status management actions (activo, contratado, descartado, inactivo). Supports dynamic skill chips, language proficiency tracking, and referral tracking.
     *   **Candidate-Vacancy Linking (Proceso de Selección)**: Automated workflow linking candidates to job openings. When creating a candidate, users can optionally select a vacancy to trigger automatic creation of a selection process (procesoSeleccion) record with default "Nueva aplicación" stage. Backend endpoint `/api/etapas-seleccion/inicializar` seeds 8 default selection stages if not present. Candidates table includes "Vacante Vinculada" column showing linked vacancy (título + departamento) using precomputed maps for O(n) performance. Form properly normalizes empty vacancy selection (empty string → undefined) to support "banco de candidatos" (candidate pool without specific vacancy). Edit mode displays current link as read-only. Error handling includes graceful fallback when etapas or procesoSeleccion creation fails, with user notifications.
+*   **Personal Management - Actas Administrativas (Administrative Records)**: Comprehensive disciplinary action tracking system compliant with Mexican labor law. Features include:
+    *   **Fault Classification**: Three-tier severity system (leve, grave, muy_grave) aligned with Mexican labor regulations
+    *   **Incident Documentation**: Detailed capture of incident date, time, location, description, and witness statements
+    *   **Sanction Management**: Supports multiple sanction types (amonestación, suspensión con días, descuento con monto, despido, ninguna) with conditional field validation
+    *   **Appeal Process**: Tracks appeal status (apelación_presentada) with dedicated workflow states
+    *   **Status Tracking**: Full lifecycle management (pendiente, aplicada, apelada, anulada, archivada) with visual badges
+    *   **Employee Enrichment**: Storage layer performs leftJoin with employees table to provide complete employee context in all responses
+    *   **Search & Filters**: Real-time search by employee name, numero empleado, or numero acta, with dual filters by tipo de falta and estatus
+    *   **Form Validation**: Comprehensive validation using Zod schemas with cross-field conditional logic (e.g., diasSuspension required when sancionAplicada = 'suspension')
+    *   **PATCH Pattern**: Implements 5-step merge-and-validate workflow matching other personal management modules for data integrity
+    *   **Internal Controls**: Supports elaborado_por, aprobado_por fields, internal notes, and detailed sanction descriptions for audit trail
 
 ## External Dependencies
 
