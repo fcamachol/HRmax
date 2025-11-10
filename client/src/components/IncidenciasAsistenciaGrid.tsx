@@ -32,7 +32,7 @@ interface IncidenciasAsistenciaGridProps {
   isLoading: boolean;
 }
 
-type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos";
+type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos" | "vacaciones";
 
 interface DailyIncidencia {
   fecha: string;
@@ -43,6 +43,7 @@ interface DailyIncidencia {
   horasDescontadas: number;
   incapacidades: number;
   permisos: number;
+  vacaciones: number;
   notas: string;
   existingId?: string;
   hasChanges: boolean;
@@ -61,6 +62,7 @@ const INCIDENCIA_LABELS: Record<IncidenciaTipo, string> = {
   horasDescontadas: "Horas Desc.",
   incapacidades: "Incapacidades",
   permisos: "Permisos",
+  vacaciones: "Vacaciones",
 };
 
 export function IncidenciasAsistenciaGrid({
@@ -110,6 +112,7 @@ export function IncidenciasAsistenciaGrid({
           horasDescontadas: parseFloat(existing?.horasDescontadas || "0"),
           incapacidades: existing?.incapacidades || 0,
           permisos: existing?.permisos || 0,
+          vacaciones: existing?.vacaciones || 0,
           notas: existing?.notas || "",
           existingId: existing?.id,
           hasChanges: false,
@@ -214,6 +217,7 @@ export function IncidenciasAsistenciaGrid({
             horasDescontadas: (dayData.horasDescontadas || 0).toString(),
             incapacidades: dayData.incapacidades || 0,
             permisos: dayData.permisos || 0,
+            vacaciones: dayData.vacaciones || 0,
             notas: dayData.notas || null,
           });
         }
@@ -316,6 +320,7 @@ export function IncidenciasAsistenciaGrid({
                 horasDescontadas: parseFloat(original.horasDescontadas || "0"),
                 incapacidades: original.incapacidades || 0,
                 permisos: original.permisos || 0,
+                vacaciones: original.vacaciones || 0,
                 notas: original.notas || "",
                 existingId: original.id,
                 hasChanges: false,
@@ -330,6 +335,7 @@ export function IncidenciasAsistenciaGrid({
                 horasDescontadas: 0,
                 incapacidades: 0,
                 permisos: 0,
+                vacaciones: 0,
                 notas: "",
                 hasChanges: false,
               });
@@ -382,6 +388,7 @@ export function IncidenciasAsistenciaGrid({
     "horasDescontadas",
     "incapacidades",
     "permisos",
+    "vacaciones",
   ];
 
   return (

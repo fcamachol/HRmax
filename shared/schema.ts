@@ -167,6 +167,7 @@ export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   horasDescontadas: decimal("horas_descontadas", { precision: 10, scale: 2 }).notNull().default("0"), // Horas a descontar
   incapacidades: integer("incapacidades").notNull().default(0), // Días de incapacidad (0 o 1 por día)
   permisos: integer("permisos").notNull().default(0), // Días de permiso (0 o 1 por día)
+  vacaciones: integer("vacaciones").notNull().default(0), // Días de vacaciones (0 o 1 por día)
   notas: text("notas"), // Observaciones del día
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
