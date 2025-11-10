@@ -61,7 +61,9 @@ import {
   insertSolicitudPermisoSchema,
   updateSolicitudPermisoSchema,
   insertActaAdministrativaSchema,
-  updateActaAdministrativaSchema
+  updateActaAdministrativaSchema,
+  insertMedioPagoSchema,
+  updateMedioPagoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
