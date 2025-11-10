@@ -30,6 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { insertSolicitudVacacionesSchema, type InsertSolicitudVacaciones, type SolicitudVacaciones } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import { EmployeeCombobox } from "@/components/EmployeeCombobox";
 
 interface VacacionesFormProps {
   open: boolean;
@@ -145,12 +146,12 @@ export function VacacionesForm({
                 name="empleadoId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>ID Empleado *</FormLabel>
+                    <FormLabel>Empleado *</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Ej: EMP001"
-                        data-testid="input-empleado-id"
+                      <EmployeeCombobox
+                        value={field.value}
+                        onChange={field.onChange}
+                        testId="combobox-empleado"
                       />
                     </FormControl>
                     <FormMessage />
