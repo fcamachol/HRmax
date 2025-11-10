@@ -141,16 +141,34 @@ export default function Payroll() {
     // Parse period string like "1-15 Nov 2025" or "16-30 Nov 2025"
     const periodMatch = selectedPeriod.match(/(\d+)-(\d+)\s+(\w+)\s+(\d+)/);
     if (periodMatch) {
-      const [, startDay, endDay, monthStr, year] = periodMatch;
+      const [, startDayStr, endDayStr, monthStr, yearStr] = periodMatch;
       const monthMap: Record<string, string> = {
         'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04',
         'May': '05', 'Jun': '06', 'Jul': '07', 'Ago': '08',
         'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
       };
+      const startDay = parseInt(startDayStr);
+      const endDay = parseInt(endDayStr);
       const month = monthMap[monthStr];
+      const year = parseInt(yearStr);
+      
+      // Handle weekly periods that cross month boundaries
+      // If start day > end day, the period crosses into the next month
+      if (startDay > endDay) {
+        // Start day is in previous month
+        const endDate = new Date(year, parseInt(month) - 1, endDay);
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - 6); // Go back 6 days for a 7-day week
+        
+        return {
+          start: format(startDate, "yyyy-MM-dd"),
+          end: format(endDate, "yyyy-MM-dd"),
+        };
+      }
+      
       return {
-        start: `${year}-${month}-${startDay.padStart(2, '0')}`,
-        end: `${year}-${month}-${endDay.padStart(2, '0')}`,
+        start: `${year}-${month}-${startDayStr.padStart(2, '0')}`,
+        end: `${year}-${month}-${endDayStr.padStart(2, '0')}`,
       };
     }
 
@@ -406,13 +424,100 @@ export default function Payroll() {
     });
   };
 
+  // Helper function to calculate current period based on frequency
+  const getCurrentPeriod = (frequency: string): string => {
+    const today = new Date();
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    
+    if (frequency === "quincenal") {
+      const day = today.getDate();
+      const month = monthNames[today.getMonth()];
+      const year = today.getFullYear();
+      
+      if (day <= 15) {
+        return `1-15 ${month} ${year}`;
+      } else {
+        const lastDay = endOfMonth(today).getDate();
+        return `16-${lastDay} ${month} ${year}`;
+      }
+    } else if (frequency === "semanal") {
+      const startWeek = startOfWeek(today, { weekStartsOn: 1 });
+      const endWeek = endOfWeek(today, { weekStartsOn: 1 });
+      // Use end week's month/year for consistent formatting
+      const month = monthNames[endWeek.getMonth()];
+      const year = endWeek.getFullYear();
+      
+      return `${startWeek.getDate()}-${endWeek.getDate()} ${month} ${year}`;
+    } else {
+      // mensual
+      const month = monthNames[today.getMonth()];
+      const year = today.getFullYear();
+      return `1-${endOfMonth(today).getDate()} ${month} ${year}`;
+    }
+  };
+
+  // Generate period options based on frequency
+  const getPeriodOptions = (frequency: string): string[] => {
+    const today = new Date();
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const periods: string[] = [];
+    
+    if (frequency === "quincenal") {
+      // Generate 6 quincenal periods (current + 5 previous)
+      let currentDate = new Date(today);
+      for (let i = 0; i < 6; i++) {
+        const day = currentDate.getDate();
+        const month = monthNames[currentDate.getMonth()];
+        const year = currentDate.getFullYear();
+        
+        if (day <= 15) {
+          periods.push(`1-15 ${month} ${year}`);
+          // Move to previous quincenal (16-end of previous month)
+          currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 0); // Last day of previous month
+        } else {
+          const lastDay = endOfMonth(currentDate).getDate();
+          periods.push(`16-${lastDay} ${month} ${year}`);
+          // Move to first half of same month
+          currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 15);
+        }
+      }
+    } else if (frequency === "semanal") {
+      // Generate 6 weekly periods
+      let currentDate = new Date(today);
+      for (let i = 0; i < 6; i++) {
+        const startWeek = startOfWeek(currentDate, { weekStartsOn: 1 });
+        const endWeek = endOfWeek(currentDate, { weekStartsOn: 1 });
+        // Use end week's month/year for consistent formatting
+        const month = monthNames[endWeek.getMonth()];
+        const year = endWeek.getFullYear();
+        
+        periods.push(`${startWeek.getDate()}-${endWeek.getDate()} ${month} ${year}`);
+        
+        // Move to previous week
+        currentDate = addDays(currentDate, -7);
+      }
+    } else {
+      // Generate 6 monthly periods
+      for (let i = 0; i < 6; i++) {
+        const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const month = monthNames[date.getMonth()];
+        const year = date.getFullYear();
+        const lastDay = endOfMonth(date).getDate();
+        periods.push(`1-${lastDay} ${month} ${year}`);
+      }
+    }
+    
+    return periods;
+  };
+
   const startNewNomina = () => {
     setViewMode("create");
     setCurrentStep(0);
     setSelectedEmployees(new Set());
     setNominaType("ordinaria");
     setExtraordinaryType("");
-    setSelectedPeriod("");
+    // Pre-select current period for ordinary payroll
+    setSelectedPeriod(getCurrentPeriod(selectedFrequency));
     setConceptValues([]);
   };
 
@@ -661,9 +766,11 @@ export default function Payroll() {
                           <SelectValue placeholder="Selecciona periodo" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="16-30 Nov 2025">16-30 Nov 2025</SelectItem>
-                          <SelectItem value="1-15 Nov 2025">1-15 Nov 2025</SelectItem>
-                          <SelectItem value="16-31 Oct 2025">16-31 Oct 2025</SelectItem>
+                          {getPeriodOptions(selectedFrequency).map((period) => (
+                            <SelectItem key={period} value={period}>
+                              {period}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
