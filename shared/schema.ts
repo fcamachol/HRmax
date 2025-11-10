@@ -123,6 +123,17 @@ export const payrollPeriods = pgTable("payroll_periods", {
   uniquePeriod: unique().on(table.grupoNominaId, table.year, table.periodNumber),
 }));
 
+export const mediosPago = pgTable("medios_pago", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre").notNull().unique(),
+  descripcion: text("descripcion"),
+  tipoComprobante: varchar("tipo_comprobante").notNull(), // factura, recibo_sin_iva
+  cuentaDeposito: varchar("cuenta_deposito").notNull(),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   employeeId: varchar("employee_id").notNull(),
@@ -342,6 +353,19 @@ export const insertPayrollPeriodSchema = createInsertSchema(payrollPeriods).omit
   id: true,
 });
 
+export const tiposComprobante = ["factura", "recibo_sin_iva"] as const;
+export type TipoComprobante = typeof tiposComprobante[number];
+
+export const insertMedioPagoSchema = createInsertSchema(mediosPago).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoComprobante: z.enum(tiposComprobante),
+});
+
+export const updateMedioPagoSchema = insertMedioPagoSchema.partial();
+
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
 });
@@ -467,6 +491,8 @@ export type GrupoNomina = typeof gruposNomina.$inferSelect;
 export type InsertGrupoNomina = z.infer<typeof insertGrupoNominaSchema>;
 export type PayrollPeriod = typeof payrollPeriods.$inferSelect;
 export type InsertPayrollPeriod = z.infer<typeof insertPayrollPeriodSchema>;
+export type MedioPago = typeof mediosPago.$inferSelect;
+export type InsertMedioPago = z.infer<typeof insertMedioPagoSchema>;
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 export type IncidenciaAsistencia = typeof incidenciasAsistencia.$inferSelect;
