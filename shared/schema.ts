@@ -5,6 +5,7 @@ import { z } from "zod";
 
 export const employees = pgTable("employees", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   numeroEmpleado: varchar("numero_empleado").notNull(),
   nombre: varchar("nombre").notNull(),
   apellidoPaterno: varchar("apellido_paterno").notNull(),
@@ -71,7 +72,7 @@ export const employees = pgTable("employees", {
   timezone: varchar("timezone").default("America/Mexico_City"),
   preferencias: jsonb("preferencias").default(sql`'{}'::jsonb`),
   jefeDirectoId: varchar("jefe_directo_id"),
-  empresaId: varchar("empresa_id"),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   registroPatronalId: integer("registro_patronal_id"),
   documentoContratoId: varchar("documento_contrato_id"),
   createdAt: timestamp("created_at").default(sql`now()`),
@@ -88,15 +89,23 @@ export const employees = pgTable("employees", {
   driveId: text("drive_id"),
   cuenta: numeric("cuenta"),
   grupoNominaId: varchar("grupo_nomina_id"),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("employees_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   name: text("name").notNull().unique(),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("departments_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const gruposNomina = pgTable("grupos_nomina", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre").notNull().unique(),
   tipoPeriodo: varchar("tipo_periodo").notNull(), // semanal, catorcenal, quincenal, mensual
   diaInicioSemana: integer("dia_inicio_semana").default(1), // 0=domingo, 1=lunes, ..., 6=sábado
@@ -107,10 +116,14 @@ export const gruposNomina = pgTable("grupos_nomina", {
   activo: boolean("activo").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("grupos_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const payrollPeriods = pgTable("payroll_periods", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   grupoNominaId: varchar("grupo_nomina_id").notNull().references(() => gruposNomina.id, { onDelete: "cascade" }),
   startDate: date("start_date").notNull(),
   endDate: date("end_date").notNull(),
@@ -121,10 +134,13 @@ export const payrollPeriods = pgTable("payroll_periods", {
   createdAt: timestamp("created_at").default(sql`now()`),
 }, (table) => ({
   uniquePeriod: unique().on(table.grupoNominaId, table.year, table.periodNumber),
+  clienteEmpresaIdx: index("payroll_periods_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 export const mediosPago = pgTable("medios_pago", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre").notNull().unique(),
   descripcion: text("descripcion"),
   tipoComprobante: varchar("tipo_comprobante").notNull(), // factura, recibo_sin_iva
@@ -132,13 +148,17 @@ export const mediosPago = pgTable("medios_pago", {
   activo: boolean("activo").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("medios_pago_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const tiposConcepto = ["percepcion", "deduccion"] as const;
 export type TipoConcepto = typeof tiposConcepto[number];
 
 export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre", { length: 200 }).notNull().unique(),
   tipo: varchar("tipo", { length: 20 }).notNull(), // percepcion, deduccion
   formula: text("formula").notNull(),
@@ -149,20 +169,27 @@ export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   activo: boolean("activo").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("conceptos_medio_pago_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Tabla de relación muchos a muchos entre conceptos y medios de pago
 export const conceptosMediosPagoRel = pgTable("conceptos_medios_pago_rel", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   conceptoId: varchar("concepto_id").notNull().references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
   medioPagoId: varchar("medio_pago_id").notNull().references(() => mediosPago.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").default(sql`now()`),
 }, (table) => ({
   uniqueRelation: unique().on(table.conceptoId, table.medioPagoId),
+  clienteEmpresaIdx: index("conceptos_medios_pago_rel_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   employeeId: varchar("employee_id").notNull(),
   centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo donde se registró la asistencia
   turnoId: varchar("turno_id").references(() => turnosCentroTrabajo.id, { onDelete: "set null" }), // Turno del empleado
@@ -176,7 +203,9 @@ export const attendance = pgTable("attendance", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("attendance_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Tipos de incidencias de asistencia
 export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso", "prima_dominical"] as const;
@@ -196,6 +225,8 @@ export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
 // Una fila por empleado por día con columnas para cada tipo de incidencia
 export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   employeeId: varchar("employee_id").notNull(),
   centroTrabajoId: varchar("centro_trabajo_id"), // Centro de trabajo (opcional)
   fecha: date("fecha").notNull(), // Fecha del día
@@ -214,6 +245,7 @@ export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
 }, (table) => ({
   // Índice único: un registro por empleado por fecha por centro
   employeeDateIdx: sql`CREATE UNIQUE INDEX IF NOT EXISTS incidencias_empleado_fecha_centro_idx ON ${table} (employee_id, fecha, COALESCE(centro_trabajo_id, ''))`,
+  clienteEmpresaIdx: index("incidencias_asistencia_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 // ============================================================================
@@ -432,6 +464,8 @@ export const bajaCategoryLabels: Record<BajaCategory, string> = {
 
 export const legalCases = pgTable("legal_cases", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   employeeId: varchar("employee_id"), // null para simulaciones
   employeeName: text("employee_name").notNull(), // Nombre del empleado
   bajaCategory: text("baja_category").notNull().default("voluntaria"), // 'voluntaria', 'involuntaria', 'especial'
@@ -450,21 +484,29 @@ export const legalCases = pgTable("legal_cases", {
   calculoData: jsonb("calculo_data"), // Desglose completo del cálculo aprobado
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("legal_cases_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Conceptos especiales para bajas (descuentos o adicionales)
 export const bajaSpecialConcepts = pgTable("baja_special_concepts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   legalCaseId: varchar("legal_case_id").notNull(), // Vinculado al caso de baja
   conceptType: text("concept_type").notNull(), // 'descuento' o 'adicional'
   description: text("description").notNull(), // Descripción del concepto
   amount: decimal("amount", { precision: 10, scale: 2 }).notNull(), // Monto
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("baja_special_concepts_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Liquidaciones y Finiquitos
 export const settlements = pgTable("settlements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   legalCaseId: varchar("legal_case_id"), // null para simulaciones independientes
   settlementType: text("settlement_type").notNull(), // 'liquidacion_injustificada', 'liquidacion_justificada', 'finiquito'
   employeeName: text("employee_name"), // Para simulaciones
@@ -476,7 +518,9 @@ export const settlements = pgTable("settlements", {
   totalAmount: decimal("total_amount", { precision: 12, scale: 2 }).notNull(),
   mode: text("mode").notNull(), // 'simulacion' o 'real'
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("settlements_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Demandas laborales - Etapas del proceso legal
 export const lawsuitStages = ["conciliacion", "contestacion", "desahogo", "alegatos", "sentencia", "cerrado"] as const;
@@ -484,6 +528,8 @@ export type LawsuitStage = typeof lawsuitStages[number];
 
 export const lawsuits = pgTable("lawsuits", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   title: text("title").notNull(), // Título de la demanda
   employeeName: text("employee_name").notNull(), // Nombre del empleado demandante
   legalCaseId: varchar("legal_case_id"), // Vincula con un caso legal de bajas si existe
@@ -492,7 +538,9 @@ export const lawsuits = pgTable("lawsuits", {
   documentUrl: text("document_url"), // URL del documento escaneado de la demanda
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("lawsuits_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
@@ -614,6 +662,8 @@ export const hiringStageLabels: Record<HiringStage, string> = {
 
 export const hiringProcess = pgTable("hiring_process", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: text("nombre").notNull(), // Nombre del candidato
   apellidoPaterno: text("apellido_paterno").notNull(), // Apellido paterno
   apellidoMaterno: text("apellido_materno"), // Apellido materno (opcional)
@@ -646,7 +696,9 @@ export const hiringProcess = pgTable("hiring_process", {
   notes: text("notes"), // Notas adicionales
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("hiring_process_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertHiringProcessSchema = createInsertSchema(hiringProcess).omit({
   id: true,
@@ -1008,6 +1060,8 @@ export type EstatusHoraExtra = typeof estatusHoraExtra[number];
 
 export const horasExtras = pgTable("horas_extras", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }),
   attendanceId: varchar("attendance_id").references(() => attendance.id, { onDelete: "set null" }), // Vinculado a asistencia
@@ -1024,7 +1078,9 @@ export const horasExtras = pgTable("horas_extras", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("horas_extras_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertHoraExtraSchema = createInsertSchema(horasExtras).omit({
   id: true,
@@ -1047,6 +1103,8 @@ export type InsertHoraExtra = z.infer<typeof insertHoraExtraSchema>;
 // Clientes para REPSE
 export const clientesREPSE = pgTable("clientes_repse", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   razonSocial: varchar("razon_social").notNull(),
   rfc: varchar("rfc").notNull(),
   nombreComercial: varchar("nombre_comercial"),
@@ -1068,7 +1126,9 @@ export const clientesREPSE = pgTable("clientes_repse", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("clientes_repse_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertClienteREPSESchema = createInsertSchema(clientesREPSE).omit({
   id: true,
@@ -1087,6 +1147,7 @@ export type EstatusREPSE = typeof estatusREPSE[number];
 
 export const registrosREPSE = pgTable("registros_repse", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   numeroRegistro: varchar("numero_registro").notNull(), // Número de registro REPSE
   fechaEmision: date("fecha_emision").notNull(),
@@ -1101,7 +1162,9 @@ export const registrosREPSE = pgTable("registros_repse", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("registros_repse_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertRegistroREPSESchema = createInsertSchema(registrosREPSE).omit({
   id: true,
@@ -1122,9 +1185,10 @@ export type EstatusContratoREPSE = typeof estatusContratoREPSE[number];
 
 export const contratosREPSE = pgTable("contratos_repse", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   registroREPSEId: varchar("registro_repse_id").notNull().references(() => registrosREPSE.id, { onDelete: "cascade" }),
-  clienteId: varchar("cliente_id").notNull().references(() => clientesREPSE.id, { onDelete: "cascade" }),
+  clienteREPSEId: varchar("cliente_repse_id").notNull().references(() => clientesREPSE.id, { onDelete: "cascade" }),
   numeroContrato: varchar("numero_contrato").notNull(),
   fechaInicio: date("fecha_inicio").notNull(),
   fechaFin: date("fecha_fin"),
@@ -1140,7 +1204,9 @@ export const contratosREPSE = pgTable("contratos_repse", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("contratos_repse_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertContratoREPSESchema = createInsertSchema(contratosREPSE).omit({
   id: true,
@@ -1161,6 +1227,8 @@ export type InsertContratoREPSE = z.infer<typeof insertContratoREPSESchema>;
 // Asignación de Personal a Contratos REPSE
 export const asignacionesPersonalREPSE = pgTable("asignaciones_personal_repse", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   contratoREPSEId: varchar("contrato_repse_id").notNull().references(() => contratosREPSE.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   fechaAsignacion: date("fecha_asignacion").notNull(),
@@ -1172,7 +1240,9 @@ export const asignacionesPersonalREPSE = pgTable("asignaciones_personal_repse", 
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("asignaciones_personal_repse_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertAsignacionPersonalREPSESchema = createInsertSchema(asignacionesPersonalREPSE).omit({
   id: true,
@@ -1200,6 +1270,7 @@ export type EstatusAvisoREPSE = typeof estatusAvisoREPSE[number];
 
 export const avisosREPSE = pgTable("avisos_repse", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   tipo: varchar("tipo").notNull(), // REPORTE_TRIMESTRAL, NUEVO_CONTRATO, etc.
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   contratoREPSEId: varchar("contrato_repse_id").references(() => contratosREPSE.id, { onDelete: "cascade" }), // Null para reportes trimestrales o cambios de empresa
@@ -1216,7 +1287,9 @@ export const avisosREPSE = pgTable("avisos_repse", {
   notas: text("notas"),
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("avisos_repse_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertAvisoREPSESchema = createInsertSchema(avisosREPSE).omit({
   id: true,
@@ -1260,6 +1333,8 @@ export const estadosCredito = [
 // Créditos Legales (INFONAVIT, FONACOT, Pensión Alimenticia, Embargos)
 export const creditosLegales = pgTable("creditos_legales", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   tipoCredito: varchar("tipo_credito").notNull(), // INFONAVIT, FONACOT, PENSION_ALIMENTICIA, EMBARGO
   
@@ -1289,7 +1364,9 @@ export const creditosLegales = pgTable("creditos_legales", {
   
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("creditos_legales_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertCreditoLegalSchema = createInsertSchema(creditosLegales).omit({
   id: true,
@@ -1309,6 +1386,8 @@ export type InsertCreditoLegal = z.infer<typeof insertCreditoLegalSchema>;
 // Préstamos Internos
 export const prestamosInternos = pgTable("prestamos_internos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
   // Datos del préstamo
@@ -1337,7 +1416,9 @@ export const prestamosInternos = pgTable("prestamos_internos", {
   
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("prestamos_internos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertPrestamoInternoSchema = createInsertSchema(prestamosInternos).omit({
   id: true,
@@ -1356,6 +1437,8 @@ export type InsertPrestamoInterno = z.infer<typeof insertPrestamoInternoSchema>;
 // Pagos/Abonos de Créditos y Préstamos (Histórico)
 export const pagosCreditosDescuentos = pgTable("pagos_creditos_descuentos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   
   // Referencia al crédito o préstamo
   creditoLegalId: varchar("credito_legal_id").references(() => creditosLegales.id, { onDelete: "cascade" }),
@@ -1378,7 +1461,9 @@ export const pagosCreditosDescuentos = pgTable("pagos_creditos_descuentos", {
   notas: text("notas"),
   
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("pagos_creditos_descuentos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertPagoCreditoDescuentoSchema = createInsertSchema(pagosCreditosDescuentos).omit({
   id: true,
@@ -1393,6 +1478,8 @@ export type InsertPagoCreditoDescuento = z.infer<typeof insertPagoCreditoDescuen
 // Puestos (Organización)
 export const puestos = pgTable("puestos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   
   // Identificación
   clavePuesto: varchar("clave_puesto").notNull().unique(),
@@ -1452,7 +1539,9 @@ export const puestos = pgTable("puestos", {
   // Auditoría
   fechaCreacion: timestamp("fecha_creacion").notNull().default(sql`now()`),
   ultimaActualizacion: timestamp("ultima_actualizacion").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("puestos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export const insertPuestoSchema = createInsertSchema(puestos).omit({
   id: true,
@@ -1549,6 +1638,7 @@ export type VacantePriority = typeof vacantePriorities[number];
 // Tabla de Vacantes (Requisiciones de Personal)
 export const vacantes = pgTable("vacantes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   titulo: varchar("titulo").notNull(),
   puestoId: varchar("puesto_id").references(() => puestos.id, { onDelete: "set null" }),
   departamento: varchar("departamento").notNull(),
@@ -1578,11 +1668,13 @@ export const vacantes = pgTable("vacantes", {
   // Condiciones Laborales
   condicionesLaborales: jsonb("condiciones_laborales").default(sql`'{}'::jsonb`),
   
-  empresaId: varchar("empresa_id"),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   creadoPor: varchar("creado_por"),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("vacantes_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Fuentes de reclutamiento
 export const fuentesReclutamiento = [
@@ -1596,6 +1688,8 @@ export type FuenteReclutamiento = typeof fuentesReclutamiento[number];
 // Tabla de Candidatos
 export const candidatos = pgTable("candidatos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre").notNull(),
   apellidoPaterno: varchar("apellido_paterno").notNull(),
   apellidoMaterno: varchar("apellido_materno"),
@@ -1623,11 +1717,15 @@ export const candidatos = pgTable("candidatos", {
   estatus: varchar("estatus").default("activo"), // activo, contratado, descartado, inactivo
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("candidatos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Etapas del proceso de selección (configurables por empresa)
 export const etapasSeleccion = pgTable("etapas_seleccion", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre").notNull(),
   descripcion: text("descripcion"),
   orden: integer("orden").notNull(), // Orden en el pipeline
@@ -1637,11 +1735,15 @@ export const etapasSeleccion = pgTable("etapas_seleccion", {
   activa: boolean("activa").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("etapas_seleccion_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Proceso de selección - Estado de cada candidato en cada vacante
 export const procesoSeleccion = pgTable("proceso_seleccion", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   candidatoId: varchar("candidato_id").notNull().references(() => candidatos.id, { onDelete: "cascade" }),
   vacanteId: varchar("vacante_id").notNull().references(() => vacantes.id, { onDelete: "cascade" }),
   etapaActualId: varchar("etapa_actual_id").notNull().references(() => etapasSeleccion.id, { onDelete: "restrict" }),
@@ -1656,18 +1758,23 @@ export const procesoSeleccion = pgTable("proceso_seleccion", {
 }, (table) => ({
   // Un candidato puede aplicar a la misma vacante solo una vez
   candidatoVacanteIdx: unique().on(table.candidatoId, table.vacanteId),
+  clienteEmpresaIdx: index("proceso_seleccion_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 // Historial de movimientos en el proceso
 export const historialProcesoSeleccion = pgTable("historial_proceso_seleccion", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
   etapaAnteriorId: varchar("etapa_anterior_id").references(() => etapasSeleccion.id, { onDelete: "set null" }),
   etapaNuevaId: varchar("etapa_nueva_id").notNull().references(() => etapasSeleccion.id, { onDelete: "restrict" }),
   comentario: text("comentario"),
   movidoPor: varchar("movido_por"),
   createdAt: timestamp("created_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("historial_proceso_seleccion_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Tipos de entrevistas
 export const tiposEntrevista = ["telefonica", "rh", "tecnica", "gerencia", "panel", "caso_practico", "otra"] as const;
@@ -1676,6 +1783,8 @@ export type TipoEntrevista = typeof tiposEntrevista[number];
 // Entrevistas programadas
 export const entrevistas = pgTable("entrevistas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
   tipo: varchar("tipo").notNull().default("rh"), // telefonica, rh, tecnica, gerencia, panel
   titulo: varchar("titulo").notNull(),
@@ -1693,11 +1802,15 @@ export const entrevistas = pgTable("entrevistas", {
   archivoNotas: varchar("archivo_notas"), // URL de archivo con notas de la entrevista
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("entrevistas_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Evaluaciones técnicas o psicométricas
 export const evaluaciones = pgTable("evaluaciones", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
   tipo: varchar("tipo").notNull(), // tecnica, psicometrica, conocimientos, idiomas, etc.
   nombre: varchar("nombre").notNull(),
@@ -1713,11 +1826,14 @@ export const evaluaciones = pgTable("evaluaciones", {
   estatus: varchar("estatus").default("pendiente"), // pendiente, en_proceso, completada, vencida
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("evaluaciones_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Ofertas de trabajo
 export const ofertas = pgTable("ofertas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   procesoSeleccionId: varchar("proceso_seleccion_id").notNull().references(() => procesoSeleccion.id, { onDelete: "cascade" }),
   vacanteId: varchar("vacante_id").notNull().references(() => vacantes.id, { onDelete: "restrict" }),
   candidatoId: varchar("candidato_id").notNull().references(() => candidatos.id, { onDelete: "restrict" }),
@@ -1738,11 +1854,13 @@ export const ofertas = pgTable("ofertas", {
   estatus: varchar("estatus").default("borrador"), // borrador, enviada, aceptada, rechazada, negociacion, vencida
   documentoOferta: varchar("documento_oferta"), // URL del documento de oferta generado
   notas: text("notas"),
-  empresaId: varchar("empresa_id"),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   creadoPor: varchar("creado_por"),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("ofertas_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // Zod schemas para validación
 
@@ -1898,6 +2016,8 @@ export type EstatusSolicitudVacaciones = typeof estatusSolicitudVacaciones[numbe
 
 export const solicitudesVacaciones = pgTable("solicitudes_vacaciones", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   fechaInicio: date("fecha_inicio").notNull(),
   fechaFin: date("fecha_fin").notNull(),
@@ -1917,6 +2037,7 @@ export const solicitudesVacaciones = pgTable("solicitudes_vacaciones", {
   // Index for common queries filtering by employee and date
   empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_vacaciones_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
   empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_vacaciones_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
+  clienteEmpresaIdx: index("solicitudes_vacaciones_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 // ============================================================================
@@ -1933,6 +2054,8 @@ export type EstatusIncapacidad = typeof estatusIncapacidad[number];
 
 export const incapacidades = pgTable("incapacidades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   tipo: varchar("tipo").notNull(), // enfermedad_general, riesgo_trabajo, maternidad
   fechaInicio: date("fecha_inicio").notNull(),
@@ -1965,6 +2088,7 @@ export const incapacidades = pgTable("incapacidades", {
   empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
   empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
   empleadoTipoIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_tipo_idx ON ${table} (empleado_id, tipo)`,
+  clienteEmpresaIdx: index("incapacidades_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 // ============================================================================
@@ -1981,6 +2105,8 @@ export type EstatusSolicitudPermiso = typeof estatusSolicitudPermiso[number];
 
 export const solicitudesPermisos = pgTable("solicitudes_permisos", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
   // Tipo y clasificación
@@ -2014,6 +2140,7 @@ export const solicitudesPermisos = pgTable("solicitudes_permisos", {
   empleadoFechaIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_fecha_idx ON ${table} (empleado_id, fecha_inicio)`,
   empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
   empleadoTipoIdx: sql`CREATE INDEX IF NOT EXISTS solicitudes_permisos_empleado_tipo_idx ON ${table} (empleado_id, tipo_permiso)`,
+  clienteEmpresaIdx: index("solicitudes_permisos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 // ============================================================================
@@ -2143,6 +2270,8 @@ export const updateSolicitudPermisoSchema = baseSolicitudPermisoSchema.partial()
 
 export const actasAdministrativas = pgTable("actas_administrativas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
   // Información del acta
@@ -2192,7 +2321,9 @@ export const actasAdministrativas = pgTable("actas_administrativas", {
   
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("actas_administrativas_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 // ============================================================================
 // BANCOS LAYOUTS - Configuración de formatos CSV para dispersión bancaria
@@ -2247,6 +2378,8 @@ export type ConfiguracionCsv = z.infer<typeof configuracionCsvSchema>;
 
 export const bancosLayouts = pgTable("bancos_layouts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre").notNull(), // "Santander México"
   codigoBanco: varchar("codigo_banco").notNull().unique(), // "SANTANDER"
   activo: boolean("activo").notNull().default(true),
@@ -2270,7 +2403,9 @@ export const bancosLayouts = pgTable("bancos_layouts", {
   
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  clienteEmpresaIdx: index("bancos_layouts_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
 
 export type BancoLayout = typeof bancosLayouts.$inferSelect;
 export const insertBancoLayoutSchema = createInsertSchema(bancosLayouts).omit({
@@ -2314,6 +2449,8 @@ export type EmpleadosData = z.infer<typeof empleadosDataSchema>;
 
 export const nominas = pgTable("nominas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   
   // Información básica de la nómina
   tipo: varchar("tipo").notNull(), // "ordinaria" | "extraordinaria"
@@ -2363,6 +2500,7 @@ export const nominas = pgTable("nominas", {
   statusIdx: index("nominas_status_idx").on(table.status),
   periodoIdx: index("nominas_periodo_idx").on(table.periodo),
   fechaPagoIdx: index("nominas_fecha_pago_idx").on(table.fechaPago),
+  clienteEmpresaIdx: index("nominas_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
 export type Nomina = typeof nominas.$inferSelect;
