@@ -65,7 +65,10 @@ import {
   insertMedioPagoSchema,
   updateMedioPagoSchema,
   insertConceptoMedioPagoSchema,
-  updateConceptoMedioPagoSchema
+  updateConceptoMedioPagoSchema,
+  insertClienteSchema,
+  insertModuloSchema,
+  insertUsuarioPermisoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -3082,6 +3085,148 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: "Etapas de selección inicializadas exitosamente",
         etapas: etapasCreadas
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SISTEMA - CLIENTES ====================
+  
+  app.post("/api/clientes", async (req, res) => {
+    try {
+      const validated = insertClienteSchema.parse(req.body);
+      const cliente = await storage.createCliente(validated);
+      res.status(201).json(cliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clientes", async (req, res) => {
+    try {
+      const clientes = await storage.getClientes();
+      res.json(clientes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clientes/activos", async (req, res) => {
+    try {
+      const clientes = await storage.getClientesActivos();
+      res.json(clientes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/clientes/:id", async (req, res) => {
+    try {
+      const cliente = await storage.getCliente(req.params.id);
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/clientes/:id", async (req, res) => {
+    try {
+      const validated = insertClienteSchema.partial().parse(req.body);
+      const cliente = await storage.updateCliente(req.params.id, validated);
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/clientes/:id", async (req, res) => {
+    try {
+      await storage.deleteCliente(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SISTEMA - MÓDULOS ====================
+  
+  app.get("/api/modulos", async (req, res) => {
+    try {
+      const modulos = await storage.getModulos();
+      res.json(modulos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/modulos/activos", async (req, res) => {
+    try {
+      const modulos = await storage.getModulosActivos();
+      res.json(modulos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/modulos/:id", async (req, res) => {
+    try {
+      const modulo = await storage.getModulo(req.params.id);
+      if (!modulo) {
+        return res.status(404).json({ message: "Módulo no encontrado" });
+      }
+      res.json(modulo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SISTEMA - PERMISOS DE USUARIOS ====================
+  
+  app.post("/api/usuarios-permisos", async (req, res) => {
+    try {
+      const validated = insertUsuarioPermisoSchema.parse(req.body);
+      const permiso = await storage.createUsuarioPermiso(validated);
+      res.status(201).json(permiso);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/usuarios-permisos", async (req, res) => {
+    try {
+      const { usuarioId } = req.query;
+      
+      if (usuarioId) {
+        const permisos = await storage.getPermisosByUsuario(usuarioId as string);
+        return res.json(permisos);
+      }
+      
+      const permisos = await storage.getUsuariosPermisos();
+      res.json(permisos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/usuarios-permisos/:id", async (req, res) => {
+    try {
+      const permiso = await storage.getUsuarioPermiso(req.params.id);
+      if (!permiso) {
+        return res.status(404).json({ message: "Permiso no encontrado" });
+      }
+      res.json(permiso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/usuarios-permisos/:id", async (req, res) => {
+    try {
+      await storage.deleteUsuarioPermiso(req.params.id);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
