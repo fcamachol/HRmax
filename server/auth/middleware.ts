@@ -7,6 +7,7 @@ declare module "express-serve-static-core" {
       id: string;
       tipoUsuario?: string;
       clienteId?: string | null;
+      isSuperAdmin?: boolean;
     };
   }
 }
@@ -78,11 +79,13 @@ export function mockAuthMiddleware(
   const userId = req.header("X-User-Id") || "mock-user-id";
   const tipoUsuario = req.header("X-User-Type") || "maxtalent";
   const clienteId = req.header("X-Cliente-Id") || null;
+  const isSuperAdmin = req.header("X-Is-Super-Admin") === "true";
 
   req.user = {
     id: userId,
     tipoUsuario,
     clienteId,
+    isSuperAdmin,
   };
 
   next();
@@ -114,6 +117,22 @@ export function requireMaxTalentUser(req: Request, res: Response, next: NextFunc
   if (req.user.tipoUsuario !== "maxtalent") {
     return res.status(403).json({
       message: "Acceso restringido a usuarios MaxTalent",
+    });
+  }
+
+  next();
+}
+
+export function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      message: "No autenticado. Inicie sesión para continuar.",
+    });
+  }
+
+  if (!req.user.isSuperAdmin) {
+    return res.status(403).json({
+      message: "Acceso denegado. Esta acción requiere privilegios de Super Admin.",
     });
   }
 

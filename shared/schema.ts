@@ -254,6 +254,9 @@ export const users = pgTable("users", {
   tipoUsuario: varchar("tipo_usuario").notNull().default("cliente"), // "maxtalent" | "cliente"
   clienteId: varchar("cliente_id").references(() => clientes.id), // Solo para tipo "cliente"
   
+  // Super Admin - permite bypass de permisos con auditoría completa
+  isSuperAdmin: boolean("is_super_admin").notNull().default(false),
+  
   // Información adicional
   nombre: text("nombre"),
   email: varchar("email"),
@@ -310,6 +313,54 @@ export const insertUsuarioPermisoSchema = createInsertSchema(usuariosPermisos).o
   scopeTipo: z.enum(["cliente", "empresa", "centro_trabajo", "modulo"]),
 });
 export type InsertUsuarioPermiso = z.infer<typeof insertUsuarioPermisoSchema>;
+
+// ============================================================================
+// ADMIN AUDIT LOGS - Registro de acciones de Super Admin
+// ============================================================================
+
+export const adminAuditLogs = pgTable("admin_audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Quién realizó la acción
+  adminUserId: varchar("admin_user_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  adminUsername: varchar("admin_username").notNull(), // Denormalizado para auditoría
+  
+  // Qué acción se realizó
+  action: varchar("action").notNull(), // "create_user", "update_user", "delete_user", "assign_permission", "remove_permission"
+  resourceType: varchar("resource_type").notNull(), // "user", "permission", etc.
+  resourceId: varchar("resource_id"), // ID del recurso afectado
+  
+  // Trazabilidad de tenant (para cumplimiento multi-tenant)
+  targetClienteId: varchar("target_cliente_id").references(() => clientes.id),
+  targetEmpresaId: varchar("target_empresa_id").references(() => empresas.id),
+  targetCentroTrabajoId: varchar("target_centro_trabajo_id").references(() => centrosTrabajo.id),
+  
+  // Detalles de la acción
+  details: jsonb("details"), // JSON con detalles específicos de la acción
+  previousValue: jsonb("previous_value"), // Valor anterior (para updates)
+  newValue: jsonb("new_value"), // Valor nuevo
+  
+  // Metadata
+  ipAddress: varchar("ip_address"),
+  userAgent: text("user_agent"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  // Índices para búsquedas eficientes
+  adminUserIdx: index("admin_audit_logs_admin_user_idx").on(table.adminUserId),
+  actionIdx: index("admin_audit_logs_action_idx").on(table.action),
+  resourceIdx: index("admin_audit_logs_resource_idx").on(table.resourceType, table.resourceId),
+  createdAtIdx: index("admin_audit_logs_created_at_idx").on(table.createdAt),
+  // Índice compuesto para trazabilidad por tenant
+  tenantTraceIdx: index("admin_audit_logs_tenant_trace_idx").on(table.targetClienteId, table.targetEmpresaId, table.targetCentroTrabajoId),
+}));
+
+export type AdminAuditLog = typeof adminAuditLogs.$inferSelect;
+export const insertAdminAuditLogSchema = createInsertSchema(adminAuditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAdminAuditLog = z.infer<typeof insertAdminAuditLogSchema>;
 
 export const configurationChangeLogs = pgTable("configuration_change_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
