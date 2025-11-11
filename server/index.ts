@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { migrateLegalCaseStatuses } from "./migrations/migrate-legal-case-statuses";
 import { migrateBajaTypes } from "./migrations/migrate-baja-types";
+import { seedModulos } from "./seeds/modulos";
 
 const app = express();
 
@@ -52,6 +53,9 @@ app.use((req, res, next) => {
   // Ejecutar migraciones automáticas
   await migrateLegalCaseStatuses();
   await migrateBajaTypes();
+  
+  // Seed módulos del sistema
+  await seedModulos();
   
   const server = await registerRoutes(app);
 
