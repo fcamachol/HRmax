@@ -277,7 +277,45 @@ export default function Payroll() {
 
   const calculateEmployeePayroll = (employeeId: string) => {
     const employee = allEmployees.find(e => e.id === employeeId);
-    if (!employee) return { earnings: 0, deductions: 0, netPay: 0 };
+    if (!employee) return { 
+      baseSalary: 0,
+      earnings: 0, 
+      deductions: 0, 
+      netPay: 0,
+      daysWorked: 0,
+      periodDays: 0,
+      absences: 0,
+      incapacities: 0
+    };
+
+    // Calcular días del periodo según frecuencia
+    const periodDays = selectedFrequency === "semanal" ? 7 
+                     : selectedFrequency === "quincenal" ? 15 
+                     : 30;
+
+    // Obtener rango de fechas del periodo seleccionado
+    const periodRange = getPeriodDateRange();
+    
+    // Contar incidencias del empleado en el periodo
+    const employeeIncidencias = incidenciasAsistencia.filter(inc => 
+      inc.employeeId === employeeId &&
+      inc.fecha >= periodRange.start &&
+      inc.fecha <= periodRange.end
+    );
+
+    const totalAbsences = employeeIncidencias.reduce((sum, inc) => sum + (inc.faltas || 0), 0);
+    const totalIncapacities = employeeIncidencias.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0);
+    const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
+    
+    // Calcular días trabajados
+    const daysWorked = Math.max(0, periodDays - totalAbsences - totalIncapacities);
+    
+    // Calcular salario proporcional
+    const baseSalary = (employee.salary / 30) * daysWorked;
+    
+    // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
+    const salarioDiario = employee.salary / 30;
+    const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
 
     const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
     
@@ -295,12 +333,23 @@ export default function Payroll() {
       })
       .reduce((sum, cv) => sum + cv.amount, 0);
 
-    const earnings = employee.salary + bonuses;
-    const baseDeductions = employee.salary * 0.1888;
+    const earnings = baseSalary + primaDominical + bonuses;
+    const baseDeductions = baseSalary * 0.1888; // Aplicar deducciones sobre salario proporcional
     const deductions = baseDeductions + incidents;
     const netPay = earnings - deductions;
 
-    return { earnings, deductions, netPay };
+    return { 
+      baseSalary,
+      primaDominical,
+      earnings, 
+      deductions, 
+      netPay,
+      daysWorked,
+      periodDays,
+      absences: totalAbsences,
+      incapacities: totalIncapacities,
+      diasDomingo: totalDiasDomingo
+    };
   };
 
   const filteredEmployees = allEmployees.filter(emp => 

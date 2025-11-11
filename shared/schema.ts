@@ -179,7 +179,7 @@ export const attendance = pgTable("attendance", {
 });
 
 // Tipos de incidencias de asistencia
-export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso"] as const;
+export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso", "prima_dominical"] as const;
 export type TipoIncidenciaAsistencia = typeof tiposIncidenciaAsistencia[number];
 
 export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
@@ -189,6 +189,7 @@ export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
   horas_descontadas: "Horas Descontadas",
   incapacidad: "Incapacidad",
   permiso: "Permiso",
+  prima_dominical: "Prima Dominical",
 };
 
 // Incidencias de asistencia por día con columnas expandibles
@@ -206,6 +207,7 @@ export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   incapacidades: integer("incapacidades").notNull().default(0), // Días de incapacidad (0 o 1 por día)
   permisos: integer("permisos").notNull().default(0), // Días de permiso (0 o 1 por día)
   vacaciones: integer("vacaciones").notNull().default(0), // Días de vacaciones (0 o 1 por día)
+  diasDomingo: integer("dias_domingo").notNull().default(0), // Días domingo trabajados (0 o 1 por día) - Prima Dominical 25%
   notas: text("notas"), // Observaciones del día
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),

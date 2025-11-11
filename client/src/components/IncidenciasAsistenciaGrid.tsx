@@ -32,7 +32,7 @@ interface IncidenciasAsistenciaGridProps {
   isLoading: boolean;
 }
 
-type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos" | "vacaciones";
+type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos" | "vacaciones" | "diasDomingo";
 
 interface DailyIncidencia {
   fecha: string;
@@ -44,6 +44,7 @@ interface DailyIncidencia {
   incapacidades: number;
   permisos: number;
   vacaciones: number;
+  diasDomingo: number;
   notas: string;
   existingId?: string;
   hasChanges: boolean;
@@ -63,6 +64,7 @@ const INCIDENCIA_LABELS: Record<IncidenciaTipo, string> = {
   incapacidades: "Incapacidades",
   permisos: "Permisos",
   vacaciones: "Vacaciones",
+  diasDomingo: "Prima Dom.",
 };
 
 export function IncidenciasAsistenciaGrid({
@@ -113,6 +115,7 @@ export function IncidenciasAsistenciaGrid({
           incapacidades: existing?.incapacidades || 0,
           permisos: existing?.permisos || 0,
           vacaciones: existing?.vacaciones || 0,
+          diasDomingo: existing?.diasDomingo || 0,
           notas: existing?.notas || "",
           existingId: existing?.id,
           hasChanges: false,
@@ -218,6 +221,7 @@ export function IncidenciasAsistenciaGrid({
             incapacidades: dayData.incapacidades || 0,
             permisos: dayData.permisos || 0,
             vacaciones: dayData.vacaciones || 0,
+            diasDomingo: dayData.diasDomingo || 0,
             notas: dayData.notas || null,
           });
         }
@@ -321,6 +325,7 @@ export function IncidenciasAsistenciaGrid({
                 incapacidades: original.incapacidades || 0,
                 permisos: original.permisos || 0,
                 vacaciones: original.vacaciones || 0,
+                diasDomingo: original.diasDomingo || 0,
                 notas: original.notas || "",
                 existingId: original.id,
                 hasChanges: false,
@@ -336,6 +341,7 @@ export function IncidenciasAsistenciaGrid({
                 incapacidades: 0,
                 permisos: 0,
                 vacaciones: 0,
+                diasDomingo: 0,
                 notas: "",
                 hasChanges: false,
               });
