@@ -86,6 +86,12 @@ import {
   type InsertBancoLayout,
   type Nomina,
   type InsertNomina,
+  type Cliente,
+  type InsertCliente,
+  type Modulo,
+  type InsertModulo,
+  type UsuarioPermiso,
+  type InsertUsuarioPermiso,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -130,7 +136,10 @@ import {
   bancosLayouts,
   nominas,
   solicitudesPermisos,
-  actasAdministrativas
+  actasAdministrativas,
+  clientes,
+  modulos,
+  usuariosPermisos
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -498,6 +507,32 @@ export interface IStorage {
   updateNominaStatus(id: string, status: string, aprobadoPor?: string): Promise<Nomina>;
   updateNomina(id: string, updates: Partial<InsertNomina>): Promise<Nomina>;
   deleteNomina(id: string): Promise<void>;
+  
+  // Clientes
+  createCliente(cliente: InsertCliente): Promise<Cliente>;
+  getCliente(id: string): Promise<Cliente | undefined>;
+  getClientes(): Promise<Cliente[]>;
+  getClientesActivos(): Promise<Cliente[]>;
+  updateCliente(id: string, updates: Partial<InsertCliente>): Promise<Cliente>;
+  deleteCliente(id: string): Promise<void>;
+  
+  // Módulos
+  createModulo(modulo: InsertModulo): Promise<Modulo>;
+  getModulo(id: string): Promise<Modulo | undefined>;
+  getModulos(): Promise<Modulo[]>;
+  getModulosActivos(): Promise<Modulo[]>;
+  updateModulo(id: string, updates: Partial<InsertModulo>): Promise<Modulo>;
+  deleteModulo(id: string): Promise<void>;
+  
+  // Usuarios Permisos
+  createUsuarioPermiso(permiso: InsertUsuarioPermiso): Promise<UsuarioPermiso>;
+  getUsuarioPermiso(id: string): Promise<UsuarioPermiso | undefined>;
+  getUsuariosPermisos(): Promise<UsuarioPermiso[]>;
+  getPermisosByUsuario(usuarioId: string): Promise<UsuarioPermiso[]>;
+  getPermisosByCliente(clienteId: string): Promise<UsuarioPermiso[]>;
+  getPermisosByEmpresa(empresaId: string): Promise<UsuarioPermiso[]>;
+  updateUsuarioPermiso(id: string, updates: Partial<InsertUsuarioPermiso>): Promise<UsuarioPermiso>;
+  deleteUsuarioPermiso(id: string): Promise<void>;
   
   // Helper methods for business logic and validation
   
@@ -2756,8 +2791,8 @@ export class DatabaseStorage implements IStorage {
   async createActaAdministrativa(acta: InsertActaAdministrativa): Promise<ActaAdministrativa> {
     const data = {
       ...acta,
-      diasSuspension: acta.diasSuspension !== undefined ? acta.diasSuspension : null,
-      montoDescuento: acta.montoDescuento !== undefined ? String(acta.montoDescuento) : null,
+      diasSuspension: acta.diasSuspension !== undefined ? (acta.diasSuspension !== null ? (typeof acta.diasSuspension === 'string' ? Number(acta.diasSuspension) : acta.diasSuspension) : null) : null,
+      montoDescuento: acta.montoDescuento !== undefined ? (acta.montoDescuento !== null ? String(acta.montoDescuento) : null) : null,
     };
     const [created] = await db.insert(actasAdministrativas).values(data).returning();
     return created;
@@ -2802,8 +2837,12 @@ export class DatabaseStorage implements IStorage {
   async updateActaAdministrativa(id: string, updates: Partial<InsertActaAdministrativa>): Promise<ActaAdministrativa> {
     const data = {
       ...updates,
-      diasSuspension: updates.diasSuspension !== undefined ? (updates.diasSuspension || null) : undefined,
-      montoDescuento: updates.montoDescuento !== undefined ? (updates.montoDescuento ? String(updates.montoDescuento) : null) : undefined,
+      diasSuspension: updates.diasSuspension !== undefined ? 
+        (updates.diasSuspension !== null ? (typeof updates.diasSuspension === 'string' ? Number(updates.diasSuspension) : updates.diasSuspension) : null) 
+        : undefined,
+      montoDescuento: updates.montoDescuento !== undefined ? 
+        (updates.montoDescuento !== null ? String(updates.montoDescuento) : null) 
+        : undefined,
       updatedAt: new Date(),
     };
     const [updated] = await db.update(actasAdministrativas).set(data).where(eq(actasAdministrativas.id, id)).returning();
@@ -2980,6 +3019,227 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(solicitudesPermisos)
       .where(eq(solicitudesPermisos.estatus, "pendiente"))
       .orderBy(desc(solicitudesPermisos.fechaSolicitud));
+  }
+
+  // Bancos Layouts
+  async createBancoLayout(layout: InsertBancoLayout): Promise<BancoLayout> {
+    const [result] = await db.insert(bancosLayouts).values(layout).returning();
+    return result;
+  }
+
+  async getBancoLayout(id: string): Promise<BancoLayout | undefined> {
+    const [result] = await db.select().from(bancosLayouts).where(eq(bancosLayouts.id, id));
+    return result || undefined;
+  }
+
+  async getBancosLayouts(): Promise<BancoLayout[]> {
+    return db.select().from(bancosLayouts).orderBy(bancosLayouts.nombre);
+  }
+
+  async getBancoLayoutByCodigo(codigoBanco: string): Promise<BancoLayout | undefined> {
+    const [result] = await db.select().from(bancosLayouts).where(eq(bancosLayouts.codigoBanco, codigoBanco));
+    return result || undefined;
+  }
+
+  async getActiveBancosLayouts(): Promise<BancoLayout[]> {
+    return db.select().from(bancosLayouts)
+      .where(eq(bancosLayouts.activo, true))
+      .orderBy(bancosLayouts.nombre);
+  }
+
+  async updateBancoLayout(id: string, updates: Partial<InsertBancoLayout>): Promise<BancoLayout> {
+    const [result] = await db
+      .update(bancosLayouts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(bancosLayouts.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteBancoLayout(id: string): Promise<void> {
+    await db.update(bancosLayouts)
+      .set({ activo: false, updatedAt: new Date() })
+      .where(eq(bancosLayouts.id, id));
+  }
+
+  // Nóminas
+  async createNomina(nomina: InsertNomina): Promise<Nomina> {
+    const data = {
+      ...nomina,
+      totalNeto: typeof nomina.totalNeto === 'number' ? String(nomina.totalNeto) : nomina.totalNeto,
+    };
+    const [result] = await db.insert(nominas).values(data).returning();
+    return result;
+  }
+
+  async getNomina(id: string): Promise<Nomina | undefined> {
+    const [result] = await db.select().from(nominas).where(eq(nominas.id, id));
+    return result || undefined;
+  }
+
+  async getNominas(): Promise<Nomina[]> {
+    return db.select().from(nominas).orderBy(desc(nominas.createdAt));
+  }
+
+  async getNominasByStatus(status: string): Promise<Nomina[]> {
+    return db.select().from(nominas)
+      .where(eq(nominas.status, status))
+      .orderBy(desc(nominas.createdAt));
+  }
+
+  async getNominasByPeriodo(periodo: string): Promise<Nomina[]> {
+    return db.select().from(nominas)
+      .where(eq(nominas.periodo, periodo))
+      .orderBy(desc(nominas.fechaPago));
+  }
+
+  async updateNominaStatus(id: string, status: string, aprobadoPor?: string): Promise<Nomina> {
+    const updates: any = {
+      status,
+      updatedAt: new Date()
+    };
+    
+    if (aprobadoPor) {
+      updates.aprobadoPor = aprobadoPor;
+      updates.fechaAprobacion = new Date();
+    }
+    
+    const [result] = await db
+      .update(nominas)
+      .set(updates)
+      .where(eq(nominas.id, id))
+      .returning();
+    return result;
+  }
+
+  async updateNomina(id: string, updates: Partial<InsertNomina>): Promise<Nomina> {
+    const data = {
+      ...updates,
+      totalNeto: updates.totalNeto !== undefined ? (typeof updates.totalNeto === 'number' ? String(updates.totalNeto) : updates.totalNeto) : undefined,
+      updatedAt: new Date(),
+    };
+    const [result] = await db
+      .update(nominas)
+      .set(data)
+      .where(eq(nominas.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteNomina(id: string): Promise<void> {
+    await db.delete(nominas).where(eq(nominas.id, id));
+  }
+
+  // Clientes
+  async createCliente(cliente: InsertCliente): Promise<Cliente> {
+    const [result] = await db.insert(clientes).values(cliente).returning();
+    return result;
+  }
+
+  async getCliente(id: string): Promise<Cliente | undefined> {
+    const [result] = await db.select().from(clientes).where(eq(clientes.id, id));
+    return result || undefined;
+  }
+
+  async getClientes(): Promise<Cliente[]> {
+    return db.select().from(clientes).orderBy(clientes.nombreComercial);
+  }
+
+  async getClientesActivos(): Promise<Cliente[]> {
+    return db.select().from(clientes)
+      .where(eq(clientes.activo, true))
+      .orderBy(clientes.nombreComercial);
+  }
+
+  async updateCliente(id: string, updates: Partial<InsertCliente>): Promise<Cliente> {
+    const [result] = await db
+      .update(clientes)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientes.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCliente(id: string): Promise<void> {
+    await db.update(clientes)
+      .set({ activo: false, updatedAt: new Date() })
+      .where(eq(clientes.id, id));
+  }
+
+  // Módulos
+  async createModulo(modulo: InsertModulo): Promise<Modulo> {
+    const [result] = await db.insert(modulos).values(modulo).returning();
+    return result;
+  }
+
+  async getModulo(id: string): Promise<Modulo | undefined> {
+    const [result] = await db.select().from(modulos).where(eq(modulos.id, id));
+    return result || undefined;
+  }
+
+  async getModulos(): Promise<Modulo[]> {
+    return db.select().from(modulos).orderBy(modulos.orden);
+  }
+
+  async getModulosActivos(): Promise<Modulo[]> {
+    return db.select().from(modulos)
+      .where(eq(modulos.activo, true))
+      .orderBy(modulos.orden);
+  }
+
+  async updateModulo(id: string, updates: Partial<InsertModulo>): Promise<Modulo> {
+    const [result] = await db
+      .update(modulos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(modulos.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteModulo(id: string): Promise<void> {
+    await db.update(modulos)
+      .set({ activo: false, updatedAt: new Date() })
+      .where(eq(modulos.id, id));
+  }
+
+  // Usuarios Permisos
+  async createUsuarioPermiso(permiso: InsertUsuarioPermiso): Promise<UsuarioPermiso> {
+    const [result] = await db.insert(usuariosPermisos).values(permiso).returning();
+    return result;
+  }
+
+  async getUsuarioPermiso(id: string): Promise<UsuarioPermiso | undefined> {
+    const [result] = await db.select().from(usuariosPermisos).where(eq(usuariosPermisos.id, id));
+    return result || undefined;
+  }
+
+  async getUsuariosPermisos(): Promise<UsuarioPermiso[]> {
+    return db.select().from(usuariosPermisos);
+  }
+
+  async getPermisosByUsuario(usuarioId: string): Promise<UsuarioPermiso[]> {
+    return db.select().from(usuariosPermisos).where(eq(usuariosPermisos.usuarioId, usuarioId));
+  }
+
+  async getPermisosByCliente(clienteId: string): Promise<UsuarioPermiso[]> {
+    return db.select().from(usuariosPermisos).where(eq(usuariosPermisos.clienteId, clienteId));
+  }
+
+  async getPermisosByEmpresa(empresaId: string): Promise<UsuarioPermiso[]> {
+    return db.select().from(usuariosPermisos).where(eq(usuariosPermisos.empresaId, empresaId));
+  }
+
+  async updateUsuarioPermiso(id: string, updates: Partial<InsertUsuarioPermiso>): Promise<UsuarioPermiso> {
+    const [result] = await db
+      .update(usuariosPermisos)
+      .set(updates)
+      .where(eq(usuariosPermisos.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteUsuarioPermiso(id: string): Promise<void> {
+    await db.delete(usuariosPermisos).where(eq(usuariosPermisos.id, id));
   }
 }
 
