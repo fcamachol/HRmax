@@ -6,15 +6,17 @@ NominaHub is a comprehensive HR and payroll management system for Mexican busine
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes - Super Admin Infrastructure (2025-01-11)
+## Recent Changes - Super Admin Portal (2025-01-11)
 
-**Status**: ✅ Core infrastructure complete (schema, middleware, storage) | 🔴 API routes and integration pending
+**Status**: ✅ COMPLETE - Fully functional Super Admin portal with independent authentication
 
 ### Completed Components:
 1. ✅ **Database Schema** - Architect approved
    - `users.isSuperAdmin: boolean` (default: false)
+   - `users.created_at`, `users.updated_at` timestamps
    - `admin_audit_logs` table with tenant traceability (clienteId, empresaId, centroTrabajoId)
    - FK on adminUserId with ON DELETE RESTRICT to preserve audit trail
+   - Migration applied via ALTER TABLE
 
 2. ✅ **Type Safety** - Architect approved
    - `PublicUser = Omit<User, 'password'>` - excludes sensitive fields
@@ -23,31 +25,54 @@ Preferred communication style: Simple, everyday language.
 
 3. ✅ **Authorization Middleware** - Architect approved
    - `requireSuperAdmin` validates user.isSuperAdmin flag
-   - mockAuthMiddleware supports "X-Is-Super-Admin: true" header
+   - mockAuthMiddleware extended to support "X-Username" header
+   - Request.user interface includes username field
 
 4. ✅ **Storage Layer** - Architect approved
    - `getAllUsers()`: Returns PublicUser[] without password
-   - `updateUser()`: Runtime validation with updateUserSchema.parse()
+   - `updateUser()`: Runtime validation with updateUserSchema.parse(), before/after audit snapshots
    - `deleteUser()`: Prevents self-deletion, requires actingUserId
-   - `createAdminAuditLog()`: Records admin actions
+   - `createAdminAuditLog()`: Records admin actions with full context
    - `getAdminAuditLogs()`: Retrieves audit trail
 
-5. ✅ **Frontend UI**
-   - SuperAdmin.tsx page with user management table
-   - Create user dialog with validation
-   - Permissions management dialog
+5. ✅ **API Routes** - Architect approved
+   - POST /api/admin/login - Bcrypt authentication (cost 12)
+   - GET /api/admin/users - List all users (requireSuperAdmin)
+   - POST /api/admin/users - Create user with uniqueness checks, super admin elevation guard
+   - PATCH /api/admin/users/:id - Update user with audit logging
+   - DELETE /api/admin/users/:id - Delete user with audit logging
 
-### Pending Implementation:
-1. 🔴 **API Routes** - Create /api/admin/users endpoints with requireSuperAdmin
-2. 🔴 **Database Migration** - Run `npm run db:push --force`
-3. 🔴 **Seed Data** - Create initial super admin user
-4. 🔴 **UI Integration** - Wire SuperAdmin.tsx to backend, add to App.tsx
+6. ✅ **Authentication Flow** - Architect approved
+   - Independent login page at /super-admin/login
+   - localStorage-based session storage
+   - Automatic header injection (X-User-Id, X-Username, X-Is-Super-Admin, X-User-Type)
+   - getSuperAdminHeaders() in queryClient.ts for all requests
+   - Logout functionality with localStorage cleanup
+
+7. ✅ **Frontend UI** - Architect approved
+   - SuperAdminLogin.tsx - Independent login page
+   - SuperAdmin.tsx - Complete user management interface
+   - Integrated in App.tsx with separate layout (outside main sidebar)
+   - Auth check and auto-redirect to login
+
+8. ✅ **Seed Data** - Complete
+   - Initial super admin created via server/seed-superadmin.ts
+   - Credentials: username=superadmin, password=Admin123!
+   - ID: 5e672c59-1f2c-43b1-a331-73e6e391e2ae
 
 ### Security Model:
 - Super admins bypass normal permission hierarchy
-- All mutations logged to admin_audit_logs
+- All mutations logged to admin_audit_logs with before/after snapshots
 - Self-deletion prevented via required actingUserId
-- Password updates prohibited via updateUser
+- Password updates prohibited via updateUser endpoint
+- Bcrypt cost factor 12 for password hashing
+- Username uniqueness enforced
+- Only existing super admins can elevate other users to super admin
+
+### Access Instructions:
+1. Navigate to `/super-admin/login`
+2. Login with: username=`superadmin`, password=`Admin123!`
+3. Portal accessible at `/super-admin`
 
 ## System Architecture
 
@@ -60,7 +85,7 @@ The frontend uses React 18, TypeScript, and Vite, with a modern SaaS aesthetic i
 **Database**: PostgreSQL (Neon serverless) with Drizzle ORM for type-safe schemas and migrations, using Spanish column names.
 **Payroll Engine**: A core engine calculates ISR, IMSS, and Subsidy based on 2025 tax tables, supporting various payment frequencies.
 **Authentication & Authorization**: Features a multi-tenant permission system with hierarchical scope resolution (cliente → empresa → centro_trabajo → módulo), `requirePermission` middleware, and mock authentication for development. Supports MaxTalent (internal) and Cliente user types with granular access control.
-**Super Admin System**: Infrastructure complete (schema, middleware, storage layer with architect approval). Pending: API routes, database migration, seed data, and UI integration.
+**Super Admin System**: Complete infrastructure with independent authentication portal, cross-tenant user management, audit trail, and bcrypt password hashing. Accessible at `/super-admin/login` with credentials: superadmin/Admin123!.
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow.
