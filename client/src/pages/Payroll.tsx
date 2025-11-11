@@ -49,6 +49,12 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -83,10 +89,11 @@ interface Nomina {
   frequency: string;
   extraordinaryType?: string;
   employeeIds: string[];
-  status: "draft" | "calculated" | "approved" | "paid";
+  status: "draft" | "pre_nomina" | "approved" | "paid";
   createdAt: Date;
   totalNet: number;
   employeeCount: number;
+  editable?: boolean;
 }
 
 export default function Payroll() {
@@ -273,6 +280,40 @@ export default function Payroll() {
     } else if (amount > 0) {
       setConceptValues([...conceptValues, { employeeId, conceptId, amount }]);
     }
+  };
+
+  const getEmployeeConceptBreakdown = (employeeId: string) => {
+    const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
+    
+    const percepciones = employeeValues
+      .filter(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return concept?.type === "percepcion";
+      })
+      .map(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return {
+          id: cv.conceptId,
+          name: concept?.name || "",
+          amount: cv.amount,
+        };
+      });
+    
+    const deducciones = employeeValues
+      .filter(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return concept?.type === "deduccion";
+      })
+      .map(cv => {
+        const concept = concepts.find(c => c.id === cv.conceptId);
+        return {
+          id: cv.conceptId,
+          name: concept?.name || "",
+          amount: cv.amount,
+        };
+      });
+    
+    return { percepciones, deducciones };
   };
 
   const calculateEmployeePayroll = (employeeId: string) => {
@@ -579,7 +620,7 @@ export default function Payroll() {
     setSelectedPeriod("");
   };
 
-  const createNomina = () => {
+  const createPreNomina = () => {
     const newNomina: Nomina = {
       id: Date.now().toString(),
       type: nominaType,
@@ -587,10 +628,11 @@ export default function Payroll() {
       frequency: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
       extraordinaryType: nominaType === "extraordinaria" ? extraordinaryType : undefined,
       employeeIds: Array.from(selectedEmployees),
-      status: "draft",
+      status: "pre_nomina",
       createdAt: new Date(),
       totalNet: totalNetPay,
       employeeCount: selectedEmployees.size,
+      editable: true,
     };
 
     setNominas([newNomina, ...nominas]);
@@ -598,8 +640,8 @@ export default function Payroll() {
     setCurrentStep(0);
     
     toast({
-      title: "Nómina creada",
-      description: `Nómina ${nominaType} para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}`,
+      title: "Pre-Nómina creada",
+      description: `Pre-nómina ${nominaType} para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}. Requiere aprobación.`,
     });
   };
 
@@ -623,8 +665,8 @@ export default function Payroll() {
     switch (status) {
       case "draft":
         return <Clock className="h-4 w-4 text-muted-foreground" />;
-      case "calculated":
-        return <Calculator className="h-4 w-4 text-blue-500" />;
+      case "pre_nomina":
+        return <AlertCircle className="h-4 w-4 text-orange-500" />;
       case "approved":
         return <CheckCircle2 className="h-4 w-4 text-green-500" />;
       case "paid":
@@ -637,14 +679,14 @@ export default function Payroll() {
   const getStatusBadge = (status: Nomina["status"]) => {
     const variants = {
       draft: "secondary" as const,
-      calculated: "outline" as const,
+      pre_nomina: "outline" as const,
       approved: "default" as const,
       paid: "default" as const,
     };
 
     const labels = {
       draft: "Borrador",
-      calculated: "Calculada",
+      pre_nomina: "Pre-Nómina",
       approved: "Aprobada",
       paid: "Pagada",
     };
@@ -1192,38 +1234,162 @@ export default function Payroll() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Detalle por Empleado</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Haz clic en cada empleado para ver el desglose detallado
+                  </p>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Empleado</TableHead>
-                        <TableHead className="text-right">Salario Base</TableHead>
-                        <TableHead className="text-right">Percepciones</TableHead>
-                        <TableHead className="text-right">Deducciones</TableHead>
-                        <TableHead className="text-right">Neto a Pagar</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedEmployeesData.map((employee) => (
-                        <TableRow key={employee.id}>
-                          <TableCell className="font-medium">{employee.name}</TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatCurrency(employee.salary)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-primary">
-                            {formatCurrency(employee.earnings)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-destructive">
-                            {formatCurrency(employee.deductions)}
-                          </TableCell>
-                          <TableCell className="text-right font-mono font-semibold">
-                            {formatCurrency(employee.netPay)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <Accordion type="multiple" className="space-y-2">
+                    {selectedEmployeesData.map((employee) => {
+                      const breakdown = getEmployeeConceptBreakdown(employee.id);
+                      const salarioDiario = employee.salary / 30;
+                      
+                      return (
+                        <AccordionItem 
+                          key={employee.id} 
+                          value={employee.id}
+                          className="border rounded-lg px-4"
+                          data-testid={`accordion-employee-${employee.id}`}
+                        >
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <div className="flex items-center gap-4">
+                                <span className="font-semibold">{employee.name}</span>
+                                <Badge variant="outline" className="font-mono">
+                                  {employee.daysWorked}/{employee.periodDays} días
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-6 text-sm">
+                                <div className="text-right">
+                                  <div className="text-muted-foreground text-xs">Base</div>
+                                  <div className="font-mono">{formatCurrency(employee.baseSalary)}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-muted-foreground text-xs">Percepciones</div>
+                                  <div className="font-mono text-primary">{formatCurrency(employee.earnings)}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-muted-foreground text-xs">Deducciones</div>
+                                  <div className="font-mono text-destructive">{formatCurrency(employee.deductions)}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div className="text-muted-foreground text-xs">Neto</div>
+                                  <div className="font-mono font-semibold text-lg">{formatCurrency(employee.netPay)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="pt-4 pb-2">
+                            <div className="grid grid-cols-3 gap-4">
+                              {/* Salario Base */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-sm font-medium">Salario Base</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Días del periodo</span>
+                                    <span className="font-mono">{employee.periodDays}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Días trabajados</span>
+                                    <span className="font-mono">{employee.daysWorked}</span>
+                                  </div>
+                                  {employee.absences > 0 && (
+                                    <div className="flex justify-between text-destructive">
+                                      <span>Faltas</span>
+                                      <span className="font-mono">-{employee.absences}</span>
+                                    </div>
+                                  )}
+                                  {employee.incapacities > 0 && (
+                                    <div className="flex justify-between text-orange-600">
+                                      <span>Incapacidades</span>
+                                      <span className="font-mono">-{employee.incapacities}</span>
+                                    </div>
+                                  )}
+                                  {employee.diasDomingo > 0 && (
+                                    <div className="flex justify-between text-primary">
+                                      <span>Domingos trabajados</span>
+                                      <span className="font-mono">+{employee.diasDomingo}</span>
+                                    </div>
+                                  )}
+                                  <div className="h-px bg-border my-2" />
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Salario diario</span>
+                                    <span className="font-mono">{formatCurrency(salarioDiario)}</span>
+                                  </div>
+                                  <div className="flex justify-between font-semibold">
+                                    <span>Salario proporcional</span>
+                                    <span className="font-mono">{formatCurrency(employee.baseSalary)}</span>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Percepciones Adicionales */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-sm font-medium">Percepciones Adicionales</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                  {employee.primaDominical > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Prima Dominical (25%)</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
+                                    </div>
+                                  )}
+                                  {breakdown.percepciones.map((concepto) => (
+                                    <div key={concepto.id} className="flex justify-between">
+                                      <span className="text-muted-foreground">{concepto.name}</span>
+                                      <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                    </div>
+                                  ))}
+                                  {employee.primaDominical === 0 && breakdown.percepciones.length === 0 && (
+                                    <div className="text-muted-foreground text-center py-4">
+                                      Sin percepciones adicionales
+                                    </div>
+                                  )}
+                                  <div className="h-px bg-border my-2" />
+                                  <div className="flex justify-between font-semibold">
+                                    <span>Total Percepciones</span>
+                                    <span className="font-mono text-primary">{formatCurrency(employee.earnings)}</span>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Deducciones */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-sm font-medium">Deducciones</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Deducciones base (ISR/IMSS)</span>
+                                    <span className="font-mono text-destructive">{formatCurrency(employee.baseSalary * 0.1888)}</span>
+                                  </div>
+                                  {breakdown.deducciones.map((concepto) => (
+                                    <div key={concepto.id} className="flex justify-between">
+                                      <span className="text-muted-foreground">{concepto.name}</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(concepto.amount)}</span>
+                                    </div>
+                                  ))}
+                                  {breakdown.deducciones.length === 0 && (
+                                    <div className="text-muted-foreground text-center py-4">
+                                      Sin deducciones adicionales
+                                    </div>
+                                  )}
+                                  <div className="h-px bg-border my-2" />
+                                  <div className="flex justify-between font-semibold">
+                                    <span>Total Deducciones</span>
+                                    <span className="font-mono text-destructive">{formatCurrency(employee.deductions)}</span>
+                                  </div>
+                                </CardContent>
+                              </Card>
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
                 </CardContent>
               </Card>
             </div>
@@ -1245,9 +1411,9 @@ export default function Payroll() {
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={createNomina} data-testid="button-create-nomina">
+            <Button onClick={createPreNomina} data-testid="button-create-pre-nomina">
               <CheckCircle2 className="h-4 w-4 mr-2" />
-              Crear Nómina
+              Crear Pre-Nómina
             </Button>
           )}
         </div>
