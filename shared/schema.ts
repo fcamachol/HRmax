@@ -694,7 +694,6 @@ export type PublicUser = Omit<User, 'password'>;
 // Schema for updating user - only allows specific non-sensitive fields
 export const updateUserSchema = z.object({
   nombre: z.string().optional(),
-  apellido: z.string().optional(),
   email: z.string().email().optional(),
   tipoUsuario: z.enum(["maxtalent", "cliente"]).optional(),
   clienteId: z.string().nullable().optional(),

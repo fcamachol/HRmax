@@ -3257,12 +3257,12 @@ export class DatabaseStorage implements IStorage {
 
   // Super Admin methods
   async getAllUsers(): Promise<PublicUser[]> {
-    // Exclude sensitive fields like passwordHash
+    // Exclude sensitive fields like password
+    // Note: users table has minimal fields; detailed personal data lives in employees table
     return db.select({
       id: users.id,
       username: users.username,
       nombre: users.nombre,
-      apellido: users.apellido,
       email: users.email,
       tipoUsuario: users.tipoUsuario,
       clienteId: users.clienteId,
