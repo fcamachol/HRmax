@@ -82,6 +82,10 @@ import {
   type InsertSolicitudPermiso,
   type ActaAdministrativa,
   type InsertActaAdministrativa,
+  type BancoLayout,
+  type InsertBancoLayout,
+  type Nomina,
+  type InsertNomina,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -123,6 +127,8 @@ import {
   ofertas,
   solicitudesVacaciones,
   incapacidades,
+  bancosLayouts,
+  nominas,
   solicitudesPermisos,
   actasAdministrativas
 } from "@shared/schema";
@@ -473,6 +479,25 @@ export interface IStorage {
   getActasAdministrativasByEstatus(estatus: string): Promise<ActaAdministrativa[]>;
   updateActaAdministrativa(id: string, updates: Partial<InsertActaAdministrativa>): Promise<ActaAdministrativa>;
   deleteActaAdministrativa(id: string): Promise<void>;
+  
+  // Bancos Layouts
+  createBancoLayout(layout: InsertBancoLayout): Promise<BancoLayout>;
+  getBancoLayout(id: string): Promise<BancoLayout | undefined>;
+  getBancosLayouts(): Promise<BancoLayout[]>;
+  getBancoLayoutByCodigo(codigoBanco: string): Promise<BancoLayout | undefined>;
+  getActiveBancosLayouts(): Promise<BancoLayout[]>;
+  updateBancoLayout(id: string, updates: Partial<InsertBancoLayout>): Promise<BancoLayout>;
+  deleteBancoLayout(id: string): Promise<void>;
+  
+  // Nóminas
+  createNomina(nomina: InsertNomina): Promise<Nomina>;
+  getNomina(id: string): Promise<Nomina | undefined>;
+  getNominas(): Promise<Nomina[]>;
+  getNominasByStatus(status: string): Promise<Nomina[]>;
+  getNominasByPeriodo(periodo: string): Promise<Nomina[]>;
+  updateNominaStatus(id: string, status: string, aprobadoPor?: string): Promise<Nomina>;
+  updateNomina(id: string, updates: Partial<InsertNomina>): Promise<Nomina>;
+  deleteNomina(id: string): Promise<void>;
   
   // Helper methods for business logic and validation
   

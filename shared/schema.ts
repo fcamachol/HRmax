@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -2002,6 +2002,194 @@ export const actasAdministrativas = pgTable("actas_administrativas", {
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
+
+// ============================================================================
+// BANCOS LAYOUTS - Configuración de formatos CSV para dispersión bancaria
+// ============================================================================
+
+// Zod schemas para validar configuración CSV de layouts bancarios
+export const csvMetadataItemSchema = z.object({
+  fila: z.number().int().positive(),
+  tipo: z.enum(["vacia", "header_cuenta", "header_fecha", "custom"]),
+  contenido: z.string().optional(),
+  formato: z.string().optional(),
+});
+
+export const csvColumnSchema = z.object({
+  campo: z.string().min(1),
+  nombre: z.string().min(1),
+  formato: z.enum(["texto", "numerico", "decimal", "moneda_mx", "fijo"]).optional(),
+  longitud: z.number().int().positive().optional(),
+  relleno: z.string().length(1).optional(),
+  alineacion: z.enum(["izquierda", "derecha"]).optional(),
+  valorDefecto: z.string().optional(),
+  prefijo: z.string().optional(),
+  separadorMiles: z.string().optional(),
+  decimales: z.number().int().nonnegative().optional(),
+  sinPunto: z.boolean().optional(),
+  mayusculas: z.boolean().optional(),
+  opcional: z.boolean().optional(),
+  comentario: z.string().optional(),
+});
+
+export const configuracionCsvSchema = z.object({
+  delimitador: z.string().length(1),
+  encoding: z.enum(["UTF-8", "ISO-8859-1", "Windows-1252"]),
+  extension: z.enum(["csv", "txt"]),
+  nombreArchivo: z.string().min(1),
+  tieneMetadata: z.boolean().default(false),
+  metadata: z.array(csvMetadataItemSchema).optional(),
+  encabezados: z.array(z.string().min(1)).optional(),
+  columnas: z.array(csvColumnSchema).nonempty(),
+  parametrosEmpresa: z.object({
+    cuentaCargo: z.enum(["required", "optional"]).optional(),
+    fechaPago: z.enum(["required", "optional"]).optional(),
+  }).optional(),
+  validaciones: z.array(z.object({
+    tipo: z.string(),
+    valor: z.union([z.string(), z.number()]).optional(),
+    descripcion: z.string().optional(),
+  })).optional(),
+}).strict();
+
+export type ConfiguracionCsv = z.infer<typeof configuracionCsvSchema>;
+
+export const bancosLayouts = pgTable("bancos_layouts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: varchar("nombre").notNull(), // "Santander México"
+  codigoBanco: varchar("codigo_banco").notNull().unique(), // "SANTANDER"
+  activo: boolean("activo").notNull().default(true),
+  
+  // Configuración completa del formato CSV en JSONB
+  configuracionCsv: jsonb("configuracion_csv").notNull(),
+  // Estructura esperada:
+  // {
+  //   delimitador: ",",
+  //   encoding: "UTF-8",
+  //   extension: "csv",
+  //   nombreArchivo: "NOMINA_SANTANDER_{{fecha}}.csv",
+  //   tieneMetadata: true,
+  //   metadata: [...],
+  //   encabezados: [...],
+  //   columnas: [...],
+  //   parametrosEmpresa: { cuentaCargo: "required", fechaPago: "required" }
+  // }
+  
+  descripcion: text("descripcion"), // Descripción adicional del layout
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type BancoLayout = typeof bancosLayouts.$inferSelect;
+export const insertBancoLayoutSchema = createInsertSchema(bancosLayouts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  configuracionCsv: configuracionCsvSchema,
+});
+export type InsertBancoLayout = z.infer<typeof insertBancoLayoutSchema>;
+
+// ============================================================================
+// NÓMINAS - Historial de nóminas procesadas
+// ============================================================================
+
+// Zod schemas para validar empleadosData en nóminas
+export const nominaConceptoSchema = z.object({
+  conceptoId: z.string().min(1),
+  concepto: z.string().min(1),
+  monto: z.number().nonnegative(),
+});
+
+export const nominaEmpleadoDataSchema = z.object({
+  empleadoId: z.string().min(1),
+  numeroEmpleado: z.string().min(1),
+  nombre: z.string().min(1),
+  apellidoPaterno: z.string().min(1),
+  apellidoMaterno: z.string().nullable().optional(),
+  cuentaBancaria: z.string().optional(), // Opcional: puede no tener cuenta bancaria configurada
+  diasTrabajados: z.number().int().nonnegative().optional(), // Opcional: aguinaldo/prima vacacional no dependen de días
+  salarioBase: z.number().nonnegative().optional(), // Opcional: algunos conceptos son fijos
+  percepciones: z.array(nominaConceptoSchema).default([]),
+  deducciones: z.array(nominaConceptoSchema).default([]),
+  netoAPagar: z.number().nonnegative(),
+});
+
+export const empleadosDataSchema = z.array(nominaEmpleadoDataSchema).nonempty();
+
+export type NominaEmpleadoData = z.infer<typeof nominaEmpleadoDataSchema>;
+export type EmpleadosData = z.infer<typeof empleadosDataSchema>;
+
+export const nominas = pgTable("nominas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  
+  // Información básica de la nómina
+  tipo: varchar("tipo").notNull(), // "ordinaria" | "extraordinaria"
+  periodo: varchar("periodo").notNull(), // Descripción del periodo
+  frecuencia: varchar("frecuencia").notNull(), // "semanal" | "quincenal" | "catorcenal" | "mensual"
+  tipoExtraordinario: varchar("tipo_extraordinario"), // Si es extraordinaria
+  
+  // Estado y procesamiento
+  status: varchar("status").notNull().default("pre_nomina"), // "pre_nomina" | "approved" | "paid"
+  
+  // Información bancaria para dispersión
+  bancoLayoutId: varchar("banco_layout_id").references(() => bancosLayouts.id),
+  cuentaCargo: varchar("cuenta_cargo"), // Cuenta desde donde se dispersa
+  fechaPago: date("fecha_pago"), // Fecha efectiva de pago
+  
+  // Totales
+  totalNeto: numeric("total_neto", { precision: 12, scale: 2 }).notNull(),
+  totalEmpleados: integer("total_empleados").notNull(),
+  
+  // Datos de empleados y conceptos (JSONB para flexibilidad)
+  empleadosData: jsonb("empleados_data").notNull(),
+  // Estructura:
+  // [
+  //   {
+  //     empleadoId: "uuid",
+  //     numeroEmpleado: "123",
+  //     nombre: "...",
+  //     apellidoPaterno: "...",
+  //     apellidoMaterno: "...",
+  //     cuentaBancaria: "...",
+  //     diasTrabajados: 15,
+  //     salarioBase: 5000.00,
+  //     percepciones: [...],
+  //     deducciones: [...],
+  //     netoAPagar: 4500.00
+  //   }
+  // ]
+  
+  // Metadatos
+  creadoPor: varchar("creado_por"), // Usuario que creó la nómina
+  aprobadoPor: varchar("aprobado_por"), // Usuario que aprobó
+  fechaAprobacion: timestamp("fecha_aprobacion"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  statusIdx: index("nominas_status_idx").on(table.status),
+  periodoIdx: index("nominas_periodo_idx").on(table.periodo),
+  fechaPagoIdx: index("nominas_fecha_pago_idx").on(table.fechaPago),
+}));
+
+export type Nomina = typeof nominas.$inferSelect;
+export const insertNominaSchema = createInsertSchema(nominas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipo: z.enum(["ordinaria", "extraordinaria"]),
+  frecuencia: z.enum(["semanal", "quincenal", "catorcenal", "mensual", "extraordinaria"]),
+  status: z.enum(["pre_nomina", "approved", "paid"]).default("pre_nomina"),
+  totalNeto: z.union([z.string(), z.number()]),
+  empleadosData: empleadosDataSchema,
+});
+export type InsertNomina = z.infer<typeof insertNominaSchema>;
+
+export const updateNominaSchema = insertNominaSchema.partial();
+export type UpdateNomina = z.infer<typeof updateNominaSchema>;
 
 // ============================================================================
 // EXPORT TYPES
