@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index, uniqueIndex, check } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -216,11 +216,100 @@ export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   employeeDateIdx: sql`CREATE UNIQUE INDEX IF NOT EXISTS incidencias_empleado_fecha_centro_idx ON ${table} (employee_id, fecha, COALESCE(centro_trabajo_id, ''))`,
 }));
 
+// ============================================================================
+// MÓDULOS - Catálogo de módulos del sistema
+// ============================================================================
+
+export const modulos = pgTable("modulos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codigo: varchar("codigo").notNull().unique(), // "nomina", "asistencia", etc.
+  nombre: varchar("nombre").notNull(), // "Nómina", "Asistencia", etc.
+  descripcion: text("descripcion"),
+  icono: varchar("icono"), // Nombre del icono de lucide-react
+  activo: boolean("activo").notNull().default(true),
+  orden: integer("orden").notNull().default(0), // Para ordenar en el menú
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type Modulo = typeof modulos.$inferSelect;
+export const insertModuloSchema = createInsertSchema(modulos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertModulo = z.infer<typeof insertModuloSchema>;
+
+// ============================================================================
+// USERS - Usuarios del sistema (MaxTalent y Clientes)
+// ============================================================================
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  
+  // Tipo de usuario y relación con cliente
+  tipoUsuario: varchar("tipo_usuario").notNull().default("cliente"), // "maxtalent" | "cliente"
+  clienteId: varchar("cliente_id").references(() => clientes.id), // Solo para tipo "cliente"
+  
+  // Información adicional
+  nombre: text("nombre"),
+  email: varchar("email"),
+  activo: boolean("activo").notNull().default(true),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
+
+// ============================================================================
+// USUARIOS PERMISOS - Sistema granular de permisos multi-nivel
+// ============================================================================
+
+export const usuariosPermisos = pgTable("usuarios_permisos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  usuarioId: varchar("usuario_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  
+  // Tipo de scope del permiso
+  scopeTipo: varchar("scope_tipo").notNull(), // "cliente" | "empresa" | "centro_trabajo" | "modulo"
+  
+  // Referencias opcionales según el scope_tipo
+  clienteId: varchar("cliente_id").references(() => clientes.id),
+  empresaId: varchar("empresa_id").references(() => empresas.id),
+  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id),
+  moduloId: varchar("modulo_id").references(() => modulos.id),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  // Índices para queries eficientes
+  usuarioScopeIdx: index("usuarios_permisos_usuario_scope_idx").on(table.usuarioId, table.scopeTipo),
+  clienteIdx: index("usuarios_permisos_cliente_idx").on(table.clienteId).where(sql`${table.scopeTipo} = 'cliente'`),
+  empresaIdx: index("usuarios_permisos_empresa_idx").on(table.empresaId).where(sql`${table.scopeTipo} = 'empresa'`),
+  centroIdx: index("usuarios_permisos_centro_idx").on(table.centroTrabajoId).where(sql`${table.scopeTipo} = 'centro_trabajo'`),
+  moduloIdx: index("usuarios_permisos_modulo_idx").on(table.usuarioId, table.moduloId).where(sql`${table.scopeTipo} = 'modulo'`),
+  
+  // UNIQUE parciales para evitar duplicados por scope (usando uniqueIndex en lugar de unique)
+  uniqueCliente: uniqueIndex("unique_usuario_cliente").on(table.usuarioId, table.clienteId).where(sql`${table.scopeTipo} = 'cliente' AND ${table.clienteId} IS NOT NULL`),
+  uniqueEmpresa: uniqueIndex("unique_usuario_empresa").on(table.usuarioId, table.empresaId).where(sql`${table.scopeTipo} = 'empresa' AND ${table.empresaId} IS NOT NULL`),
+  uniqueCentro: uniqueIndex("unique_usuario_centro").on(table.usuarioId, table.centroTrabajoId).where(sql`${table.scopeTipo} = 'centro_trabajo' AND ${table.centroTrabajoId} IS NOT NULL`),
+  uniqueModulo: uniqueIndex("unique_usuario_modulo").on(table.usuarioId, table.moduloId).where(sql`${table.scopeTipo} = 'modulo' AND ${table.moduloId} IS NOT NULL`),
+  
+  // CHECK constraints para validar que el campo correcto esté filled según scopeTipo
+  checkClienteScope: check("check_cliente_scope", sql`(${table.scopeTipo} = 'cliente' AND ${table.clienteId} IS NOT NULL) OR ${table.scopeTipo} != 'cliente'`),
+  checkEmpresaScope: check("check_empresa_scope", sql`(${table.scopeTipo} = 'empresa' AND ${table.empresaId} IS NOT NULL) OR ${table.scopeTipo} != 'empresa'`),
+  checkCentroScope: check("check_centro_scope", sql`(${table.scopeTipo} = 'centro_trabajo' AND ${table.centroTrabajoId} IS NOT NULL) OR ${table.scopeTipo} != 'centro_trabajo'`),
+  checkModuloScope: check("check_modulo_scope", sql`(${table.scopeTipo} = 'modulo' AND ${table.moduloId} IS NOT NULL) OR ${table.scopeTipo} != 'modulo'`),
+}));
+
+export type UsuarioPermiso = typeof usuariosPermisos.$inferSelect;
+export const insertUsuarioPermisoSchema = createInsertSchema(usuariosPermisos).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  scopeTipo: z.enum(["cliente", "empresa", "centro_trabajo", "modulo"]),
+});
+export type InsertUsuarioPermiso = z.infer<typeof insertUsuarioPermisoSchema>;
 
 export const configurationChangeLogs = pgTable("configuration_change_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -559,8 +648,44 @@ export type Lawsuit = typeof lawsuits.$inferSelect;
 export type InsertLawsuit = z.infer<typeof insertLawsuitSchema>;
 
 // Empresas (Companies)
+// ============================================================================
+// CLIENTES - Clientes de MaxTalent (agrupan múltiples empresas)
+// ============================================================================
+
+export const clientes = pgTable("clientes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombreComercial: text("nombre_comercial").notNull(),
+  razonSocial: text("razon_social").notNull(),
+  rfc: varchar("rfc", { length: 13 }).notNull().unique(),
+  activo: boolean("activo").notNull().default(true),
+  fechaAlta: date("fecha_alta").notNull().default(sql`CURRENT_DATE`),
+  
+  // Datos de contacto
+  telefono: varchar("telefono"),
+  email: varchar("email"),
+  
+  // Notas
+  notas: text("notas"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type Cliente = typeof clientes.$inferSelect;
+export const insertClienteSchema = createInsertSchema(clientes).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCliente = z.infer<typeof insertClienteSchema>;
+
+// ============================================================================
+// EMPRESAS - Empresas de los clientes
+// ============================================================================
+
 export const empresas = pgTable("empresas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").references(() => clientes.id, { onDelete: "cascade" }),
   razonSocial: text("razon_social").notNull(),
   nombreComercial: text("nombre_comercial"),
   rfc: varchar("rfc", { length: 13 }).notNull().unique(),
