@@ -16,7 +16,12 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
 **Backend**: Utilizes Express.js with TypeScript on Node.js, providing a RESTful API with JSON responses and modular endpoint management. `tsx` is used for development and `esbuild` for production.
 **Database**: PostgreSQL (Neon serverless) is the chosen database, managed with Drizzle ORM for type-safe schemas and migrations. Spanish column names are used for compliance.
 **Payroll Engine**: A core payroll calculation engine handles ISR, IMSS, and Subsidy calculations based on 2025 tax tables, supporting various payment frequencies and income types.
-**Authentication**: Basic user schema and session storage infrastructure are in place, awaiting full session-based authentication.
+**Authentication & Authorization**: 
+- Multi-tenant permission system with hierarchical scope resolution (cliente → empresa → centro_trabajo → módulo)
+- Authorization middleware (`requirePermission`) validates user access before executing route handlers
+- Mock authentication middleware for development (X-User-Id header) - to be replaced with session-based auth
+- Permission helper (`checkUserPermission`) implements complete hierarchical resolution with module-level fallback
+- Support for two user types: MaxTalent (internal) and Cliente (customer) with granular access control
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation (finiquito/liquidación) compliant with Mexican labor law, termination letter generation, and a Kanban board for workflow management.
@@ -75,6 +80,47 @@ The frontend is built with React 18 and TypeScript, using Vite for development. 
 
 ### Object Storage
 *   **Replit Object Storage**: For document and file uploads.
+
+## Authorization & Permissions System
+
+### Multi-Tenant Permission Model
+NominaHub implements a hierarchical permission system supporting four scope levels:
+1. **Módulo** (global): User has access to all data within a module regardless of scope
+2. **Cliente**: User has access to all empresas and centros de trabajo under a specific client
+3. **Empresa**: User has access to all centros de trabajo under a specific company
+4. **Centro de Trabajo**: User has access only to a specific work center
+
+### Permission Resolution Flow
+Permissions are resolved in hierarchical order:
+- Direct scope match → Inherited scope (centro→empresa→cliente) → Module-level → Denial
+- Example: When checking empresa access, system verifies empresa permission, then falls back to cliente permission, then module permission
+
+### Implementation Files
+- **server/auth/permissions.ts**: Core permission checking logic with `checkUserPermission` function
+- **server/auth/middleware.ts**: Express middleware for route protection
+  - `requirePermission(moduleCode, options)`: Main authorization middleware
+  - `mockAuthMiddleware`: Development-only mock authentication (uses X-User-Id header)
+  - `requireMaxTalentUser`: Restricts access to internal MaxTalent users
+  - `requireClienteScope`: Ensures user has cliente assignment
+
+### Database Tables
+- **clientes**: Client/tenant records with soft deletes
+- **modulos**: System modules catalog (Dashboard, Personal, Nómina, Asistencia, etc.)
+- **usuarios_permisos**: User-module-scope permission mappings with CHECK constraints and partial unique indexes
+- **users**: Extended with `tipo_usuario` (maxtalent/cliente) and nullable `cliente_id`
+
+### API Routes
+- `/api/clientes`: Cliente management (restricted to MaxTalent)
+- `/api/modulos`: Module catalog (read-only)
+- `/api/usuarios-permisos`: Permission assignment and management
+
+### Development vs Production
+- **Development**: Uses `mockAuthMiddleware` reading user info from request headers
+- **Production**: To be implemented with proper session-based authentication
+- Transition path: Replace `mockAuthMiddleware` in `server/index.ts` with session middleware
+
+### Module Codes
+Pre-seeded system modules: dashboard, personal, nomina, asistencia, organizacion, reclutamiento, beneficios, actas, configuracion, reportes, legal, repse, creditos, empresas
 
 ## Component Documentation
 

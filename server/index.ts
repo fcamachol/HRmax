@@ -4,6 +4,7 @@ import { setupVite, serveStatic, log } from "./vite";
 import { migrateLegalCaseStatuses } from "./migrations/migrate-legal-case-statuses";
 import { migrateBajaTypes } from "./migrations/migrate-baja-types";
 import { seedModulos } from "./seeds/modulos";
+import { mockAuthMiddleware } from "./auth/middleware";
 
 const app = express();
 
@@ -18,6 +19,8 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: false }));
+
+app.use(mockAuthMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();
