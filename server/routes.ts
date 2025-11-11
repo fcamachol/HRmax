@@ -68,11 +68,15 @@ import {
   updateConceptoMedioPagoSchema,
   insertClienteSchema,
   insertModuloSchema,
-  insertUsuarioPermisoSchema
+  insertUsuarioPermisoSchema,
+  updateUserSchema,
+  insertUserSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
+import { requireSuperAdmin } from "./auth/middleware";
+import bcrypt from "bcrypt";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configuration Change Logs
@@ -3228,6 +3232,204 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.deleteUsuarioPermiso(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SUPER ADMIN - AUTHENTICATION ====================
+  
+  app.post("/api/admin/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username y password son requeridos" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      if (!user.isSuperAdmin) {
+        return res.status(403).json({ message: "Acceso denegado. Solo super administradores pueden acceder." });
+      }
+
+      if (!user.activo) {
+        return res.status(403).json({ message: "Usuario desactivado. Contacte al administrador." });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      const { password: _, ...publicUser } = user;
+      res.json({ 
+        success: true, 
+        user: publicUser,
+        message: "Login exitoso" 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SUPER ADMIN - USER MANAGEMENT ====================
+  
+  app.get("/api/admin/users", requireSuperAdmin, async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      res.json(users);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/admin/users", requireSuperAdmin, async (req, res) => {
+    try {
+      const validated = insertUserSchema.parse(req.body);
+      
+      // Check username uniqueness
+      const existingUser = await storage.getUserByUsername(validated.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "El nombre de usuario ya existe" });
+      }
+
+      // Only super admins can create other super admins
+      if (validated.isSuperAdmin && !req.user!.isSuperAdmin) {
+        return res.status(403).json({ message: "Solo super administradores pueden crear otros super administradores" });
+      }
+      
+      // Hash password with bcrypt (cost factor 12 per architect recommendation)
+      const hashedPassword = await bcrypt.hash(validated.password, 12);
+      
+      const newUser = await storage.createUser({
+        ...validated,
+        password: hashedPassword
+      });
+      
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'create_user',
+        resourceType: 'user',
+        resourceId: newUser.id,
+        newValue: { 
+          username: newUser.username, 
+          tipoUsuario: newUser.tipoUsuario,
+          isSuperAdmin: newUser.isSuperAdmin 
+        },
+        targetClienteId: newUser.clienteId || null,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      // Return public user (without password)
+      const { password, ...publicUser } = newUser;
+      res.status(201).json(publicUser);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validate only safe fields can be updated
+      const validated = updateUserSchema.parse(req.body);
+
+      // Only super admins can elevate users to super admin
+      if (validated.isSuperAdmin && !req.user!.isSuperAdmin) {
+        return res.status(403).json({ message: "Solo super administradores pueden elevar otros usuarios a super administrador" });
+      }
+      
+      // Get current user state for audit log
+      const currentUser = await storage.getUser(id);
+      if (!currentUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      // Update user (storage layer validates at runtime)
+      const updatedUser = await storage.updateUser(id, validated);
+      
+      // Create audit log with before/after snapshot
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'update_user',
+        resourceType: 'user',
+        resourceId: id,
+        previousValue: {
+          nombre: currentUser.nombre,
+          email: currentUser.email,
+          tipoUsuario: currentUser.tipoUsuario,
+          clienteId: currentUser.clienteId,
+          activo: currentUser.activo,
+          isSuperAdmin: currentUser.isSuperAdmin
+        },
+        newValue: validated,
+        targetClienteId: updatedUser.clienteId || null,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      // Return public user
+      const { password, ...publicUser } = updatedUser;
+      res.json(publicUser);
+    } catch (error: any) {
+      if (error.message?.includes("no existe")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get user info for audit log before deletion
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      // Delete user (storage layer prevents self-deletion)
+      await storage.deleteUser(id, req.user!.id);
+      
+      // Create audit log after successful deletion
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'delete_user',
+        resourceType: 'user',
+        resourceId: id,
+        previousValue: { 
+          username: targetUser.username,
+          tipoUsuario: targetUser.tipoUsuario,
+          isSuperAdmin: targetUser.isSuperAdmin
+        },
+        targetClienteId: targetUser.clienteId || null,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      res.json({ success: true, message: "Usuario eliminado correctamente" });
+    } catch (error: any) {
+      if (error.message?.includes("no existe")) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message?.includes("auto-eliminación")) {
+        return res.status(403).json({ message: error.message });
+      }
+      if (error.message?.includes("tiene permisos asignados") || error.message?.includes("violates foreign key")) {
+        return res.status(409).json({ message: "No se puede eliminar el usuario porque tiene permisos asignados. Elimine los permisos primero." });
+      }
       res.status(500).json({ message: error.message });
     }
   });

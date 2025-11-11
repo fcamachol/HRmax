@@ -5,6 +5,7 @@ declare module "express-serve-static-core" {
   interface Request {
     user?: {
       id: string;
+      username: string;
       tipoUsuario?: string;
       clienteId?: string | null;
       isSuperAdmin?: boolean;
@@ -77,12 +78,14 @@ export function mockAuthMiddleware(
   next: NextFunction
 ) {
   const userId = req.header("X-User-Id") || "mock-user-id";
+  const username = req.header("X-Username") || "mock-admin";
   const tipoUsuario = req.header("X-User-Type") || "maxtalent";
   const clienteId = req.header("X-Cliente-Id") || null;
   const isSuperAdmin = req.header("X-Is-Super-Admin") === "true";
 
   req.user = {
     id: userId,
+    username,
     tipoUsuario,
     clienteId,
     isSuperAdmin,

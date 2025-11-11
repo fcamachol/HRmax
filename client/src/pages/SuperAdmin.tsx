@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, UserPlus, Shield, Trash2, X } from "lucide-react";
+import { Search, UserPlus, Shield, Trash2, X, LogOut } from "lucide-react";
 
 type User = {
   id: string;
@@ -88,6 +89,7 @@ type UsuarioPermiso = {
 };
 
 export default function SuperAdmin() {
+  const [, setLocation] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [permissionsDialogOpen, setPermissionsDialogOpen] = useState(false);
@@ -95,8 +97,29 @@ export default function SuperAdmin() {
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
+  useEffect(() => {
+    const superAdminUser = localStorage.getItem("superAdminUser");
+    if (!superAdminUser) {
+      toast({
+        title: "Acceso denegado",
+        description: "Debe iniciar sesión como super administrador",
+        variant: "destructive",
+      });
+      setLocation("/super-admin/login");
+    }
+  }, [setLocation, toast]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("superAdminUser");
+    toast({
+      title: "Sesión cerrada",
+      description: "Ha cerrado sesión exitosamente",
+    });
+    setLocation("/super-admin/login");
+  };
+
   const { data: users = [], isLoading: usersLoading } = useQuery<User[]>({
-    queryKey: ["/api/users"],
+    queryKey: ["/api/admin/users"],
   });
 
   const { data: modulos = [] } = useQuery<Modulo[]>({
@@ -108,9 +131,9 @@ export default function SuperAdmin() {
   });
 
   const deleteUserMutation = useMutation({
-    mutationFn: (userId: string) => apiRequest("DELETE", `/api/users/${userId}`),
+    mutationFn: (userId: string) => apiRequest("DELETE", `/api/admin/users/${userId}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({
         title: "Usuario eliminado",
         description: "El usuario ha sido eliminado correctamente",
@@ -155,23 +178,33 @@ export default function SuperAdmin() {
             Gestión de usuarios y asignación de permisos del sistema
           </p>
         </div>
-        <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-crear-usuario">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Crear Usuario
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Crear Usuario</DialogTitle>
-              <DialogDescription>
-                Crea un nuevo usuario en el sistema
-              </DialogDescription>
-            </DialogHeader>
-            <CreateUserForm onSuccess={() => setCreateUserDialogOpen(false)} />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={handleLogout}
+            data-testid="button-logout"
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Cerrar Sesión
+          </Button>
+          <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="button-crear-usuario">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Crear Usuario
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Crear Usuario</DialogTitle>
+                <DialogDescription>
+                  Crea un nuevo usuario en el sistema
+                </DialogDescription>
+              </DialogHeader>
+              <CreateUserForm onSuccess={() => setCreateUserDialogOpen(false)} />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Card>
@@ -307,9 +340,9 @@ function CreateUserForm({ onSuccess }: { onSuccess: () => void }) {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: (data: any) => apiRequest("POST", "/api/users", data),
+    mutationFn: (data: any) => apiRequest("POST", "/api/admin/users", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({
         title: "Usuario creado",
         description: "El usuario ha sido creado correctamente",

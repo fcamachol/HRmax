@@ -7,14 +7,36 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+function getSuperAdminHeaders(): Record<string, string> {
+  const superAdminUserStr = localStorage.getItem("superAdminUser");
+  if (!superAdminUserStr) return {};
+  
+  try {
+    const superAdminUser = JSON.parse(superAdminUserStr);
+    return {
+      "X-User-Id": superAdminUser.id,
+      "X-Username": superAdminUser.username,
+      "X-Is-Super-Admin": "true",
+      "X-User-Type": superAdminUser.tipoUsuario || "maxtalent",
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...(data ? { "Content-Type": "application/json" } : {}),
+    ...getSuperAdminHeaders(),
+  };
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,7 +51,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
+    const headers = getSuperAdminHeaders();
+    
     const res = await fetch(queryKey.join("/") as string, {
+      headers,
       credentials: "include",
     });
 

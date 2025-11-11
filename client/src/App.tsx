@@ -34,6 +34,8 @@ import Permisos from "@/pages/permisos/Permisos";
 import ActasAdministrativas from "@/pages/actas-administrativas/ActasAdministrativas";
 import MediosPago from "@/pages/configuracion/MediosPago";
 import RelojChecador from "@/components/RelojChecador";
+import SuperAdminLogin from "@/pages/SuperAdminLogin";
+import SuperAdmin from "@/pages/SuperAdmin";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -81,20 +83,34 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <header className="flex items-center justify-between p-4 border-b bg-background">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <ThemeToggle />
-                </header>
+          <Switch>
+            <Route path="/super-admin/login" component={SuperAdminLogin} />
+            <Route path="/super-admin">
+              {() => (
                 <main className="flex-1 overflow-auto p-6 md:p-8">
-                  <Router />
+                  <SuperAdmin />
                 </main>
-              </div>
-            </div>
-          </SidebarProvider>
+              )}
+            </Route>
+            <Route>
+              {() => (
+                <SidebarProvider style={style as React.CSSProperties}>
+                  <div className="flex h-screen w-full">
+                    <AppSidebar />
+                    <div className="flex flex-col flex-1 overflow-hidden">
+                      <header className="flex items-center justify-between p-4 border-b bg-background">
+                        <SidebarTrigger data-testid="button-sidebar-toggle" />
+                        <ThemeToggle />
+                      </header>
+                      <main className="flex-1 overflow-auto p-6 md:p-8">
+                        <Router />
+                      </main>
+                    </div>
+                  </div>
+                </SidebarProvider>
+              )}
+            </Route>
+          </Switch>
           <Toaster />
         </ThemeProvider>
       </TooltipProvider>
