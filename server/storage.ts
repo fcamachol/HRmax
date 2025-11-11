@@ -1,6 +1,11 @@
 import { 
   type User, 
   type InsertUser,
+  type PublicUser,
+  type UpdateUser,
+  updateUserSchema,
+  type AdminAuditLog,
+  type InsertAdminAuditLog,
   type Employee,
   type InsertEmployee,
   type ConfigurationChangeLog,
@@ -139,7 +144,8 @@ import {
   actasAdministrativas,
   clientes,
   modulos,
-  usuariosPermisos
+  usuariosPermisos,
+  adminAuditLogs
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
@@ -549,6 +555,13 @@ export interface IStorage {
   // Permisos helpers
   checkPermisosOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudPermiso[]>;
   getPendingPermisosApprovals(): Promise<SolicitudPermiso[]>;
+  
+  // Super Admin methods
+  getAllUsers(): Promise<PublicUser[]>;
+  updateUser(id: string, updates: UpdateUser): Promise<User>;
+  deleteUser(id: string, actingUserId: string): Promise<void>;
+  createAdminAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
+  getAdminAuditLogs(limit?: number): Promise<AdminAuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3240,6 +3253,80 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUsuarioPermiso(id: string): Promise<void> {
     await db.delete(usuariosPermisos).where(eq(usuariosPermisos.id, id));
+  }
+
+  // Super Admin methods
+  async getAllUsers(): Promise<PublicUser[]> {
+    // Exclude sensitive fields like passwordHash
+    return db.select({
+      id: users.id,
+      username: users.username,
+      nombre: users.nombre,
+      apellido: users.apellido,
+      email: users.email,
+      tipoUsuario: users.tipoUsuario,
+      clienteId: users.clienteId,
+      activo: users.activo,
+      isSuperAdmin: users.isSuperAdmin,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    }).from(users);
+  }
+
+  async updateUser(id: string, updates: UpdateUser): Promise<User> {
+    // Validate updates at runtime - only allows safe fields
+    const validatedUpdates = updateUserSchema.parse(updates);
+    
+    const [result] = await db
+      .update(users)
+      .set(validatedUpdates)
+      .where(eq(users.id, id))
+      .returning();
+    
+    if (!result) {
+      throw new Error(`Usuario con ID ${id} no encontrado`);
+    }
+    
+    return result;
+  }
+
+  async deleteUser(id: string, actingUserId: string): Promise<void> {
+    // Prevent self-deletion (required parameter ensures check cannot be bypassed)
+    if (id === actingUserId) {
+      throw new Error(`No puedes eliminar tu propia cuenta de super admin`);
+    }
+
+    // Check if user exists first
+    const user = await this.getUser(id);
+    if (!user) {
+      throw new Error(`Usuario con ID ${id} no encontrado`);
+    }
+    
+    try {
+      await db.delete(users).where(eq(users.id, id));
+    } catch (error: any) {
+      // Handle FK constraint violations with a clear message
+      if (error.code === '23503' || error.message?.includes('foreign key')) {
+        throw new Error(`No se puede eliminar el usuario porque tiene registros asociados (permisos, logs de auditoría, etc.)`);
+      }
+      throw error;
+    }
+  }
+
+  async createAdminAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog> {
+    const [result] = await db
+      .insert(adminAuditLogs)
+      .values(log)
+      .returning();
+    return result;
+  }
+
+  async getAdminAuditLogs(limit?: number): Promise<AdminAuditLog[]> {
+    const query = db.select().from(adminAuditLogs).orderBy(desc(adminAuditLogs.createdAt));
+    if (limit) {
+      return query.limit(limit);
+    }
+    return query;
   }
 }
 

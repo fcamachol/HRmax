@@ -687,6 +687,21 @@ export type IncidenciaAsistencia = typeof incidenciasAsistencia.$inferSelect;
 export type InsertIncidenciaAsistencia = z.infer<typeof insertIncidenciaAsistenciaSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+
+// Public user type - excludes sensitive fields like password
+export type PublicUser = Omit<User, 'password'>;
+
+// Schema for updating user - only allows specific non-sensitive fields
+export const updateUserSchema = z.object({
+  nombre: z.string().optional(),
+  apellido: z.string().optional(),
+  email: z.string().email().optional(),
+  tipoUsuario: z.enum(["maxtalent", "cliente"]).optional(),
+  clienteId: z.string().nullable().optional(),
+  activo: z.boolean().optional(),
+  isSuperAdmin: z.boolean().optional(),
+});
+export type UpdateUser = z.infer<typeof updateUserSchema>;
 export type ConfigurationChangeLog = typeof configurationChangeLogs.$inferSelect;
 export type InsertConfigurationChangeLog = z.infer<typeof insertConfigurationChangeLogSchema>;
 export type BajaSpecialConcept = typeof bajaSpecialConcepts.$inferSelect;
