@@ -67,6 +67,7 @@ import {
   insertConceptoMedioPagoSchema,
   updateConceptoMedioPagoSchema,
   insertClienteSchema,
+  updateClienteSchema,
   insertModuloSchema,
   insertUsuarioPermisoSchema,
   updateUserSchema,
@@ -3429,6 +3430,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (error.message?.includes("tiene permisos asignados") || error.message?.includes("violates foreign key")) {
         return res.status(409).json({ message: "No se puede eliminar el usuario porque tiene permisos asignados. Elimine los permisos primero." });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== CLIENTES - GESTIÓN DE CLIENTES ====================
+
+  app.get("/api/clientes", requireSuperAdmin, async (req, res) => {
+    try {
+      const clientes = await storage.getClientes();
+      res.json(clientes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/clientes", requireSuperAdmin, async (req, res) => {
+    try {
+      const validatedData = insertClienteSchema.parse(req.body);
+      
+      // Check RFC uniqueness
+      const existingCliente = await storage.getClientes();
+      if (existingCliente.some(c => c.rfc === validatedData.rfc)) {
+        return res.status(400).json({ message: "El RFC ya existe en el sistema" });
+      }
+
+      const cliente = await storage.createCliente(validatedData);
+      
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'create_cliente',
+        resourceType: 'cliente',
+        resourceId: cliente.id,
+        newValue: {
+          nombreComercial: cliente.nombreComercial,
+          razonSocial: cliente.razonSocial,
+          rfc: cliente.rfc
+        },
+        targetClienteId: cliente.id,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      res.json(cliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/clientes/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get current state for audit log
+      const currentCliente = await storage.getCliente(id);
+      if (!currentCliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+
+      const validatedData = updateClienteSchema.parse(req.body);
+      
+      // Check RFC uniqueness if RFC is being updated
+      if (validatedData.rfc && validatedData.rfc !== currentCliente.rfc) {
+        const existingCliente = await storage.getClientes();
+        if (existingCliente.some(c => c.rfc === validatedData.rfc && c.id !== id)) {
+          return res.status(400).json({ message: "El RFC ya existe en el sistema" });
+        }
+      }
+
+      const updatedCliente = await storage.updateCliente(id, validatedData);
+      
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'update_cliente',
+        resourceType: 'cliente',
+        resourceId: id,
+        previousValue: {
+          nombreComercial: currentCliente.nombreComercial,
+          razonSocial: currentCliente.razonSocial,
+          rfc: currentCliente.rfc,
+          activo: currentCliente.activo
+        },
+        newValue: {
+          nombreComercial: updatedCliente.nombreComercial,
+          razonSocial: updatedCliente.razonSocial,
+          rfc: updatedCliente.rfc,
+          activo: updatedCliente.activo
+        },
+        targetClienteId: id,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      res.json(updatedCliente);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/clientes/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get cliente info for audit log before deletion
+      const cliente = await storage.getCliente(id);
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
+      }
+
+      await storage.deleteCliente(id);
+      
+      // Create audit log after successful deletion
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'delete_cliente',
+        resourceType: 'cliente',
+        resourceId: id,
+        previousValue: {
+          nombreComercial: cliente.nombreComercial,
+          razonSocial: cliente.razonSocial,
+          rfc: cliente.rfc
+        },
+        targetClienteId: id,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null
+      });
+      
+      res.json({ success: true, message: "Cliente eliminado correctamente" });
+    } catch (error: any) {
+      if (error.message?.includes("violates foreign key")) {
+        return res.status(409).json({ message: "No se puede eliminar el cliente porque tiene empresas asociadas. Elimine las empresas primero." });
       }
       res.status(500).json({ message: error.message });
     }

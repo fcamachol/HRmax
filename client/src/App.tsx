@@ -35,7 +35,9 @@ import ActasAdministrativas from "@/pages/actas-administrativas/ActasAdministrat
 import MediosPago from "@/pages/configuracion/MediosPago";
 import RelojChecador from "@/components/RelojChecador";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
-import SuperAdmin from "@/pages/SuperAdmin";
+import SuperAdminLayout from "@/pages/super-admin/Layout";
+import SuperAdminUsers from "@/pages/super-admin/Users";
+import SuperAdminClientes from "@/pages/super-admin/Clientes";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -85,11 +87,25 @@ export default function App() {
         <ThemeProvider>
           <Switch>
             <Route path="/super-admin/login" component={SuperAdminLogin} />
+            <Route path="/super-admin/users">
+              {() => (
+                <SuperAdminLayout>
+                  <SuperAdminUsers />
+                </SuperAdminLayout>
+              )}
+            </Route>
+            <Route path="/super-admin/clientes">
+              {() => (
+                <SuperAdminLayout>
+                  <SuperAdminClientes />
+                </SuperAdminLayout>
+              )}
+            </Route>
             <Route path="/super-admin">
               {() => (
-                <main className="flex-1 overflow-auto p-6 md:p-8">
-                  <SuperAdmin />
-                </main>
+                <SuperAdminLayout>
+                  <SuperAdminUsers />
+                </SuperAdminLayout>
               )}
             </Route>
             <Route>

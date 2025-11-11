@@ -743,6 +743,7 @@ export const insertClienteSchema = createInsertSchema(clientes).omit({
   updatedAt: true,
 });
 export type InsertCliente = z.infer<typeof insertClienteSchema>;
+export const updateClienteSchema = insertClienteSchema.partial();
 
 // ============================================================================
 // EMPRESAS - Empresas de los clientes
