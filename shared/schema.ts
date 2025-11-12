@@ -2805,6 +2805,7 @@ export const periodosNomina = pgTable("periodos_nomina", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  grupoNominaId: varchar("grupo_nomina_id").notNull().references(() => gruposNomina.id, { onDelete: "cascade" }),
   centroTrabajoId: varchar("centro_trabajo_id"),
   
   // Información del período

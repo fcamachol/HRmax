@@ -1505,14 +1505,13 @@ export class DatabaseStorage implements IStorage {
       
       // Crear las relaciones si hay medios de pago
       if (mediosPagoIds && mediosPagoIds.length > 0) {
-        await tx
-          .insert(conceptosMediosPagoRel)
-          .values(
-            mediosPagoIds.map((medioPagoId) => ({
-              conceptoId: newConcepto!.id,
-              medioPagoId,
-            }))
-          );
+        const relations: typeof conceptosMediosPagoRel.$inferInsert[] = mediosPagoIds.map((medioPagoId) => ({
+          clienteId: newConcepto!.clienteId,
+          empresaId: newConcepto!.empresaId,
+          conceptoId: newConcepto!.id,
+          medioPagoId,
+        }));
+        await tx.insert(conceptosMediosPagoRel).values(relations);
       }
       
       return {
@@ -1584,14 +1583,13 @@ export class DatabaseStorage implements IStorage {
         
         // Insertar las nuevas relaciones
         if (mediosPagoIds.length > 0) {
-          await tx
-            .insert(conceptosMediosPagoRel)
-            .values(
-              mediosPagoIds.map((medioPagoId) => ({
-                conceptoId: id,
-                medioPagoId,
-              }))
-            );
+          const relations: typeof conceptosMediosPagoRel.$inferInsert[] = mediosPagoIds.map((medioPagoId) => ({
+            clienteId: updatedConcepto!.clienteId,
+            empresaId: updatedConcepto!.empresaId,
+            conceptoId: id,
+            medioPagoId,
+          }));
+          await tx.insert(conceptosMediosPagoRel).values(relations);
         }
       }
       
@@ -3292,7 +3290,7 @@ export class DatabaseStorage implements IStorage {
 
   async getIncidenciasNominaByPeriodo(periodoNominaId: string): Promise<IncidenciaNomina[]> {
     return db.select().from(incidenciasNomina)
-      .where(eq(incidenciasNomina.periodoNominaId, periodoNominaId))
+      .where(eq(incidenciasNomina.periodoId, periodoNominaId))
       .orderBy(incidenciasNomina.empleadoId);
   }
 
@@ -3332,7 +3330,7 @@ export class DatabaseStorage implements IStorage {
 
   async getNominaMovimientosByPeriodo(periodoNominaId: string): Promise<NominaMovimiento[]> {
     return db.select().from(nominaMovimientos)
-      .where(eq(nominaMovimientos.periodoNominaId, periodoNominaId))
+      .where(eq(nominaMovimientos.periodoId, periodoNominaId))
       .orderBy(nominaMovimientos.empleadoId, nominaMovimientos.conceptoId);
   }
 
@@ -3363,7 +3361,7 @@ export class DatabaseStorage implements IStorage {
 
   async getNominaResumenesByPeriodo(periodoNominaId: string): Promise<NominaResumen[]> {
     return db.select().from(nominaResumen)
-      .where(eq(nominaResumen.periodoNominaId, periodoNominaId))
+      .where(eq(nominaResumen.periodoId, periodoNominaId))
       .orderBy(nominaResumen.empleadoId);
   }
 
