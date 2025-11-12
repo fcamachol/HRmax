@@ -1,0 +1,553 @@
+import { db } from "../db";
+import {
+  catSatTiposPercepcion,
+  catSatTiposDeduccion,
+  catSatTiposOtroPago,
+  catIsrTarifas,
+  catSubsidioEmpleo,
+  catImssConfig,
+  catImssCuotas,
+} from "@shared/schema";
+import { porcentajeToBp, pesosToBp } from "@shared/basisPoints";
+
+/**
+ * Seed data para catálogos de nómina y tablas fiscales mexicanas 2025
+ * 
+ * Incluye:
+ * - Catálogos SAT CFDI 4.0 (percepciones, deducciones, otros pagos)
+ * - Tablas ISR 2025 (todos los periodos)
+ * - Tabla de Subsidio al Empleo 2025 (todos los periodos)
+ * - Configuración IMSS 2025 (UMA, salario mínimo, topes)
+ * - Cuotas IMSS 2025 (obrero y patronal)
+ */
+
+// ============================================================================
+// CATÁLOGOS SAT CFDI 4.0
+// ============================================================================
+
+const catalogosSAT_Percepciones = [
+  { clave: "001", nombre: "Sueldos, Salarios, Rayas y Jornales", gravado: true, integraSdi: true, esImss: false },
+  { clave: "002", nombre: "Gratificación Anual (Aguinaldo)", gravado: true, integraSdi: true, esImss: false },
+  { clave: "003", nombre: "Participación de los Trabajadores en las Utilidades (PTU)", gravado: true, integraSdi: false, esImss: false },
+  { clave: "004", nombre: "Reembolso de Gastos Médicos Dentales y Hospitalarios", gravado: false, integraSdi: false, esImss: false },
+  { clave: "005", nombre: "Fondo de Ahorro", gravado: false, integraSdi: false, esImss: false },
+  { clave: "006", nombre: "Caja de Ahorro", gravado: false, integraSdi: false, esImss: false },
+  { clave: "009", nombre: "Contribuciones a Cargo del Trabajador Pagadas por el Patrón", gravado: false, integraSdi: false, esImss: false },
+  { clave: "010", nombre: "Premios por Puntualidad", gravado: true, integraSdi: true, esImss: false },
+  { clave: "011", nombre: "Prima de Seguro de Vida", gravado: false, integraSdi: false, esImss: false },
+  { clave: "012", nombre: "Seguro de Gastos Médicos Mayores", gravado: false, integraSdi: false, esImss: false },
+  { clave: "013", nombre: "Cuotas Sindicales Pagadas por el Patrón", gravado: false, integraSdi: false, esImss: false },
+  { clave: "014", nombre: "Subsidios por Incapacidad", gravado: false, integraSdi: false, esImss: true },
+  { clave: "015", nombre: "Becas para Trabajadores y/o Hijos", gravado: false, integraSdi: false, esImss: false },
+  { clave: "019", nombre: "Horas Extra", gravado: true, integraSdi: true, esImss: false },
+  { clave: "020", nombre: "Prima Dominical", gravado: true, integraSdi: true, esImss: false },
+  { clave: "021", nombre: "Prima Vacacional", gravado: true, integraSdi: true, esImss: false },
+  { clave: "022", nombre: "Prima por Antigüedad", gravado: true, integraSdi: false, esImss: false },
+  { clave: "023", nombre: "Pagos por Separación", gravado: true, integraSdi: false, esImss: false },
+  { clave: "024", nombre: "Seguro de Retiro", gravado: false, integraSdi: false, esImss: true },
+  { clave: "025", nombre: "Indemnizaciones", gravado: true, integraSdi: false, esImss: false },
+  { clave: "028", nombre: "Acciones o Títulos Valor que Representan Bienes", gravado: true, integraSdi: false, esImss: false },
+  { clave: "029", nombre: "Alimentación", gravado: true, integraSdi: true, esImss: false },
+  { clave: "030", nombre: "Habitación", gravado: true, integraSdi: true, esImss: false },
+  { clave: "031", nombre: "Prima de Antigüedad", gravado: true, integraSdi: false, esImss: false },
+  { clave: "032", nombre: "Pagos por Separación", gravado: true, integraSdi: false, esImss: false },
+  { clave: "033", nombre: "Pagos por Muerte del Trabajador", gravado: true, integraSdi: false, esImss: false },
+  { clave: "034", nombre: "Otros Ingresos por Salarios", gravado: true, integraSdi: true, esImss: false },
+  { clave: "038", nombre: "Jubilaciones, Pensiones o Haberes de Retiro", gravado: true, integraSdi: false, esImss: false },
+  { clave: "039", nombre: "Jubilaciones, Pensiones o Haberes de Retiro en Parcialidades", gravado: true, integraSdi: false, esImss: false },
+  { clave: "044", nombre: "Jubilaciones, Pensiones o Haberes de Retiro en una sola Exhibición", gravado: true, integraSdi: false, esImss: false },
+  { clave: "045", nombre: "Ingresos en Acciones o Títulos Valor que Representan Bienes", gravado: true, integraSdi: false, esImss: false },
+  { clave: "046", nombre: "Ingresos Asimilados a Salarios", gravado: true, integraSdi: false, esImss: false },
+  { clave: "047", nombre: "Alimentación", gravado: true, integraSdi: true, esImss: false },
+  { clave: "048", nombre: "Habitación", gravado: true, integraSdi: true, esImss: false },
+  { clave: "049", nombre: "Premios por Asistencia", gravado: true, integraSdi: true, esImss: false },
+  { clave: "050", nombre: "Viáticos", gravado: true, integraSdi: false, esImss: false },
+];
+
+const catalogosSAT_Deducciones = [
+  { clave: "001", nombre: "Seguridad Social" },
+  { clave: "002", nombre: "ISR" },
+  { clave: "003", nombre: "Aportaciones a Retiro, Cesantía en Edad Avanzada y Vejez" },
+  { clave: "004", nombre: "Otros" },
+  { clave: "005", nombre: "Aportaciones a Fondo de Vivienda" },
+  { clave: "006", nombre: "Descuento por Incapacidad" },
+  { clave: "007", nombre: "Pensión Alimenticia" },
+  { clave: "008", nombre: "Renta" },
+  { clave: "009", nombre: "Préstamos Provenientes del Fondo Nacional de la Vivienda para los Trabajadores" },
+  { clave: "010", nombre: "Pago por Crédito de Vivienda" },
+  { clave: "011", nombre: "Pago de Abonos Infonacot" },
+  { clave: "012", nombre: "Anticipo de Salarios" },
+  { clave: "013", nombre: "Pagos Hechos con Exceso al Trabajador" },
+  { clave: "014", nombre: "Errores" },
+  { clave: "015", nombre: "Pérdidas" },
+  { clave: "016", nombre: "Averías" },
+  { clave: "017", nombre: "Adquisición de Artículos Producidos por la Empresa o Establecimiento" },
+  { clave: "018", nombre: "Cuotas para la Constitución y Fomento de Sociedades Cooperativas y de Cajas de Ahorro" },
+  { clave: "019", nombre: "Cuotas Sindicales" },
+  { clave: "020", nombre: "Ausencias (Ausentismo)" },
+  { clave: "021", nombre: "Cuotas Obrero Patronales" },
+  { clave: "022", nombre: "Impuestos Locales" },
+  { clave: "023", nombre: "Aportaciones Voluntarias" },
+  { clave: "024", nombre: "Ajuste en Gratificación Anual (Aguinaldo) Exento" },
+  { clave: "025", nombre: "Ajuste en Gratificación Anual (Aguinaldo) Gravado" },
+  { clave: "026", nombre: "Ajuste en Participación de los Trabajadores en las Utilidades PTU Exento" },
+  { clave: "027", nombre: "Ajuste en Participación de los Trabajadores en las Utilidades PTU Gravado" },
+  { clave: "028", nombre: "Ajuste en Reembolso de Gastos Médicos Dentales y Hospitalarios Exento" },
+  { clave: "029", nombre: "Ajuste en Fondo de Ahorro Exento" },
+  { clave: "030", nombre: "Ajuste en Caja de Ahorro Exento" },
+  { clave: "031", nombre: "Ajuste en Contribuciones a Cargo del Trabajador Pagadas por el Patrón Exento" },
+  { clave: "032", nombre: "Ajuste en Premios por Puntualidad Gravado" },
+  { clave: "033", nombre: "Ajuste en Prima de Seguro de Vida Exento" },
+  { clave: "034", nombre: "Ajuste en Seguro de Gastos Médicos Mayores Exento" },
+  { clave: "035", nombre: "Ajuste en Cuotas Sindicales Pagadas por el Patrón Exento" },
+  { clave: "036", nombre: "Ajuste en Subsidios por Incapacidad Exento" },
+  { clave: "037", nombre: "Ajuste en Becas para Trabajadores y/o Hijos Exento" },
+  { clave: "038", nombre: "Ajuste en Horas Extra Exento" },
+  { clave: "039", nombre: "Ajuste en Horas Extra Gravado" },
+  { clave: "040", nombre: "Ajuste en Prima Dominical Exento" },
+  { clave: "041", nombre: "Ajuste en Prima Dominical Gravado" },
+  { clave: "042", nombre: "Ajuste en Prima Vacacional Exento" },
+  { clave: "043", nombre: "Ajuste en Prima Vacacional Gravado" },
+  { clave: "044", nombre: "Ajuste en Prima por Antigüedad Exento" },
+  { clave: "045", nombre: "Ajuste en Prima por Antigüedad Gravado" },
+  { clave: "046", nombre: "Ajuste en Pagos por Separación Exento" },
+  { clave: "047", nombre: "Ajuste en Pagos por Separación Gravado" },
+  { clave: "048", nombre: "Ajuste en Seguro de Retiro Exento" },
+  { clave: "049", nombre: "Ajuste en Indemnizaciones Exento" },
+  { clave: "050", nombre: "Ajuste en Indemnizaciones Gravado" },
+  { clave: "051", nombre: "Ajuste en Reembolso por Funeral Exento" },
+  { clave: "052", nombre: "Ajuste en Cuotas de Seguridad Social Pagadas por el Patrón Exento" },
+  { clave: "053", nombre: "Ajuste en Comisiones Gravado" },
+  { clave: "054", nombre: "Ajuste en Vales de Despensa Exento" },
+  { clave: "055", nombre: "Ajuste en Vales de Restaurante Exento" },
+  { clave: "056", nombre: "Ajuste en Vales de Gasolina Exento" },
+  { clave: "057", nombre: "Ajuste en Vales de Ropa Exento" },
+  { clave: "058", nombre: "Ajuste en Ayuda para Renta Exento" },
+  { clave: "059", nombre: "Ajuste en Ayuda para Artículos Escolares Exento" },
+  { clave: "060", nombre: "Ajuste en Ayuda para Anteojos Exento" },
+  { clave: "061", nombre: "Ajuste en Ayuda para Transporte Exento" },
+  { clave: "062", nombre: "Ajuste en Ayuda para Gastos de Funeral Exento" },
+  { clave: "063", nombre: "Ajuste en Otros Ingresos por Salarios Exento" },
+  { clave: "064", nombre: "Ajuste en Otros Ingresos por Salarios Gravado" },
+  { clave: "065", nombre: "Ajuste en Jubilaciones, Pensiones o Haberes de Retiro en Parcialidades Exento" },
+  { clave: "066", nombre: "Ajuste en Jubilaciones, Pensiones o Haberes de Retiro en Parcialidades Gravado" },
+  { clave: "067", nombre: "Ajuste en Subsidio Causado" },
+  { clave: "068", nombre: "Ajuste en Viáticos Gravados" },
+  { clave: "069", nombre: "Ajuste en Viáticos (entregados al trabajador)" },
+  { clave: "070", nombre: "Ajuste en Alimentación (entregados en bienes)" },
+  { clave: "071", nombre: "Ajuste en Habitación (entregados en bienes)" },
+  { clave: "072", nombre: "Ajuste en Premios por Asistencia" },
+  { clave: "100", nombre: "Ajuste a ISR Pagado en Exceso" },
+  { clave: "101", nombre: "ISR Ajustado por Subsidio" },
+  { clave: "102", nombre: "Subsidio Causado no Aplicado" },
+  { clave: "103", nombre: "Viáticos Pagados en Exceso" },
+  { clave: "104", nombre: "Ajuste en Esquema de Sueldos y Salarios Exento" },
+  { clave: "105", nombre: "Ajuste en Esquema de Sueldos y Salarios Gravado" },
+  { clave: "106", nombre: "Ajuste en Subsidio para el Empleo" },
+  { clave: "107", nombre: "Ajuste en Subsidio para el Empleo Aplicado" },
+];
+
+const catalogosSAT_OtrosPagos = [
+  { clave: "001", nombre: "Reintegro de ISR Pagado en Exceso (Siempre que sea Fiscal)" },
+  { clave: "002", nombre: "Subsidio para el Empleo (Efectivamente Entregado al Trabajador)" },
+  { clave: "003", nombre: "Viáticos (entregados al trabajador)" },
+  { clave: "004", nombre: "Aplicación de Saldo a Favor por Compensación Anual" },
+  { clave: "005", nombre: "Reintegro de ISR Retenido en Exceso de Ejercicio Anterior (Siempre que sea Fiscal)" },
+  { clave: "006", nombre: "Alimentos en Bienes (Servicios de Comedor)" },
+  { clave: "007", nombre: "Habitación (Servicios de Habitación)" },
+  { clave: "008", nombre: "Premios por Asistencia (Servicios en Especie)" },
+  { clave: "009", nombre: "Pagos Distintos a los Listados" },
+  { clave: "010", nombre: "Ajuste en Reintegro de ISR Pagado en Exceso" },
+  { clave: "011", nombre: "Ajuste en Subsidio para el Empleo Efectivamente Entregado al Trabajador" },
+  { clave: "012", nombre: "Ajuste en Viáticos Pagados al Trabajador" },
+  { clave: "013", nombre: "Ajuste en Aplicación de Saldo a Favor por Compensación Anual" },
+  { clave: "014", nombre: "Ajuste en Reintegro de ISR Retenido en Exceso de Ejercicio Anterior" },
+  { clave: "999", nombre: "Pagos Distintos a los Listados (No Considerados Ingresos Fiscales)" },
+];
+
+// ============================================================================
+// TABLAS ISR 2025 - TODOS LOS PERIODOS
+// ============================================================================
+
+/**
+ * Tabla ISR 2025 - Periodo MENSUAL
+ * Fuente: Artículo 96 LISR (Tarifa aplicable para 2025)
+ */
+const tablaISR_Mensual_2025 = [
+  { orden: 1, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(746.04), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+  { orden: 2, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(746.05), limiteSuperiorBp: pesosToBp(6332.05), cuotaFijaBp: pesosToBp(14.32), tasaExcedenteBp: porcentajeToBp(6.40) },
+  { orden: 3, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(6332.06), limiteSuperiorBp: pesosToBp(11128.01), cuotaFijaBp: pesosToBp(371.83), tasaExcedenteBp: porcentajeToBp(10.88) },
+  { orden: 4, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(11128.02), limiteSuperiorBp: pesosToBp(12935.82), cuotaFijaBp: pesosToBp(893.63), tasaExcedenteBp: porcentajeToBp(16.00) },
+  { orden: 5, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(12935.83), limiteSuperiorBp: pesosToBp(15487.71), cuotaFijaBp: pesosToBp(1182.88), tasaExcedenteBp: porcentajeToBp(17.92) },
+  { orden: 6, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(15487.72), limiteSuperiorBp: pesosToBp(31236.49), cuotaFijaBp: pesosToBp(1640.18), tasaExcedenteBp: porcentajeToBp(21.36) },
+  { orden: 7, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(31236.50), limiteSuperiorBp: pesosToBp(49233.00), cuotaFijaBp: pesosToBp(5004.12), tasaExcedenteBp: porcentajeToBp(23.52) },
+  { orden: 8, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(49233.01), limiteSuperiorBp: pesosToBp(93993.90), cuotaFijaBp: pesosToBp(9236.89), tasaExcedenteBp: porcentajeToBp(30.00) },
+  { orden: 9, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(93993.91), limiteSuperiorBp: pesosToBp(125325.20), cuotaFijaBp: pesosToBp(22665.17), tasaExcedenteBp: porcentajeToBp(32.00) },
+  { orden: 10, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(125325.21), limiteSuperiorBp: pesosToBp(375975.61), cuotaFijaBp: pesosToBp(32691.18), tasaExcedenteBp: porcentajeToBp(34.00) },
+  { orden: 11, periodo: "mensual", anio: 2025, limiteInferiorBp: pesosToBp(375975.62), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(117912.32), tasaExcedenteBp: porcentajeToBp(35.00) },
+];
+
+/**
+ * Tabla ISR 2025 - Periodo QUINCENAL
+ * Se divide cada valor mensual entre 2
+ */
+const tablaISR_Quincenal_2025 = tablaISR_Mensual_2025.map((fila) => ({
+  orden: fila.orden,
+  periodo: "quincenal",
+  anio: fila.anio,
+  limiteInferiorBp: fila.limiteInferiorBp / BigInt(2),
+  limiteSuperiorBp: fila.limiteSuperiorBp ? fila.limiteSuperiorBp / BigInt(2) : null,
+  cuotaFijaBp: fila.cuotaFijaBp / BigInt(2),
+  tasaExcedenteBp: fila.tasaExcedenteBp,
+}));
+
+/**
+ * Tabla ISR 2025 - Periodo CATORCENAL
+ * Se multiplica cada valor mensual por 14/30
+ */
+const tablaISR_Catorcenal_2025 = tablaISR_Mensual_2025.map((fila) => ({
+  orden: fila.orden,
+  periodo: "catorcenal",
+  anio: fila.anio,
+  limiteInferiorBp: (fila.limiteInferiorBp * BigInt(14 * 10000)) / BigInt(30 * 10000),
+  limiteSuperiorBp: fila.limiteSuperiorBp 
+    ? (fila.limiteSuperiorBp * BigInt(14 * 10000)) / BigInt(30 * 10000)
+    : null,
+  cuotaFijaBp: (fila.cuotaFijaBp * BigInt(14 * 10000)) / BigInt(30 * 10000),
+  tasaExcedenteBp: fila.tasaExcedenteBp,
+}));
+
+/**
+ * Tabla ISR 2025 - Periodo SEMANAL
+ * Se multiplica cada valor mensual por 7/30
+ */
+const tablaISR_Semanal_2025 = tablaISR_Mensual_2025.map((fila) => ({
+  orden: fila.orden,
+  periodo: "semanal",
+  anio: fila.anio,
+  limiteInferiorBp: (fila.limiteInferiorBp * BigInt(7 * 10000)) / BigInt(30 * 10000),
+  limiteSuperiorBp: fila.limiteSuperiorBp 
+    ? (fila.limiteSuperiorBp * BigInt(7 * 10000)) / BigInt(30 * 10000)
+    : null,
+  cuotaFijaBp: (fila.cuotaFijaBp * BigInt(7 * 10000)) / BigInt(30 * 10000),
+  tasaExcedenteBp: fila.tasaExcedenteBp,
+}));
+
+// ============================================================================
+// TABLAS SUBSIDIO AL EMPLEO 2025 - TODOS LOS PERIODOS
+// ============================================================================
+
+/**
+ * Tabla de Subsidio al Empleo 2025 - Periodo MENSUAL
+ * Fuente: Decreto de Subsidio para el Empleo (DOF)
+ */
+const tablaSubsidio_Mensual_2025 = [
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(0.01),
+    limiteSuperiorBp: pesosToBp(1768.96),
+    subsidioBp: pesosToBp(407.02),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(1768.97),
+    limiteSuperiorBp: pesosToBp(2653.38),
+    subsidioBp: pesosToBp(406.83),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(2653.39),
+    limiteSuperiorBp: pesosToBp(3472.84),
+    subsidioBp: pesosToBp(406.62),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(3472.85),
+    limiteSuperiorBp: pesosToBp(3537.87),
+    subsidioBp: pesosToBp(392.77),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(3537.88),
+    limiteSuperiorBp: pesosToBp(4446.15),
+    subsidioBp: pesosToBp(382.46),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(4446.16),
+    limiteSuperiorBp: pesosToBp(4717.18),
+    subsidioBp: pesosToBp(354.23),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(4717.19),
+    limiteSuperiorBp: pesosToBp(5335.42),
+    subsidioBp: pesosToBp(324.87),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(5335.43),
+    limiteSuperiorBp: pesosToBp(6224.67),
+    subsidioBp: pesosToBp(294.63),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(6224.68),
+    limiteSuperiorBp: pesosToBp(7113.90),
+    subsidioBp: pesosToBp(253.54),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(7113.91),
+    limiteSuperiorBp: pesosToBp(7382.33),
+    subsidioBp: pesosToBp(217.61),
+  },
+  {
+    periodo: "mensual",
+    anio: 2025,
+    limiteInferiorBp: pesosToBp(7382.34),
+    limiteSuperiorBp: null,
+    subsidioBp: pesosToBp(0),
+  },
+];
+
+/**
+ * Tabla de Subsidio al Empleo 2025 - Periodo QUINCENAL
+ */
+const tablaSubsidio_Quincenal_2025 = tablaSubsidio_Mensual_2025.map((fila) => ({
+  periodo: "quincenal",
+  anio: fila.anio,
+  limiteInferiorBp: fila.limite_inferior_bp / BigInt(2),
+  limiteSuperiorBp: fila.limite_superior_bp ? fila.limite_superior_bp / BigInt(2) : null,
+  subsidioBp: fila.subsidio_bp / BigInt(2),
+}));
+
+/**
+ * Tabla de Subsidio al Empleo 2025 - Periodo CATORCENAL
+ */
+const tablaSubsidio_Catorcenal_2025 = tablaSubsidio_Mensual_2025.map((fila) => ({
+  periodo: "catorcenal",
+  anio: fila.anio,
+  limiteInferiorBp: (fila.limite_inferior_bp * BigInt(14 * 10000)) / BigInt(30 * 10000),
+  limiteSuperiorBp: fila.limite_superior_bp 
+    ? (fila.limite_superior_bp * BigInt(14 * 10000)) / BigInt(30 * 10000)
+    : null,
+  subsidioBp: (fila.subsidio_bp * BigInt(14 * 10000)) / BigInt(30 * 10000),
+}));
+
+/**
+ * Tabla de Subsidio al Empleo 2025 - Periodo SEMANAL
+ */
+const tablaSubsidio_Semanal_2025 = tablaSubsidio_Mensual_2025.map((fila) => ({
+  periodo: "semanal",
+  anio: fila.anio,
+  limiteInferiorBp: (fila.limite_inferior_bp * BigInt(7 * 10000)) / BigInt(30 * 10000),
+  limiteSuperiorBp: fila.limite_superior_bp 
+    ? (fila.limite_superior_bp * BigInt(7 * 10000)) / BigInt(30 * 10000)
+    : null,
+  subsidioBp: (fila.subsidio_bp * BigInt(7 * 10000)) / BigInt(30 * 10000),
+}));
+
+// ============================================================================
+// CONFIGURACIÓN IMSS 2025
+// ============================================================================
+
+const configIMSS_2025 = [
+  {
+    anio: 2025,
+    uma_diaria_bp: pesosToBp(108.57), // UMA 2025
+    salario_minimo_diario_bp: pesosToBp(278.80), // Salario Mínimo 2025
+    tope_sbc_uma: 25, // Tope SBC = 25 UMAs
+  },
+];
+
+// ============================================================================
+// CUOTAS IMSS 2025
+// ============================================================================
+
+const cuotasIMSS_2025 = [
+  // Enfermedad y Maternidad - Cuota Fija
+  {
+    anio: 2025,
+    ramo: "enfermedad_maternidad_cuota_fija",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(0.4), // 0.4%
+    aplica_uma: false,
+    topado: false,
+  },
+  {
+    anio: 2025,
+    ramo: "enfermedad_maternidad_cuota_fija",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(13.9), // 13.9%
+    aplica_uma: false,
+    topado: false,
+  },
+  // Enfermedad y Maternidad - Excedente 3 UMAs
+  {
+    anio: 2025,
+    ramo: "enfermedad_maternidad_excedente",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(0.4), // 0.4%
+    aplica_uma: true,
+    topado: false,
+  },
+  {
+    anio: 2025,
+    ramo: "enfermedad_maternidad_excedente",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(1.1), // 1.1%
+    aplica_uma: true,
+    topado: false,
+  },
+  // Prestaciones en Dinero
+  {
+    anio: 2025,
+    ramo: "prestaciones_dinero",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(0.25), // 0.25%
+    aplica_uma: false,
+    topado: false,
+  },
+  {
+    anio: 2025,
+    ramo: "prestaciones_dinero",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(0.7), // 0.7%
+    aplica_uma: false,
+    topado: false,
+  },
+  // Gastos Médicos Pensionados
+  {
+    anio: 2025,
+    ramo: "gastos_medicos_pensionados",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(0.375), // 0.375%
+    aplica_uma: false,
+    topado: false,
+  },
+  {
+    anio: 2025,
+    ramo: "gastos_medicos_pensionados",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(1.05), // 1.05%
+    aplica_uma: false,
+    topado: false,
+  },
+  // Invalidez y Vida
+  {
+    anio: 2025,
+    ramo: "invalidez_vida",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(0.625), // 0.625%
+    aplica_uma: false,
+    topado: false,
+  },
+  {
+    anio: 2025,
+    ramo: "invalidez_vida",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(1.75), // 1.75%
+    aplica_uma: false,
+    topado: false,
+  },
+  // Retiro
+  {
+    anio: 2025,
+    ramo: "retiro",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(2), // 2%
+    aplica_uma: false,
+    topado: true, // Topado a 25 UMAs
+  },
+  // Cesantía y Vejez
+  {
+    anio: 2025,
+    ramo: "cesantia_vejez",
+    tipo_cuota: "obrero",
+    tasa_bp: porcentajeToBp(1.125), // 1.125%
+    aplica_uma: false,
+    topado: true, // Topado a 25 UMAs
+  },
+  {
+    anio: 2025,
+    ramo: "cesantia_vejez",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(3.15), // 3.15%
+    aplica_uma: false,
+    topado: true, // Topado a 25 UMAs
+  },
+  // Infonavit
+  {
+    anio: 2025,
+    ramo: "infonavit",
+    tipo_cuota: "patronal",
+    tasa_bp: porcentajeToBp(5), // 5%
+    aplica_uma: false,
+    topado: true, // Topado a 25 UMAs
+  },
+];
+
+/**
+ * Seed principal: inserta todos los catálogos y tablas
+ */
+export async function seedPayrollCatalogs() {
+  console.log("🌱 Starting payroll catalogs seed...");
+
+  try {
+    // 1. Catálogos SAT
+    console.log("📋 Seeding SAT Catalogos...");
+    await db.insert(catSatTiposPercepcion).values(catalogosSAT_Percepciones).onConflictDoNothing();
+    await db.insert(catSatTiposDeduccion).values(catalogosSAT_Deducciones).onConflictDoNothing();
+    await db.insert(catSatTiposOtroPago).values(catalogosSAT_OtrosPagos).onConflictDoNothing();
+
+    // 2. Tablas ISR 2025
+    console.log("💰 Seeding ISR Tables 2025...");
+    const todasTablasISR = [
+      ...tablaISR_Mensual_2025,
+      ...tablaISR_Quincenal_2025,
+      ...tablaISR_Catorcenal_2025,
+      ...tablaISR_Semanal_2025,
+    ];
+    await db.insert(catIsrTarifas).values(todasTablasISR).onConflictDoNothing();
+
+    // 3. Tablas Subsidio 2025
+    console.log("🎁 Seeding Subsidio al Empleo Tables 2025...");
+    const todasTablasSubsidio = [
+      ...tablaSubsidio_Mensual_2025,
+      ...tablaSubsidio_Quincenal_2025,
+      ...tablaSubsidio_Catorcenal_2025,
+      ...tablaSubsidio_Semanal_2025,
+    ];
+    await db.insert(catSubsidioEmpleo).values(todasTablasSubsidio).onConflictDoNothing();
+
+    // 4. Configuración IMSS 2025
+    console.log("⚕️ Seeding IMSS Config 2025...");
+    await db.insert(catImssConfig).values(configIMSS_2025).onConflictDoNothing();
+
+    // 5. Cuotas IMSS 2025
+    console.log("📊 Seeding IMSS Cuotas 2025...");
+    await db.insert(catImssCuotas).values(cuotasIMSS_2025).onConflictDoNothing();
+
+    console.log("✅ Payroll catalogs seed completed successfully!");
+  } catch (error) {
+    console.error("❌ Error seeding payroll catalogs:", error);
+    throw error;
+  }
+}
+
+// Ejecutar seed si se llama directamente
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await seedPayrollCatalogs();
+  process.exit(0);
+}
