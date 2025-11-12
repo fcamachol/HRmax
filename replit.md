@@ -6,6 +6,42 @@ NominaHub is a comprehensive HR and payroll management system for Mexican busine
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes - Payroll System Schema (2025-01-12)
+
+**Status**: ✅ COMPLETE - Full payroll schema with basis points precision and Mexican tax compliance
+
+### Completed Components:
+1. ✅ **Basis Points Helper Library** - `shared/basisPoints.ts`
+   - Conversion functions: `pesos_to_bp()`, `bp_to_pesos()`, `porcentaje_to_bp()`
+   - Safe arithmetic: `bp_add()`, `bp_subtract()`, `bp_multiply()`, `bp_divide()`
+   - 4 decimal precision (10,000 basis points = 1 peso)
+
+2. ✅ **Payroll Database Schema** - 12 new tables in `shared/schema.ts`
+   - **SAT Catalogs (Global)**: `cat_sat_tipos_percepcion`, `cat_sat_tipos_deduccion`, `cat_sat_tipos_otro_pago`
+   - **Fiscal Tables (Global, bigint)**: `cat_isr_tarifas`, `cat_subsidio_empleo`, `cat_imss_config`, `cat_imss_cuotas`
+   - **Core Payroll (Tenant-scoped)**: `conceptos_nomina`, `periodos_nomina`, `incidencias_nomina`, `nomina_movimientos`, `nomina_resumen`
+   - **Employee Extensions**: Added `sbc_bp` and `sdi_bp` to employees table
+
+3. ✅ **Migration Applied Manually** - Due to drizzle-kit push TTY issues
+   - Created all 12 tables via `execute_sql_tool`
+   - Applied 15 foreign key constraints
+   - Created 17 performance indexes
+   - Extended employees table with ALTER TABLE
+   - All SQL extracted from `migrations/0000_stale_skreet.sql`
+
+4. ✅ **Data Architecture**
+   - Global catalogs: No clienteId/empresaId (SAT/IMSS standard data)
+   - Tenant-scoped: All core payroll tables with multi-tenancy
+   - Bigint precision: All monetary/percentage fields use `bigint` with { mode: "bigint" }
+   - Composite indexes: Optimized for clienteId + empresaId queries
+   - Referential integrity: Full FK constraints enforced
+
+### Technical Decisions:
+- **Why bigint?** Mexican tax law requires exact calculations to 4 decimals; floating point causes rounding errors
+- **Why basis points?** 1 peso = 10,000 bp ensures integer arithmetic without precision loss
+- **Manual migration?** `drizzle-kit push` blocks on interactive prompts in non-TTY Replit environment
+- **Global vs tenant tables?** SAT/IMSS catalogs are standard across all clients; payroll data is tenant-isolated
+
 ## Recent Changes - Super Admin Portal (2025-01-11)
 
 **Status**: ✅ COMPLETE - Fully functional Super Admin portal with independent authentication

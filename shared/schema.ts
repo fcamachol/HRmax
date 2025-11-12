@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index, uniqueIndex, check } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index, uniqueIndex, check, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -57,6 +57,8 @@ export const employees = pgTable("employees", {
   salarioDiarioExento: numeric("salario_diario_exento"),
   sbc: numeric("sbc"),
   sdi: numeric("sdi"),
+  sbcBp: bigint("sbc_bp", { mode: "bigint" }), // Salario Base de Cotización en basis points (autoritativo)
+  sdiBp: bigint("sdi_bp", { mode: "bigint" }), // Salario Diario Integrado en basis points (autoritativo)
   tablaImss: varchar("tabla_imss").default("fija"),
   diasVacacionesAnuales: integer("dias_vacaciones_anuales").default(12),
   diasVacacionesDisponibles: integer("dias_vacaciones_disponibles").default(12),
@@ -2586,3 +2588,416 @@ export interface SolicitudPermisoWithEmpleado extends SolicitudPermiso {
 export interface ActaAdministrativaWithEmpleado extends ActaAdministrativa {
   empleado: EmpleadoBasicInfo;
 }
+
+// ============================================================================
+// SISTEMA DE NÓMINA - CATÁLOGOS SAT CFDI 4.0 (GLOBALES)
+// ============================================================================
+
+// Catálogo SAT: Tipos de Percepción
+export const catSatTiposPercepcion = pgTable("cat_sat_tipos_percepcion", {
+  clave: varchar("clave", { length: 10 }).primaryKey(),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  descripcion: text("descripcion"),
+  gravado: boolean("gravado").notNull().default(true),
+  integraSdi: boolean("integra_sdi").notNull().default(true), // ¿Integra para IMSS?
+  esImss: boolean("es_imss").notNull().default(false), // ¿Es pago de IMSS?
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CatSatTipoPercepcion = typeof catSatTiposPercepcion.$inferSelect;
+export const insertCatSatTipoPercepcionSchema = createInsertSchema(catSatTiposPercepcion).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatSatTipoPercepcion = z.infer<typeof insertCatSatTipoPercepcionSchema>;
+
+// Catálogo SAT: Tipos de Deducción
+export const catSatTiposDeduccion = pgTable("cat_sat_tipos_deduccion", {
+  clave: varchar("clave", { length: 10 }).primaryKey(),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  descripcion: text("descripcion"),
+  esObligatoria: boolean("es_obligatoria").notNull().default(false),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CatSatTipoDeduccion = typeof catSatTiposDeduccion.$inferSelect;
+export const insertCatSatTipoDeduccionSchema = createInsertSchema(catSatTiposDeduccion).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatSatTipoDeduccion = z.infer<typeof insertCatSatTipoDeduccionSchema>;
+
+// Catálogo SAT: Tipos de Otro Pago
+export const catSatTiposOtroPago = pgTable("cat_sat_tipos_otro_pago", {
+  clave: varchar("clave", { length: 10 }).primaryKey(),
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  descripcion: text("descripcion"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CatSatTipoOtroPago = typeof catSatTiposOtroPago.$inferSelect;
+export const insertCatSatTipoOtroPagoSchema = createInsertSchema(catSatTiposOtroPago).omit({
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatSatTipoOtroPago = z.infer<typeof insertCatSatTipoOtroPagoSchema>;
+
+// ============================================================================
+// SISTEMA DE NÓMINA - TABLAS FISCALES 2025 (GLOBALES CON BASIS POINTS)
+// ============================================================================
+
+// Tabla ISR: Tarifas por período (diario, semanal, decenal, catorcenal, quincenal, mensual)
+export const catIsrTarifas = pgTable("cat_isr_tarifas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anio: integer("anio").notNull(),
+  periodo: varchar("periodo", { length: 20 }).notNull(), // 'mensual', 'quincenal', 'semanal', 'diario', 'catorcenal', 'decenal'
+  limiteInferiorBp: bigint("limite_inferior_bp", { mode: "bigint" }).notNull(), // En basis points
+  limiteSuperiorBp: bigint("limite_superior_bp", { mode: "bigint" }), // NULL para último rango
+  cuotaFijaBp: bigint("cuota_fija_bp", { mode: "bigint" }).notNull(),
+  tasaExcedenteBp: integer("tasa_excedente_bp").notNull(), // Tasa en basis points (10% = 1000 bp)
+  orden: integer("orden").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniquePeriodo: unique().on(table.anio, table.periodo, table.orden),
+}));
+
+export type CatIsrTarifa = typeof catIsrTarifas.$inferSelect;
+export const insertCatIsrTarifaSchema = createInsertSchema(catIsrTarifas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatIsrTarifa = z.infer<typeof insertCatIsrTarifaSchema>;
+
+// Tabla Subsidio al Empleo
+export const catSubsidioEmpleo = pgTable("cat_subsidio_empleo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anio: integer("anio").notNull(),
+  periodo: varchar("periodo", { length: 20 }).notNull(),
+  limiteInferiorBp: bigint("limite_inferior_bp", { mode: "bigint" }).notNull(),
+  limiteSuperiorBp: bigint("limite_superior_bp", { mode: "bigint" }),
+  subsidioBp: bigint("subsidio_bp", { mode: "bigint" }).notNull(), // Subsidio en basis points
+  orden: integer("orden").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniquePeriodo: unique().on(table.anio, table.periodo, table.orden),
+}));
+
+export type CatSubsidioEmpleo = typeof catSubsidioEmpleo.$inferSelect;
+export const insertCatSubsidioEmpleoSchema = createInsertSchema(catSubsidioEmpleo).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatSubsidioEmpleo = z.infer<typeof insertCatSubsidioEmpleoSchema>;
+
+// Configuración IMSS por año
+export const catImssConfig = pgTable("cat_imss_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anio: integer("anio").notNull().unique(),
+  umaBp: bigint("uma_bp", { mode: "bigint" }).notNull(), // UMA en basis points
+  salarioMinimoBp: bigint("salario_minimo_bp", { mode: "bigint" }).notNull(), // Salario mínimo en bp
+  limiteSuperiorCotizacionUma: integer("limite_superior_cotizacion_uma").notNull().default(25), // 25 UMAs
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CatImssConfig = typeof catImssConfig.$inferSelect;
+export const insertCatImssConfigSchema = createInsertSchema(catImssConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatImssConfig = z.infer<typeof insertCatImssConfigSchema>;
+
+// Cuotas IMSS (Ramos de Seguro)
+export const catImssCuotas = pgTable("cat_imss_cuotas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anio: integer("anio").notNull(),
+  ramo: varchar("ramo", { length: 100 }).notNull(),
+  concepto: varchar("concepto", { length: 255 }).notNull(),
+  patronTasaBp: integer("patron_tasa_bp"), // Tasa patrón en basis points (5.5% = 550 bp)
+  trabajadorTasaBp: integer("trabajador_tasa_bp"), // Tasa trabajador en basis points
+  patronCuotaFijaBp: bigint("patron_cuota_fija_bp", { mode: "bigint" }), // Cuota fija patrón en bp
+  trabajadorCuotaFijaBp: bigint("trabajador_cuota_fija_bp", { mode: "bigint" }), // Cuota fija trabajador en bp
+  baseCalculo: varchar("base_calculo", { length: 50 }), // 'sbc', 'uma', 'excedente_3uma'
+  aplicaLimiteSuperior: boolean("aplica_limite_superior").default(true),
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniqueConcepto: unique().on(table.anio, table.ramo, table.concepto),
+}));
+
+export type CatImssCuota = typeof catImssCuotas.$inferSelect;
+export const insertCatImssCuotaSchema = createInsertSchema(catImssCuotas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatImssCuota = z.infer<typeof insertCatImssCuotaSchema>;
+
+// ============================================================================
+// SISTEMA DE NÓMINA - TABLAS CORE (CON MULTI-TENANCY)
+// ============================================================================
+
+// Conceptos de Nómina (Percepciones/Deducciones/Otros Pagos configurables)
+export const conceptosNomina = pgTable("conceptos_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  codigo: varchar("codigo", { length: 50 }).notNull(), // Código interno único por cliente
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  tipo: varchar("tipo", { length: 20 }).notNull(), // 'percepcion', 'deduccion', 'otro_pago'
+  satClave: varchar("sat_clave", { length: 10 }), // Referencia a catálogos SAT
+  naturaleza: varchar("naturaleza", { length: 20 }).notNull(), // 'ordinaria', 'extraordinaria', 'mixta'
+  
+  // Configuración fiscal
+  gravado: boolean("gravado").notNull().default(true),
+  integraSdi: boolean("integra_sdi").notNull().default(true), // ¿Integra Salario Diario Integrado?
+  afectaIsr: boolean("afecta_isr").notNull().default(true),
+  afectaImss: boolean("afecta_imss").notNull().default(true),
+  
+  // Fórmula de cálculo
+  tipoCalculo: varchar("tipo_calculo", { length: 50 }).notNull(), // 'fijo', 'variable', 'formula', 'porcentaje', 'dias', 'horas'
+  formula: text("formula"), // Fórmula JavaScript o SQL
+  baseCalculo: varchar("base_calculo", { length: 50 }), // 'sueldo_base', 'sdi', 'percepciones_gravadas', etc.
+  factor: decimal("factor", { precision: 18, scale: 6 }), // Factor multiplicador
+  
+  // Prioridad de cálculo
+  ordenCalculo: integer("orden_calculo").notNull().default(100),
+  
+  // Configuración de display
+  mostrarRecibo: boolean("mostrar_recibo").notNull().default(true),
+  etiquetaRecibo: varchar("etiqueta_recibo", { length: 255 }),
+  grupoRecibo: varchar("grupo_recibo", { length: 50 }), // Para agrupar en recibo
+  
+  // Multi-tenancy y auditoría
+  centroTrabajoId: varchar("centro_trabajo_id"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniqueCodigoClienteEmpresa: unique().on(table.clienteId, table.empresaId, table.codigo),
+  clienteEmpresaIdx: index("conceptos_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  tipoIdx: index("conceptos_nomina_tipo_idx").on(table.tipo),
+  ordenIdx: index("conceptos_nomina_orden_idx").on(table.ordenCalculo),
+}));
+
+export type ConceptoNomina = typeof conceptosNomina.$inferSelect;
+export const insertConceptoNominaSchema = createInsertSchema(conceptosNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertConceptoNomina = z.infer<typeof insertConceptoNominaSchema>;
+
+// Períodos de Nómina
+export const periodosNomina = pgTable("periodos_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  centroTrabajoId: varchar("centro_trabajo_id"),
+  
+  // Información del período
+  tipoPeriodo: varchar("tipo_periodo", { length: 20 }).notNull(), // 'semanal', 'quincenal', 'decenal', 'catorcenal', 'mensual'
+  numeroPeriodo: integer("numero_periodo").notNull(),
+  anio: integer("anio").notNull(),
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin").notNull(),
+  fechaPago: date("fecha_pago").notNull(),
+  
+  // Días del período
+  diasPeriodo: integer("dias_periodo").notNull(),
+  diasLaborales: integer("dias_laborales").notNull(),
+  
+  // Estado del período
+  estatus: varchar("estatus", { length: 20 }).notNull().default("abierto"), // 'abierto', 'calculado', 'autorizado', 'dispersado', 'timbrado', 'cerrado'
+  fechaCalculo: timestamp("fecha_calculo"),
+  fechaAutorizacion: timestamp("fecha_autorizacion"),
+  fechaDispersion: timestamp("fecha_dispersion"),
+  fechaTimbrado: timestamp("fecha_timbrado"),
+  fechaCierre: timestamp("fecha_cierre"),
+  
+  // Totales del período (en basis points)
+  totalPercepcionesBp: bigint("total_percepciones_bp", { mode: "bigint" }),
+  totalDeduccionesBp: bigint("total_deducciones_bp", { mode: "bigint" }),
+  totalNetoBp: bigint("total_neto_bp", { mode: "bigint" }),
+  totalEmpleados: integer("total_empleados"),
+  
+  // Auditoría
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  uniquePeriodoClienteEmpresa: unique().on(table.clienteId, table.empresaId, table.tipoPeriodo, table.numeroPeriodo, table.anio),
+  clienteEmpresaIdx: index("periodos_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  estatusIdx: index("periodos_nomina_estatus_idx").on(table.estatus),
+  fechaPagoIdx: index("periodos_nomina_fecha_pago_idx").on(table.fechaPago),
+}));
+
+export type PeriodoNomina = typeof periodosNomina.$inferSelect;
+export const insertPeriodoNominaSchema = createInsertSchema(periodosNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertPeriodoNomina = z.infer<typeof insertPeriodoNominaSchema>;
+
+// Incidencias de Nómina
+export const incidenciasNomina = pgTable("incidencias_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull(),
+  periodoId: varchar("periodo_id").notNull().references(() => periodosNomina.id),
+  
+  // Información de la incidencia
+  tipoIncidencia: varchar("tipo_incidencia", { length: 50 }).notNull(), // 'falta', 'retardo', 'permiso', 'incapacidad', 'vacaciones', 'hora_extra', 'bono', 'descuento'
+  fecha: date("fecha").notNull(),
+  conceptoId: varchar("concepto_id").references(() => conceptosNomina.id), // Referencia a conceptos_nomina
+  
+  // Valores
+  cantidad: decimal("cantidad", { precision: 18, scale: 4 }), // Horas, días, etc.
+  montoBp: bigint("monto_bp", { mode: "bigint" }), // Monto en basis points
+  porcentaje: decimal("porcentaje", { precision: 10, scale: 4 }), // Para incapacidades
+  
+  // Justificación y documentos
+  descripcion: text("descripcion"),
+  justificada: boolean("justificada").default(false),
+  documentoUrl: varchar("documento_url", { length: 500 }),
+  
+  // Estado
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"), // 'pendiente', 'aprobada', 'rechazada', 'aplicada'
+  fechaAprobacion: timestamp("fecha_aprobacion"),
+  aprobadoPor: varchar("aprobado_por"),
+  notasRechazo: text("notas_rechazo"),
+  
+  // Auditoría
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  clienteEmpresaIdx: index("incidencias_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoIdx: index("incidencias_nomina_empleado_idx").on(table.empleadoId),
+  periodoIdx: index("incidencias_nomina_periodo_idx").on(table.periodoId),
+  estatusIdx: index("incidencias_nomina_estatus_idx").on(table.estatus),
+}));
+
+export type IncidenciaNomina = typeof incidenciasNomina.$inferSelect;
+export const insertIncidenciaNominaSchema = createInsertSchema(incidenciasNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertIncidenciaNomina = z.infer<typeof insertIncidenciaNominaSchema>;
+
+// Movimientos de Nómina (desglose por concepto)
+export const nominaMovimientos = pgTable("nomina_movimientos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull(),
+  periodoId: varchar("periodo_id").notNull().references(() => periodosNomina.id),
+  conceptoId: varchar("concepto_id").notNull().references(() => conceptosNomina.id),
+  
+  // Valores del movimiento
+  tipo: varchar("tipo", { length: 20 }).notNull(), // 'percepcion', 'deduccion', 'otro_pago'
+  claveSat: varchar("clave_sat", { length: 10 }),
+  conceptoNombre: varchar("concepto_nombre", { length: 255 }).notNull(),
+  
+  // Importes en basis points
+  importeGravadoBp: bigint("importe_gravado_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  importeExentoBp: bigint("importe_exento_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  importeTotalBp: bigint("importe_total_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // Detalles del cálculo
+  cantidad: decimal("cantidad", { precision: 18, scale: 4 }), // Días, horas, unidades
+  factor: decimal("factor", { precision: 18, scale: 6 }), // Factor aplicado
+  formulaAplicada: text("formula_aplicada"), // Fórmula que se usó
+  
+  // Origen del movimiento
+  origen: varchar("origen", { length: 50 }), // 'ordinario', 'incidencia', 'ajuste', 'retroactivo'
+  incidenciaId: varchar("incidencia_id"),
+  
+  // Integración SDI
+  integraSdi: boolean("integra_sdi").notNull().default(false),
+  
+  // Auditoría
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("nomina_movimientos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoIdx: index("nomina_movimientos_empleado_idx").on(table.empleadoId),
+  periodoIdx: index("nomina_movimientos_periodo_idx").on(table.periodoId),
+  conceptoIdx: index("nomina_movimientos_concepto_idx").on(table.conceptoId),
+}));
+
+export type NominaMovimiento = typeof nominaMovimientos.$inferSelect;
+export const insertNominaMovimientoSchema = createInsertSchema(nominaMovimientos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertNominaMovimiento = z.infer<typeof insertNominaMovimientoSchema>;
+
+// Resumen de Nómina (totales por empleado)
+export const nominaResumen = pgTable("nomina_resumen", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull(),
+  periodoId: varchar("periodo_id").notNull().references(() => periodosNomina.id),
+  
+  // Totales en basis points
+  percepcionesGravadasBp: bigint("percepciones_gravadas_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  percepcionesExentasBp: bigint("percepciones_exentas_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  totalPercepcionesBp: bigint("total_percepciones_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // ISR y Subsidio
+  isrCausadoBp: bigint("isr_causado_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  subsidioAplicadoBp: bigint("subsidio_aplicado_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  subsidioEntregableBp: bigint("subsidio_entregable_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  isrRetenidoBp: bigint("isr_retenido_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // IMSS
+  imssTrabajadorBp: bigint("imss_trabajador_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  imssPatronBp: bigint("imss_patron_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // Otras deducciones
+  totalOtrasDeduccionesBp: bigint("total_otras_deducciones_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  totalDeduccionesBp: bigint("total_deducciones_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // Neto a pagar
+  netoPagarBp: bigint("neto_pagar_bp", { mode: "bigint" }).notNull().default(sql`0`),
+  
+  // Días trabajados
+  diasTrabajados: integer("dias_trabajados"),
+  diasFaltas: integer("dias_faltas").default(0),
+  horasExtra: decimal("horas_extra", { precision: 10, scale: 2 }).default("0"),
+  
+  // Auditoría
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniqueEmpleadoPeriodo: unique().on(table.empleadoId, table.periodoId),
+  clienteEmpresaIdx: index("nomina_resumen_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoIdx: index("nomina_resumen_empleado_idx").on(table.empleadoId),
+  periodoIdx: index("nomina_resumen_periodo_idx").on(table.periodoId),
+}));
+
+export type NominaResumen = typeof nominaResumen.$inferSelect;
+export const insertNominaResumenSchema = createInsertSchema(nominaResumen).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertNominaResumen = z.infer<typeof insertNominaResumenSchema>;
