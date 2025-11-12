@@ -91,6 +91,16 @@ import {
   type InsertBancoLayout,
   type Nomina,
   type InsertNomina,
+  type ConceptoNomina,
+  type InsertConceptoNomina,
+  type PeriodoNomina,
+  type InsertPeriodoNomina,
+  type IncidenciaNomina,
+  type InsertIncidenciaNomina,
+  type NominaMovimiento,
+  type InsertNominaMovimiento,
+  type NominaResumen,
+  type InsertNominaResumen,
   type Cliente,
   type InsertCliente,
   type Modulo,
@@ -140,6 +150,11 @@ import {
   incapacidades,
   bancosLayouts,
   nominas,
+  conceptosNomina,
+  periodosNomina,
+  incidenciasNomina,
+  nominaMovimientos,
+  nominaResumen,
   solicitudesPermisos,
   actasAdministrativas,
   clientes,
@@ -513,6 +528,48 @@ export interface IStorage {
   updateNominaStatus(id: string, status: string, aprobadoPor?: string): Promise<Nomina>;
   updateNomina(id: string, updates: Partial<InsertNomina>): Promise<Nomina>;
   deleteNomina(id: string): Promise<void>;
+
+  // Conceptos de Nómina (SAT catalog mappings)
+  createConceptoNomina(concepto: InsertConceptoNomina): Promise<ConceptoNomina>;
+  getConceptoNomina(id: string): Promise<ConceptoNomina | undefined>;
+  getConceptosNomina(): Promise<ConceptoNomina[]>;
+  getConceptosNominaActivos(): Promise<ConceptoNomina[]>;
+  updateConceptoNomina(id: string, updates: Partial<InsertConceptoNomina>): Promise<ConceptoNomina>;
+  deleteConceptoNomina(id: string): Promise<void>;
+
+  // Períodos de Nómina
+  createPeriodoNomina(periodo: InsertPeriodoNomina): Promise<PeriodoNomina>;
+  getPeriodoNomina(id: string): Promise<PeriodoNomina | undefined>;
+  getPeriodosNomina(): Promise<PeriodoNomina[]>;
+  getPeriodosNominaByGrupo(grupoNominaId: string): Promise<PeriodoNomina[]>;
+  getPeriodosNominaByEmpresa(empresaId: string): Promise<PeriodoNomina[]>;
+  updatePeriodoNomina(id: string, updates: Partial<InsertPeriodoNomina>): Promise<PeriodoNomina>;
+  deletePeriodoNomina(id: string): Promise<void>;
+
+  // Incidencias de Nómina (overtime, bonuses, deductions)
+  createIncidenciaNomina(incidencia: InsertIncidenciaNomina): Promise<IncidenciaNomina>;
+  getIncidenciaNomina(id: string): Promise<IncidenciaNomina | undefined>;
+  getIncidenciasNomina(): Promise<IncidenciaNomina[]>;
+  getIncidenciasNominaByPeriodo(periodoNominaId: string): Promise<IncidenciaNomina[]>;
+  getIncidenciasNominaByEmpleado(empleadoId: string): Promise<IncidenciaNomina[]>;
+  updateIncidenciaNomina(id: string, updates: Partial<InsertIncidenciaNomina>): Promise<IncidenciaNomina>;
+  deleteIncidenciaNomina(id: string): Promise<void>;
+
+  // Movimientos de Nómina (detailed payroll line items)
+  createNominaMovimiento(movimiento: InsertNominaMovimiento): Promise<NominaMovimiento>;
+  getNominaMovimiento(id: string): Promise<NominaMovimiento | undefined>;
+  getNominaMovimientos(): Promise<NominaMovimiento[]>;
+  getNominaMovimientosByPeriodo(periodoNominaId: string): Promise<NominaMovimiento[]>;
+  getNominaMovimientosByEmpleado(empleadoId: string): Promise<NominaMovimiento[]>;
+  deleteNominaMovimiento(id: string): Promise<void>;
+
+  // Resumen de Nómina (payroll summary per employee)
+  createNominaResumen(resumen: InsertNominaResumen): Promise<NominaResumen>;
+  getNominaResumen(id: string): Promise<NominaResumen | undefined>;
+  getNominaResumenes(): Promise<NominaResumen[]>;
+  getNominaResumenesByPeriodo(periodoNominaId: string): Promise<NominaResumen[]>;
+  getNominaResumenesByEmpleado(empleadoId: string): Promise<NominaResumen[]>;
+  deleteNominaResumen(id: string): Promise<void>;
   
   // Clientes
   createCliente(cliente: InsertCliente): Promise<Cliente>;
@@ -3141,6 +3198,183 @@ export class DatabaseStorage implements IStorage {
 
   async deleteNomina(id: string): Promise<void> {
     await db.delete(nominas).where(eq(nominas.id, id));
+  }
+
+  // Conceptos de Nómina
+  async createConceptoNomina(concepto: InsertConceptoNomina): Promise<ConceptoNomina> {
+    const [result] = await db.insert(conceptosNomina).values(concepto).returning();
+    return result;
+  }
+
+  async getConceptoNomina(id: string): Promise<ConceptoNomina | undefined> {
+    const [result] = await db.select().from(conceptosNomina).where(eq(conceptosNomina.id, id));
+    return result || undefined;
+  }
+
+  async getConceptosNomina(): Promise<ConceptoNomina[]> {
+    return db.select().from(conceptosNomina).orderBy(conceptosNomina.nombre);
+  }
+
+  async getConceptosNominaActivos(): Promise<ConceptoNomina[]> {
+    return db.select().from(conceptosNomina)
+      .where(eq(conceptosNomina.activo, true))
+      .orderBy(conceptosNomina.nombre);
+  }
+
+  async updateConceptoNomina(id: string, updates: Partial<InsertConceptoNomina>): Promise<ConceptoNomina> {
+    const [result] = await db
+      .update(conceptosNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(conceptosNomina.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteConceptoNomina(id: string): Promise<void> {
+    await db.delete(conceptosNomina).where(eq(conceptosNomina.id, id));
+  }
+
+  // Períodos de Nómina
+  async createPeriodoNomina(periodo: InsertPeriodoNomina): Promise<PeriodoNomina> {
+    const [result] = await db.insert(periodosNomina).values(periodo).returning();
+    return result;
+  }
+
+  async getPeriodoNomina(id: string): Promise<PeriodoNomina | undefined> {
+    const [result] = await db.select().from(periodosNomina).where(eq(periodosNomina.id, id));
+    return result || undefined;
+  }
+
+  async getPeriodosNomina(): Promise<PeriodoNomina[]> {
+    return db.select().from(periodosNomina)
+      .orderBy(desc(periodosNomina.fechaInicio));
+  }
+
+  async getPeriodosNominaByGrupo(grupoNominaId: string): Promise<PeriodoNomina[]> {
+    return db.select().from(periodosNomina)
+      .where(eq(periodosNomina.grupoNominaId, grupoNominaId))
+      .orderBy(desc(periodosNomina.fechaInicio));
+  }
+
+  async getPeriodosNominaByEmpresa(empresaId: string): Promise<PeriodoNomina[]> {
+    return db.select().from(periodosNomina)
+      .where(eq(periodosNomina.empresaId, empresaId))
+      .orderBy(desc(periodosNomina.fechaInicio));
+  }
+
+  async updatePeriodoNomina(id: string, updates: Partial<InsertPeriodoNomina>): Promise<PeriodoNomina> {
+    const [result] = await db
+      .update(periodosNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(periodosNomina.id, id))
+      .returning();
+    return result;
+  }
+
+  async deletePeriodoNomina(id: string): Promise<void> {
+    await db.delete(periodosNomina).where(eq(periodosNomina.id, id));
+  }
+
+  // Incidencias de Nómina
+  async createIncidenciaNomina(incidencia: InsertIncidenciaNomina): Promise<IncidenciaNomina> {
+    const [result] = await db.insert(incidenciasNomina).values(incidencia).returning();
+    return result;
+  }
+
+  async getIncidenciaNomina(id: string): Promise<IncidenciaNomina | undefined> {
+    const [result] = await db.select().from(incidenciasNomina).where(eq(incidenciasNomina.id, id));
+    return result || undefined;
+  }
+
+  async getIncidenciasNomina(): Promise<IncidenciaNomina[]> {
+    return db.select().from(incidenciasNomina).orderBy(desc(incidenciasNomina.createdAt));
+  }
+
+  async getIncidenciasNominaByPeriodo(periodoNominaId: string): Promise<IncidenciaNomina[]> {
+    return db.select().from(incidenciasNomina)
+      .where(eq(incidenciasNomina.periodoNominaId, periodoNominaId))
+      .orderBy(incidenciasNomina.empleadoId);
+  }
+
+  async getIncidenciasNominaByEmpleado(empleadoId: string): Promise<IncidenciaNomina[]> {
+    return db.select().from(incidenciasNomina)
+      .where(eq(incidenciasNomina.empleadoId, empleadoId))
+      .orderBy(desc(incidenciasNomina.createdAt));
+  }
+
+  async updateIncidenciaNomina(id: string, updates: Partial<InsertIncidenciaNomina>): Promise<IncidenciaNomina> {
+    const [result] = await db
+      .update(incidenciasNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(incidenciasNomina.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteIncidenciaNomina(id: string): Promise<void> {
+    await db.delete(incidenciasNomina).where(eq(incidenciasNomina.id, id));
+  }
+
+  // Movimientos de Nómina
+  async createNominaMovimiento(movimiento: InsertNominaMovimiento): Promise<NominaMovimiento> {
+    const [result] = await db.insert(nominaMovimientos).values(movimiento).returning();
+    return result;
+  }
+
+  async getNominaMovimiento(id: string): Promise<NominaMovimiento | undefined> {
+    const [result] = await db.select().from(nominaMovimientos).where(eq(nominaMovimientos.id, id));
+    return result || undefined;
+  }
+
+  async getNominaMovimientos(): Promise<NominaMovimiento[]> {
+    return db.select().from(nominaMovimientos).orderBy(desc(nominaMovimientos.createdAt));
+  }
+
+  async getNominaMovimientosByPeriodo(periodoNominaId: string): Promise<NominaMovimiento[]> {
+    return db.select().from(nominaMovimientos)
+      .where(eq(nominaMovimientos.periodoNominaId, periodoNominaId))
+      .orderBy(nominaMovimientos.empleadoId, nominaMovimientos.conceptoId);
+  }
+
+  async getNominaMovimientosByEmpleado(empleadoId: string): Promise<NominaMovimiento[]> {
+    return db.select().from(nominaMovimientos)
+      .where(eq(nominaMovimientos.empleadoId, empleadoId))
+      .orderBy(desc(nominaMovimientos.createdAt));
+  }
+
+  async deleteNominaMovimiento(id: string): Promise<void> {
+    await db.delete(nominaMovimientos).where(eq(nominaMovimientos.id, id));
+  }
+
+  // Resumen de Nómina
+  async createNominaResumen(resumen: InsertNominaResumen): Promise<NominaResumen> {
+    const [result] = await db.insert(nominaResumen).values(resumen).returning();
+    return result;
+  }
+
+  async getNominaResumen(id: string): Promise<NominaResumen | undefined> {
+    const [result] = await db.select().from(nominaResumen).where(eq(nominaResumen.id, id));
+    return result || undefined;
+  }
+
+  async getNominaResumenes(): Promise<NominaResumen[]> {
+    return db.select().from(nominaResumen).orderBy(desc(nominaResumen.createdAt));
+  }
+
+  async getNominaResumenesByPeriodo(periodoNominaId: string): Promise<NominaResumen[]> {
+    return db.select().from(nominaResumen)
+      .where(eq(nominaResumen.periodoNominaId, periodoNominaId))
+      .orderBy(nominaResumen.empleadoId);
+  }
+
+  async getNominaResumenesByEmpleado(empleadoId: string): Promise<NominaResumen[]> {
+    return db.select().from(nominaResumen)
+      .where(eq(nominaResumen.empleadoId, empleadoId))
+      .orderBy(desc(nominaResumen.createdAt));
+  }
+
+  async deleteNominaResumen(id: string): Promise<void> {
+    await db.delete(nominaResumen).where(eq(nominaResumen.id, id));
   }
 
   // Clientes

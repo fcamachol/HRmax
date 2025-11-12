@@ -6,21 +6,22 @@ NominaHub is a comprehensive HR and payroll management system for Mexican busine
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
-## Recent Changes - Payroll System Schema (2025-01-12)
+## Recent Changes - Payroll System Complete (2025-01-12)
 
-**Status**: ✅ COMPLETE - Full payroll schema with basis points precision and Mexican tax compliance
+**Status**: ✅ COMPLETE - Full payroll infrastructure with seed data, calculations, and Mexican tax compliance
 
 ### Completed Components:
 1. ✅ **Basis Points Helper Library** - `shared/basisPoints.ts`
-   - Conversion functions: `pesos_to_bp()`, `bp_to_pesos()`, `porcentaje_to_bp()`
-   - Safe arithmetic: `bp_add()`, `bp_subtract()`, `bp_multiply()`, `bp_divide()`
+   - Conversion functions: `pesosToBp()`, `bpToPesos()`, `porcentajeToBp()`
+   - Safe arithmetic: `sumarBp()`, `restarBp()`, `multiplicarBpPorTasa()`, `dividirBp()`
    - 4 decimal precision (10,000 basis points = 1 peso)
+   - Uses `Math.trunc()` instead of `Math.round()` to prevent upward rounding errors
 
 2. ✅ **Payroll Database Schema** - 12 new tables in `shared/schema.ts`
-   - **SAT Catalogs (Global)**: `cat_sat_tipos_percepcion`, `cat_sat_tipos_deduccion`, `cat_sat_tipos_otro_pago`
-   - **Fiscal Tables (Global, bigint)**: `cat_isr_tarifas`, `cat_subsidio_empleo`, `cat_imss_config`, `cat_imss_cuotas`
-   - **Core Payroll (Tenant-scoped)**: `conceptos_nomina`, `periodos_nomina`, `incidencias_nomina`, `nomina_movimientos`, `nomina_resumen`
-   - **Employee Extensions**: Added `sbc_bp` and `sdi_bp` to employees table
+   - **SAT Catalogs (Global)**: `catSatTiposPercepcion`, `catSatTiposDeduccion`, `catSatTiposOtroPago`
+   - **Fiscal Tables (Global, bigint)**: `catIsrTarifas`, `catSubsidioEmpleo`, `catImssConfig`, `catImssCuotas`
+   - **Core Payroll (Tenant-scoped)**: `conceptosNomina`, `periodosNomina`, `incidenciasNomina`, `nominaMovimientos`, `nominaResumen`
+   - **Employee Extensions**: Added `sbcBp` and `sdiBp` to employees table
 
 3. ✅ **Migration Applied Manually** - Due to drizzle-kit push TTY issues
    - Created all 12 tables via `execute_sql_tool`
@@ -29,18 +30,30 @@ Preferred communication style: Simple, everyday language.
    - Extended employees table with ALTER TABLE
    - All SQL extracted from `migrations/0000_stale_skreet.sql`
 
-4. ✅ **Data Architecture**
-   - Global catalogs: No clienteId/empresaId (SAT/IMSS standard data)
-   - Tenant-scoped: All core payroll tables with multi-tenancy
-   - Bigint precision: All monetary/percentage fields use `bigint` with { mode: "bigint" }
-   - Composite indexes: Optimized for clienteId + empresaId queries
-   - Referential integrity: Full FK constraints enforced
+4. ✅ **Payroll Calculation Functions** - `shared/payrollCalculations.ts`
+   - `calcularISR()` - Income tax with progressive rates for all periods
+   - `calcularSubsidio()` - Employment subsidy lookup
+   - `calcularIMSS()` - Social security contributions (13 ramos)
+   - `calcularSDI()` - Integrated daily salary (SDI)
+   - `calcularSBC()` - Contribution base salary (SBC)
+   - `calcularHorasExtra()` - Overtime with double/triple rates
+   - All use bigint arithmetic with Math.trunc() for exact precision
+
+5. ✅ **Seed Data** - `server/seeds/payrollCatalogs.ts`
+   - **SAT CFDI 4.0 Catalogs**: 7 percepciones, 8 deducciones, 3 otros pagos
+   - **ISR Tables 2025**: 11 brackets × 4 periods (44 rows total)
+   - **Subsidio Tables 2025**: 11 brackets × 4 periods (44 rows total)
+   - **IMSS Config 2025**: UMA=$108.57, Salario Mínimo=$278.80, Tope=25 UMAs
+   - **IMSS Cuotas 2025**: 12 quotas (patrón/trabajador split)
+   - Executable script: `npx tsx server/seeds/payrollCatalogs.ts`
 
 ### Technical Decisions:
 - **Why bigint?** Mexican tax law requires exact calculations to 4 decimals; floating point causes rounding errors
 - **Why basis points?** 1 peso = 10,000 bp ensures integer arithmetic without precision loss
 - **Manual migration?** `drizzle-kit push` blocks on interactive prompts in non-TTY Replit environment
 - **Global vs tenant tables?** SAT/IMSS catalogs are standard across all clients; payroll data is tenant-isolated
+- **Schema naming?** camelCase in TypeScript/Drizzle (limiteInferiorBp, cuotaFijaBp) for consistency
+- **Math.trunc vs Math.round?** Prevents upward rounding that causes overpayment in UMA caps and overtime
 
 ## Recent Changes - Super Admin Portal (2025-01-11)
 
