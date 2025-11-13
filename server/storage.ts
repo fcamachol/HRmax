@@ -1655,6 +1655,9 @@ export class DatabaseStorage implements IStorage {
     const startOfYear = new Date(year, 0, 1);
     const endOfYear = new Date(year, 11, 31);
     
+    // Derivar tenant IDs del grupo para multi-tenancy
+    const { clienteId, empresaId } = grupo;
+    
     let periodNumber = 1;
     let currentDate = new Date(startOfYear);
 
@@ -1678,6 +1681,8 @@ export class DatabaseStorage implements IStorage {
           partialEnd.setDate(partialEnd.getDate() - 1);
           
           periods.push({
+            clienteId,
+            empresaId,
             grupoNominaId,
             startDate: startOfYear.toISOString().split('T')[0],
             endDate: partialEnd.toISOString().split('T')[0],
@@ -1697,6 +1702,8 @@ export class DatabaseStorage implements IStorage {
           // Solo agregar si el periodo empieza en este año
           if (periodStart.getFullYear() === year) {
             periods.push({
+              clienteId,
+              empresaId,
               grupoNominaId,
               startDate: periodStart.toISOString().split('T')[0],
               endDate: periodEnd.toISOString().split('T')[0],
@@ -1731,6 +1738,8 @@ export class DatabaseStorage implements IStorage {
           partialEnd.setDate(partialEnd.getDate() - 1);
           
           periods.push({
+            clienteId,
+            empresaId,
             grupoNominaId,
             startDate: startOfYear.toISOString().split('T')[0],
             endDate: partialEnd.toISOString().split('T')[0],
@@ -1749,6 +1758,8 @@ export class DatabaseStorage implements IStorage {
           
           if (periodStart.getFullYear() === year) {
             periods.push({
+              clienteId,
+              empresaId,
               grupoNominaId,
               startDate: periodStart.toISOString().split('T')[0],
               endDate: periodEnd.toISOString().split('T')[0],
@@ -1769,6 +1780,8 @@ export class DatabaseStorage implements IStorage {
         for (let month = 0; month < 12; month++) {
           // Primera quincena: 1-15
           periods.push({
+            clienteId,
+            empresaId,
             grupoNominaId,
             startDate: new Date(year, month, 1).toISOString().split('T')[0],
             endDate: new Date(year, month, 15).toISOString().split('T')[0],
@@ -1781,6 +1794,8 @@ export class DatabaseStorage implements IStorage {
           // Segunda quincena: 16-último día del mes
           const lastDay = new Date(year, month + 1, 0).getDate();
           periods.push({
+            clienteId,
+            empresaId,
             grupoNominaId,
             startDate: new Date(year, month, 16).toISOString().split('T')[0],
             endDate: new Date(year, month, lastDay).toISOString().split('T')[0],
@@ -1798,6 +1813,8 @@ export class DatabaseStorage implements IStorage {
         for (let month = 0; month < 12; month++) {
           const lastDay = new Date(year, month + 1, 0).getDate();
           periods.push({
+            clienteId,
+            empresaId,
             grupoNominaId,
             startDate: new Date(year, month, 1).toISOString().split('T')[0],
             endDate: new Date(year, month, lastDay).toISOString().split('T')[0],
