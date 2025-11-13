@@ -2202,6 +2202,13 @@ export class DatabaseStorage implements IStorage {
   async generarAvisosTrimestrales(empresaId: string, año: number): Promise<AvisoREPSE[]> {
     const avisos: AvisoREPSE[] = [];
     
+    // Derivar clienteId desde empresa para multi-tenancy
+    const empresa = await this.getEmpresa(empresaId);
+    if (!empresa) {
+      throw new Error('Empresa no encontrada');
+    }
+    const { clienteId } = empresa;
+    
     const trimestresFechasLimite = [
       { trimestre: 1, mes: 4, dia: 17 },
       { trimestre: 2, mes: 7, dia: 17 },
@@ -2228,6 +2235,7 @@ export class DatabaseStorage implements IStorage {
 
       if (avisosExistentes.length === 0) {
         const nuevoAviso = await this.createAvisoREPSE({
+          clienteId,
           tipo: "REPORTE_TRIMESTRAL",
           empresaId,
           descripcion: `Reporte Trimestral Q${trimestre} ${año} - REPSE`,
