@@ -1335,12 +1335,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/periodos-nomina", async (req, res) => {
     try {
-      const { grupoNominaId, year } = req.query;
+      const { grupoNominaId } = req.query;
       if (grupoNominaId) {
-        const periodos = await storage.getPeriodosNominaByGrupo(
-          grupoNominaId as string,
-          year ? parseInt(year as string) : undefined
-        );
+        const periodos = await storage.getPeriodosNominaByGrupo(grupoNominaId as string);
         return res.json(periodos);
       }
       const periodos = await storage.getPeriodosNomina();
@@ -1387,11 +1384,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/conceptos-nomina", async (req, res) => {
     try {
-      const { empresaId } = req.query;
-      if (empresaId) {
-        const conceptos = await storage.getConceptosNominaByEmpresa(empresaId as string);
-        return res.json(conceptos);
-      }
       const conceptos = await storage.getConceptosNomina();
       res.json(conceptos);
     } catch (error: any) {
@@ -1641,6 +1633,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contrato = await storage.createContratoREPSE(validatedData);
       console.log("[POST /api/contratos-repse] Contract created:", contrato.id);
       
+      // Validar que fechaInicio no sea null antes de crear aviso
+      if (!contrato.fechaInicio) {
+        return res.status(400).json({ 
+          message: "No se puede crear aviso: fechaInicio es requerida" 
+        });
+      }
+      
       // Crear aviso automático para nuevo contrato (30 días de plazo)
       const fechaEvento = new Date(contrato.fechaInicio);
       const fechaLimite = new Date(fechaEvento);
@@ -1648,13 +1647,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Obtener información del cliente para la descripción
       const cliente = await storage.getClienteREPSE(contrato.clienteId);
-      console.log("[POST /api/contratos-repse] Cliente fetched:", cliente?.razonSocial);
+      console.log("[POST /api/contratos-repse] Cliente fetched:", cliente?.razonSocial ?? "N/A");
       const descripcion = cliente 
         ? `Aviso de nuevo contrato con ${cliente.razonSocial} - Contrato ${contrato.numeroContrato}`
         : `Aviso de nuevo contrato - Contrato ${contrato.numeroContrato}`;
       
+      // Derivar clienteId desde empresa para multi-tenancy
+      const empresa = await storage.getEmpresa(contrato.empresaId);
+      if (!empresa) {
+        throw new Error('Empresa no encontrada');
+      }
+      
       console.log("[POST /api/contratos-repse] Creating aviso:", {
         tipo: "NUEVO_CONTRATO",
+        clienteId: empresa.clienteId,
         empresaId: contrato.empresaId,
         contratoREPSEId: contrato.id,
         descripcion,
@@ -1663,6 +1669,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       const aviso = await storage.createAvisoREPSE({
+        clienteId: empresa.clienteId,
         tipo: "NUEVO_CONTRATO",
         empresaId: contrato.empresaId,
         contratoREPSEId: contrato.id,
@@ -1720,14 +1727,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contratoAnterior = await storage.getContratoREPSE(req.params.id);
       const contrato = await storage.updateContratoREPSE(req.params.id, validatedData);
       
+      // Derivar clienteId desde empresa para multi-tenancy (usado en avisos)
+      const empresa = await storage.getEmpresa(contrato.empresaId);
+      if (!empresa) {
+        throw new Error('Empresa no encontrada');
+      }
+      
       // Verificar si el estatus cambió a finalizado o cancelado (terminación de contrato)
       if (contratoAnterior && 
           contratoAnterior.estatus !== contrato.estatus &&
           (contrato.estatus === "finalizado" || contrato.estatus === "cancelado")) {
         
-        const fechaEvento = new Date();
-        const fechaLimite = new Date();
+        const ahora = new Date();
+        const fechaLimite = new Date(ahora);
         fechaLimite.setDate(fechaLimite.getDate() + 30);
+        
+        // Usar fechaFin si está disponible, sino fecha actual
+        const fechaEventoStr: string = contrato.fechaFin ?? ahora.toISOString().split('T')[0];
         
         const cliente = await storage.getClienteREPSE(contrato.clienteId);
         const descripcion = cliente 
@@ -1735,11 +1751,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : `Aviso de terminación de contrato - Contrato ${contrato.numeroContrato}`;
         
         await storage.createAvisoREPSE({
+          clienteId: empresa.clienteId,
           tipo: "TERMINACION_CONTRATO",
           empresaId: contrato.empresaId,
           contratoREPSEId: contrato.id,
           descripcion,
-          fechaEvento: fechaEvento.toISOString().split('T')[0],
+          fechaEvento: fechaEventoStr,
           fechaLimite: fechaLimite.toISOString().split('T')[0],
           estatus: "PENDIENTE",
         });
@@ -1750,9 +1767,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 validatedData.fechaFin || 
                 validatedData.montoContrato)) {
         
-        const fechaEvento = new Date();
-        const fechaLimite = new Date();
+        const ahora = new Date();
+        const fechaLimite = new Date(ahora);
         fechaLimite.setDate(fechaLimite.getDate() + 30);
+        
+        // Usar fechaInicio si está disponible, sino fecha actual
+        const fechaEventoStr: string = contrato.fechaInicio ?? ahora.toISOString().split('T')[0];
         
         const cliente = await storage.getClienteREPSE(contrato.clienteId);
         const descripcion = cliente 
@@ -1760,11 +1780,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           : `Aviso de modificación de contrato - Contrato ${contrato.numeroContrato}`;
         
         await storage.createAvisoREPSE({
+          clienteId: empresa.clienteId,
           tipo: "MODIFICACION_CONTRATO",
           empresaId: contrato.empresaId,
           contratoREPSEId: contrato.id,
           descripcion,
-          fechaEvento: fechaEvento.toISOString().split('T')[0],
+          fechaEvento: fechaEventoStr,
           fechaLimite: fechaLimite.toISOString().split('T')[0],
           estatus: "PENDIENTE",
         });
@@ -3186,6 +3207,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/etapas-seleccion/inicializar", async (req, res) => {
     try {
+      const { clienteId, empresaId } = req.body;
+      
+      if (!clienteId || !empresaId) {
+        return res.status(400).json({ message: "clienteId y empresaId son requeridos" });
+      }
+      
       const etapasExistentes = await storage.getEtapasSeleccion();
       
       // Si ya existen etapas, no hacer nada
@@ -3274,7 +3301,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const etapasCreadas = [];
       for (const etapa of etapasPredeterminadas) {
-        const created = await storage.createEtapaSeleccion(etapa);
+        const created = await storage.createEtapaSeleccion({
+          ...etapa,
+          clienteId,
+          empresaId
+        });
         etapasCreadas.push(created);
       }
 
