@@ -71,7 +71,11 @@ import {
   insertModuloSchema,
   insertUsuarioPermisoSchema,
   updateUserSchema,
-  insertUserSchema
+  insertUserSchema,
+  insertPeriodoNominaSchema,
+  insertIncidenciaNominaSchema,
+  insertConceptoNominaSchema,
+  insertNominaMovimientoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -1320,6 +1324,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteHoraExtra(req.params.id);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // NÓMINA - Periodos
+  // ============================================================================
+
+  app.get("/api/periodos-nomina", async (req, res) => {
+    try {
+      const { grupoNominaId, year } = req.query;
+      if (grupoNominaId) {
+        const periodos = await storage.getPeriodosNominaByGrupo(
+          grupoNominaId as string,
+          year ? parseInt(year as string) : undefined
+        );
+        return res.json(periodos);
+      }
+      const periodos = await storage.getPeriodosNomina();
+      res.json(periodos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/periodos-nomina/:id", async (req, res) => {
+    try {
+      const periodo = await storage.getPeriodoNomina(req.params.id);
+      if (!periodo) {
+        return res.status(404).json({ message: "Periodo no encontrado" });
+      }
+      res.json(periodo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/periodos-nomina", async (req, res) => {
+    try {
+      const validatedData = insertPeriodoNominaSchema.parse(req.body);
+      const periodo = await storage.createPeriodoNomina(validatedData);
+      res.json(periodo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/periodos-nomina/:id", async (req, res) => {
+    try {
+      const periodo = await storage.updatePeriodoNomina(req.params.id, req.body);
+      res.json(periodo);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // NÓMINA - Conceptos
+  // ============================================================================
+
+  app.get("/api/conceptos-nomina", async (req, res) => {
+    try {
+      const { empresaId } = req.query;
+      if (empresaId) {
+        const conceptos = await storage.getConceptosNominaByEmpresa(empresaId as string);
+        return res.json(conceptos);
+      }
+      const conceptos = await storage.getConceptosNomina();
+      res.json(conceptos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/conceptos-nomina/:id", async (req, res) => {
+    try {
+      const concepto = await storage.getConceptoNomina(req.params.id);
+      if (!concepto) {
+        return res.status(404).json({ message: "Concepto no encontrado" });
+      }
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/conceptos-nomina", async (req, res) => {
+    try {
+      const validatedData = insertConceptoNominaSchema.parse(req.body);
+      const concepto = await storage.createConceptoNomina(validatedData);
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // NÓMINA - Incidencias
+  // ============================================================================
+
+  app.get("/api/incidencias-nomina", async (req, res) => {
+    try {
+      const { periodoId, empleadoId } = req.query;
+      if (periodoId) {
+        const incidencias = await storage.getIncidenciasNominaByPeriodo(periodoId as string);
+        return res.json(incidencias);
+      }
+      if (empleadoId) {
+        const incidencias = await storage.getIncidenciasNominaByEmpleado(empleadoId as string);
+        return res.json(incidencias);
+      }
+      const incidencias = await storage.getIncidenciasNomina();
+      res.json(incidencias);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/incidencias-nomina/:id", async (req, res) => {
+    try {
+      const incidencia = await storage.getIncidenciaNomina(req.params.id);
+      if (!incidencia) {
+        return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/incidencias-nomina", async (req, res) => {
+    try {
+      const validatedData = insertIncidenciaNominaSchema.parse(req.body);
+      const incidencia = await storage.createIncidenciaNomina(validatedData);
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/incidencias-nomina/:id", async (req, res) => {
+    try {
+      const incidencia = await storage.updateIncidenciaNomina(req.params.id, req.body);
+      res.json(incidencia);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/incidencias-nomina/:id", async (req, res) => {
+    try {
+      await storage.deleteIncidenciaNomina(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // NÓMINA - Movimientos
+  // ============================================================================
+
+  app.get("/api/nomina-movimientos", async (req, res) => {
+    try {
+      const { periodoId, empleadoId } = req.query;
+      if (periodoId) {
+        const movimientos = await storage.getNominaMovimientosByPeriodo(periodoId as string);
+        return res.json(movimientos);
+      }
+      if (empleadoId) {
+        const movimientos = await storage.getNominaMovimientosByEmpleado(empleadoId as string);
+        return res.json(movimientos);
+      }
+      const movimientos = await storage.getNominaMovimientos();
+      res.json(movimientos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/nomina-movimientos/:id", async (req, res) => {
+    try {
+      const movimiento = await storage.getNominaMovimiento(req.params.id);
+      if (!movimiento) {
+        return res.status(404).json({ message: "Movimiento no encontrado" });
+      }
+      res.json(movimiento);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
