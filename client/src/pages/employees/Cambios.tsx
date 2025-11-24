@@ -540,21 +540,23 @@ function ModificacionForm({
           </Button>
         </div>
 
-        {formData.cambios.length === 0 && (
-          <div className="p-4 border border-dashed rounded-md text-center text-sm text-muted-foreground">
-            Haz clic en "Agregar Cambio" para incluir modificaciones
-          </div>
-        )}
+        <div className="max-h-[500px] overflow-y-auto space-y-3 pr-1">
+          {formData.cambios.length === 0 && (
+            <div className="p-4 border border-dashed rounded-md text-center text-sm text-muted-foreground">
+              Haz clic en "Agregar Cambio" para incluir modificaciones
+            </div>
+          )}
 
-        {formData.cambios.map((cambio) => (
-          <CambioCard
-            key={cambio.id}
-            cambio={cambio}
-            empleado={selectedEmployee}
-            onUpdate={(updates) => actualizarCambio(cambio.id, updates)}
-            onRemove={() => eliminarCambio(cambio.id)}
-          />
-        ))}
+          {formData.cambios.map((cambio) => (
+            <CambioCard
+              key={cambio.id}
+              cambio={cambio}
+              empleado={selectedEmployee}
+              onUpdate={(updates) => actualizarCambio(cambio.id, updates)}
+              onRemove={() => eliminarCambio(cambio.id)}
+            />
+          ))}
+        </div>
       </div>
 
       <div className="flex justify-end gap-2 pt-4 border-t">
