@@ -342,7 +342,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         endDate: data.endDate || null,
         contractType: data.contractType,
         contractDuration: data.contractDuration,
-        diasPrueba: data.diasPrueba || null,
+        diasPrueba: data.diasPrueba ? parseInt(data.diasPrueba) : null,
         email: data.email,
         phone: data.phone,
         rfc: data.rfc,
