@@ -1577,8 +1577,8 @@ export const puestos = pgTable("puestos", {
   
   // Ubicación Organizacional
   area: varchar("area"),
-  departamento: varchar("departamento"),
-  ubicacion: varchar("ubicacion"),
+  departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }),
+  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }),
   nivelJerarquico: varchar("nivel_jerarquico"), // Operativo, Supervisor, Gerente, Director
   tipoPuesto: varchar("tipo_puesto"), // Operativo, Administrativo, Directivo
   

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertPuestoSchema } from "@shared/schema";
+import { insertPuestoSchema, type Departamento, type CentroTrabajo } from "@shared/schema";
 import { z } from "zod";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -72,14 +73,22 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
   const [newIdioma, setNewIdioma] = useState("");
   const [newNivelIdioma, setNewNivelIdioma] = useState("basico");
 
+  const { data: departamentos = [] } = useQuery<Departamento[]>({
+    queryKey: ["/api/departamentos"],
+  });
+
+  const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
+    queryKey: ["/api/centros-trabajo"],
+  });
+
   const form = useForm<PuestoFormValues>({
     resolver: zodResolver(puestoFormSchema),
     defaultValues: defaultValues || {
       nombrePuesto: "",
       clavePuesto: "",
-      departamento: "",
+      departamentoId: "",
       area: "",
-      ubicacion: "",
+      centroTrabajoId: "",
       nivelJerarquico: "",
       tipoPuesto: "",
       reportaA: "",
@@ -311,13 +320,25 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
 
                     <FormField
                       control={form.control}
-                      name="departamento"
+                      name="departamentoId"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Departamento</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: Recursos Humanos" {...field} value={field.value || ""} data-testid="input-departamento" />
-                          </FormControl>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-departamento">
+                                <SelectValue placeholder="Seleccionar departamento (opcional)" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="">Sin departamento</SelectItem>
+                              {departamentos.map((dept) => (
+                                <SelectItem key={dept.id} value={dept.id}>
+                                  {dept.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -339,13 +360,25 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
 
                     <FormField
                       control={form.control}
-                      name="ubicacion"
+                      name="centroTrabajoId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Ubicación</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Ej: Oficina Central - CDMX" {...field} value={field.value || ""} data-testid="input-ubicacion" />
-                          </FormControl>
+                          <FormLabel>Centro de Trabajo</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-centro-trabajo">
+                                <SelectValue placeholder="Seleccionar centro de trabajo (opcional)" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="">Sin centro de trabajo</SelectItem>
+                              {centrosTrabajo.map((centro) => (
+                                <SelectItem key={centro.id} value={centro.id}>
+                                  {centro.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
