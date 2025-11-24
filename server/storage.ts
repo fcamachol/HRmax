@@ -107,6 +107,9 @@ import {
   type InsertModulo,
   type UsuarioPermiso,
   type InsertUsuarioPermiso,
+  type ModificacionPersonal,
+  type InsertModificacionPersonal,
+  modificacionesPersonal,
   configurationChangeLogs,
   legalCases,
   settlements,
@@ -178,6 +181,19 @@ export interface IStorage {
   getEmployeesByCentroTrabajo(centroTrabajoId: string): Promise<Employee[]>;
   updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee>;
   deleteEmployee(id: string): Promise<void>;
+  
+  // Modificaciones de Personal (Personnel Modifications)
+  createModificacionPersonal(modificacion: InsertModificacionPersonal): Promise<ModificacionPersonal>;
+  getModificacionPersonal(id: string): Promise<ModificacionPersonal | undefined>;
+  getModificacionesPersonal(): Promise<ModificacionPersonal[]>;
+  getModificacionesPersonalByEmpleado(empleadoId: string): Promise<ModificacionPersonal[]>;
+  getModificacionesPersonalByTipo(tipoModificacion: string): Promise<ModificacionPersonal[]>;
+  getModificacionesPersonalByEstatus(estatus: string): Promise<ModificacionPersonal[]>;
+  updateModificacionPersonal(id: string, updates: Partial<InsertModificacionPersonal>): Promise<ModificacionPersonal>;
+  deleteModificacionPersonal(id: string): Promise<void>;
+  aprobarModificacionPersonal(id: string, aprobadoPor: string): Promise<ModificacionPersonal>;
+  rechazarModificacionPersonal(id: string, notasRechazo: string): Promise<ModificacionPersonal>;
+  aplicarModificacionPersonal(id: string): Promise<ModificacionPersonal>;
   
   // Configuration Change Logs
   createChangeLog(log: InsertConfigurationChangeLog): Promise<ConfigurationChangeLog>;
