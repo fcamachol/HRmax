@@ -759,6 +759,45 @@ export class DatabaseStorage implements IStorage {
       .insert(modificacionesPersonal)
       .values(modificacion)
       .returning();
+
+    const valoresNuevos = modificacion.valoresNuevos as Record<string, any>;
+    const empleadoUpdate: Record<string, any> = {};
+
+    switch (modificacion.tipoModificacion) {
+      case 'salario':
+        if (valoresNuevos.salarioBrutoMensual !== undefined) {
+          empleadoUpdate.salarioBrutoMensual = valoresNuevos.salarioBrutoMensual;
+        }
+        break;
+      case 'puesto':
+        if (valoresNuevos.puesto !== undefined) {
+          empleadoUpdate.puesto = valoresNuevos.puesto;
+        }
+        break;
+      case 'centro_trabajo':
+        if (valoresNuevos.lugarTrabajo !== undefined) {
+          empleadoUpdate.lugarTrabajo = valoresNuevos.lugarTrabajo;
+        }
+        break;
+      case 'departamento':
+        if (valoresNuevos.departamento !== undefined) {
+          empleadoUpdate.departamento = valoresNuevos.departamento;
+        }
+        break;
+      case 'jefe_directo':
+        if (valoresNuevos.jefeDirecto !== undefined) {
+          empleadoUpdate.jefeDirecto = valoresNuevos.jefeDirecto;
+        }
+        break;
+    }
+
+    if (Object.keys(empleadoUpdate).length > 0) {
+      await db
+        .update(employees)
+        .set(empleadoUpdate)
+        .where(eq(employees.id, modificacion.empleadoId));
+    }
+
     return newModificacion;
   }
 
@@ -844,6 +883,55 @@ export class DatabaseStorage implements IStorage {
   }
 
   async aplicarModificacionPersonal(id: string): Promise<ModificacionPersonal> {
+    const modificacion = await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.id, id))
+      .limit(1)
+      .then(rows => rows[0]);
+
+    if (!modificacion) {
+      throw new Error('Modificación no encontrada');
+    }
+
+    const valoresNuevos = modificacion.valoresNuevos as Record<string, any>;
+    const empleadoUpdate: Record<string, any> = {};
+
+    switch (modificacion.tipoModificacion) {
+      case 'salario':
+        if (valoresNuevos.salarioBrutoMensual !== undefined) {
+          empleadoUpdate.salarioBrutoMensual = valoresNuevos.salarioBrutoMensual;
+        }
+        break;
+      case 'puesto':
+        if (valoresNuevos.puesto !== undefined) {
+          empleadoUpdate.puesto = valoresNuevos.puesto;
+        }
+        break;
+      case 'centro_trabajo':
+        if (valoresNuevos.lugarTrabajo !== undefined) {
+          empleadoUpdate.lugarTrabajo = valoresNuevos.lugarTrabajo;
+        }
+        break;
+      case 'departamento':
+        if (valoresNuevos.departamento !== undefined) {
+          empleadoUpdate.departamento = valoresNuevos.departamento;
+        }
+        break;
+      case 'jefe_directo':
+        if (valoresNuevos.jefeDirecto !== undefined) {
+          empleadoUpdate.jefeDirecto = valoresNuevos.jefeDirecto;
+        }
+        break;
+    }
+
+    if (Object.keys(empleadoUpdate).length > 0) {
+      await db
+        .update(employees)
+        .set(empleadoUpdate)
+        .where(eq(employees.id, modificacion.empleadoId));
+    }
+
     const [updated] = await db
       .update(modificacionesPersonal)
       .set({ 
