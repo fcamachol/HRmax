@@ -337,6 +337,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         nombre: data.nombre,
         apellidoPaterno: data.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno,
+        position: data.puestoId || "",
+        department: data.departamentoId || "",
         puestoId: data.puestoId,
         departamentoId: data.departamentoId,
         proposedSalary: data.proposedSalary,
@@ -372,6 +374,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         sucursal: data.sucursal,
         formaPago: data.formaPago,
         // Centro trabajo
+        centroTrabajo: data.centroTrabajoId || null,
         centroTrabajoId: data.centroTrabajoId,
         notes: data.notes,
         documentsChecklist: data.documentsChecklist,

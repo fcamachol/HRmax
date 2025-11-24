@@ -728,6 +728,8 @@ export const hiringProcess = pgTable("hiring_process", {
   nombre: text("nombre").notNull(), // Nombre del candidato
   apellidoPaterno: text("apellido_paterno").notNull(), // Apellido paterno
   apellidoMaterno: text("apellido_materno"), // Apellido materno (opcional)
+  position: text("position").notNull().default(""), // Campo legacy - usar puestoId
+  department: text("department").notNull().default(""), // Campo legacy - usar departamentoId
   puestoId: varchar("puesto_id").references(() => puestos.id, { onDelete: "set null" }), // Puesto ofrecido (FK)
   departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }), // Departamento (FK)
   proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto
@@ -765,6 +767,7 @@ export const hiringProcess = pgTable("hiring_process", {
   sucursal: varchar("sucursal"),
   formaPago: varchar("forma_pago"),
   // Centro de trabajo
+  centroTrabajo: varchar("centro_trabajo"), // Campo legacy - usar centroTrabajoId
   centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }), // Centro de trabajo (FK)
   // Datos de la oferta
   offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
