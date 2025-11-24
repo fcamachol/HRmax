@@ -29,6 +29,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RefreshCw, Plus, Check, X, Play, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -354,6 +355,7 @@ function ModificacionForm({
     justificacion: string;
     valoresAnteriores: Record<string, any>;
     valoresNuevos: Record<string, any>;
+    incluyeCambioSalario?: boolean;
   }>({
     empleadoId: "",
     tipoModificacion: "",
@@ -362,6 +364,7 @@ function ModificacionForm({
     justificacion: "",
     valoresAnteriores: {},
     valoresNuevos: {},
+    incluyeCambioSalario: false,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -383,6 +386,11 @@ function ModificacionForm({
       case "puesto":
         valoresAnteriores = { puesto: empleado.puesto };
         valoresNuevos = { puesto: formData.valoresNuevos.puesto };
+        // Si se incluye cambio de salario opcional
+        if (formData.incluyeCambioSalario && formData.valoresNuevos.salarioBrutoMensual) {
+          valoresAnteriores.salarioBrutoMensual = empleado.salarioBrutoMensual;
+          valoresNuevos.salarioBrutoMensual = formData.valoresNuevos.salarioBrutoMensual;
+        }
         break;
       case "centro_trabajo":
         valoresAnteriores = { lugarTrabajo: empleado.lugarTrabajo };
@@ -473,12 +481,17 @@ function ModificacionForm({
       {selectedEmployee && formData.tipoModificacion && (
         <div className="space-y-2">
           <Label>Valor Actual</Label>
-          <div className="p-3 bg-muted rounded-md text-sm">
+          <div className="p-3 bg-muted rounded-md text-sm space-y-1">
             {formData.tipoModificacion === "salario" && (
               <div>Salario Actual: ${selectedEmployee.salarioBrutoMensual}</div>
             )}
             {formData.tipoModificacion === "puesto" && (
-              <div>Puesto Actual: {selectedEmployee.puesto}</div>
+              <>
+                <div>Puesto Actual: {selectedEmployee.puesto}</div>
+                {formData.incluyeCambioSalario && (
+                  <div>Salario Actual: ${selectedEmployee.salarioBrutoMensual}</div>
+                )}
+              </>
             )}
             {formData.tipoModificacion === "centro_trabajo" && (
               <div>Centro Actual: {selectedEmployee.lugarTrabajo || "No especificado"}</div>
@@ -526,6 +539,56 @@ function ModificacionForm({
             />
           )}
         </div>
+      )}
+
+      {formData.tipoModificacion === "puesto" && (
+        <>
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="incluyeCambioSalario"
+              checked={formData.incluyeCambioSalario}
+              onCheckedChange={(checked) =>
+                setFormData({
+                  ...formData,
+                  incluyeCambioSalario: checked === true,
+                  valoresNuevos: {
+                    ...formData.valoresNuevos,
+                    ...(checked !== true && { salarioBrutoMensual: undefined }),
+                  },
+                })
+              }
+              data-testid="checkbox-cambio-salario"
+            />
+            <Label
+              htmlFor="incluyeCambioSalario"
+              className="text-sm font-normal cursor-pointer"
+            >
+              Incluir cambio de salario (opcional)
+            </Label>
+          </div>
+
+          {formData.incluyeCambioSalario && (
+            <div className="space-y-2">
+              <Label htmlFor="nuevoSalario">Nuevo Salario</Label>
+              <Input
+                id="nuevoSalario"
+                type="number"
+                step="0.01"
+                placeholder="Nuevo salario bruto mensual"
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    valoresNuevos: {
+                      ...formData.valoresNuevos,
+                      salarioBrutoMensual: e.target.value,
+                    },
+                  })
+                }
+                data-testid="input-nuevo-salario"
+              />
+            </div>
+          )}
+        </>
       )}
 
       <div className="space-y-2">
