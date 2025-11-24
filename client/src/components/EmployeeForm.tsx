@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
@@ -19,17 +20,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PrestacionesEmpleadoOverride } from "@/components/PrestacionesEmpleadoOverride";
+import { Gift } from "lucide-react";
 
 const employeeFormSchema = insertEmployeeSchema;
 
 type EmployeeFormValues = z.infer<typeof employeeFormSchema>;
 
+interface EmployeeFormDefaultValues extends Partial<EmployeeFormValues> {
+  id?: string;
+  puestoId?: string | null;
+  esquemaPrestacionesId?: string | null;
+}
+
 interface EmployeeFormProps {
   onSubmit: (data: EmployeeFormValues) => void;
-  defaultValues?: Partial<EmployeeFormValues>;
+  defaultValues?: EmployeeFormDefaultValues;
 }
 
 export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
+  const [prestacionesDialogOpen, setPrestacionesDialogOpen] = useState(false);
+  const isEditMode = !!(defaultValues?.id);
+
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
     defaultValues: defaultValues || {
@@ -304,15 +316,45 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
           />
         </div>
 
-        <div className="flex justify-end gap-4">
-          <Button type="button" variant="outline" data-testid="button-cancel">
-            Cancelar
-          </Button>
-          <Button type="submit" data-testid="button-submit">
-            Guardar Empleado
-          </Button>
+        <div className="flex justify-between gap-4">
+          <div>
+            {isEditMode && defaultValues && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPrestacionesDialogOpen(true)}
+                data-testid="button-configurar-prestaciones"
+              >
+                <Gift className="mr-2 h-4 w-4" />
+                Configurar Prestaciones Especiales
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-4">
+            <Button type="button" variant="outline" data-testid="button-cancel">
+              Cancelar
+            </Button>
+            <Button type="submit" data-testid="button-submit">
+              Guardar Empleado
+            </Button>
+          </div>
         </div>
       </form>
+
+      {isEditMode && defaultValues && (
+        <PrestacionesEmpleadoOverride
+          employee={{
+            id: defaultValues.id!,
+            nombre: defaultValues.nombre || "",
+            apellidoPaterno: defaultValues.apellidoPaterno || "",
+            apellidoMaterno: defaultValues.apellidoMaterno ?? undefined,
+            puestoId: defaultValues.puestoId ?? null,
+            esquemaPrestacionesId: defaultValues.esquemaPrestacionesId ?? null,
+          }}
+          open={prestacionesDialogOpen}
+          onOpenChange={setPrestacionesDialogOpen}
+        />
+      )}
     </Form>
   );
 }

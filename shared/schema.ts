@@ -1661,6 +1661,9 @@ export const puestos = pgTable("puestos", {
   // Estado
   estatus: varchar("estatus").default("activo"), // activo, inactivo
   
+  // Prestaciones
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id").references(() => catTablasPrestaciones.id),
+  
   // Auditoría
   fechaCreacion: timestamp("fecha_creacion").notNull().default(sql`now()`),
   ultimaActualizacion: timestamp("ultima_actualizacion").notNull().default(sql`now()`),

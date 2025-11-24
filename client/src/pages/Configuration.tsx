@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Settings, Edit, Save, X, Plus } from "lucide-react";
 import { DemoCalculoNomina } from "@/components/DemoCalculoNomina";
 import { EditISRDialog } from "@/components/EditISRDialog";
+import { PrestacionesPorPuestoManager } from "@/components/configuracion/PrestacionesPorPuestoManager";
 
 type Periodicidad = "diaria" | "semanal" | "decenal" | "quincenal" | "mensual";
 
@@ -274,12 +275,15 @@ export default function Configuration() {
       </div>
 
       <Tabs defaultValue="demo-calculo" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="demo-calculo" data-testid="tab-demo-calculo">
             Demo Cálculo
           </TabsTrigger>
           <TabsTrigger value="valores-referencia" data-testid="tab-valores-referencia">
             Valores
+          </TabsTrigger>
+          <TabsTrigger value="prestaciones-puesto" data-testid="tab-prestaciones-puesto">
+            Prestaciones
           </TabsTrigger>
           <TabsTrigger value="conceptos" data-testid="tab-conceptos">
             Conceptos
@@ -306,6 +310,10 @@ export default function Configuration() {
             </p>
           </div>
           <DemoCalculoNomina />
+        </TabsContent>
+
+        <TabsContent value="prestaciones-puesto" className="space-y-6">
+          <PrestacionesPorPuestoManager />
         </TabsContent>
 
         <TabsContent value="valores-referencia" className="space-y-6">

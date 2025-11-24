@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { z } from "zod";
 import { storage } from "./storage";
 import { 
   insertConfigurationChangeLogSchema, 
@@ -3960,6 +3961,129 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(409).json({ message: "No se puede eliminar el cliente porque tiene empresas asociadas. Elimine las empresas primero." });
       }
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== Prestaciones ====================
+  
+  // Obtener todos los esquemas de prestaciones disponibles
+  app.get("/api/cat-tablas-prestaciones", async (req, res) => {
+    try {
+      const { clienteId, empresaId, nombreEsquema } = req.query;
+      
+      const filters: any = {};
+      if (clienteId) filters.clienteId = clienteId as string;
+      if (empresaId) filters.empresaId = empresaId as string;
+      if (nombreEsquema) filters.nombreEsquema = nombreEsquema as string;
+      
+      const tablas = await storage.getCatTablasPrestaciones(filters);
+      res.json(tablas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Obtener un esquema de prestaciones específico
+  app.get("/api/cat-tablas-prestaciones/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tabla = await storage.getCatTablaPrestaciones(id);
+      
+      if (!tabla) {
+        return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+      }
+      
+      res.json(tabla);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Schema de validación para prestaciones
+  const updatePrestacionesSchema = z.object({
+    esquemaPrestacionesId: z.union([
+      z.string()
+        .transform((val) => val.trim())
+        .refine((val) => val.length > 0, {
+          message: "esquemaPrestacionesId no puede ser un string vacío o solo espacios"
+        }),
+      z.null()
+    ])
+  }).strict();
+
+  // Asignar esquema de prestaciones a un puesto
+  app.patch("/api/puestos/:id/prestaciones", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validar el payload con Zod
+      const validation = updatePrestacionesSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Payload inválido",
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { esquemaPrestacionesId } = validation.data;
+      
+      // Verificar que el puesto existe
+      const puesto = await storage.getPuesto(id);
+      if (!puesto) {
+        return res.status(404).json({ message: "Puesto no encontrado" });
+      }
+      
+      // Verificar que el esquema existe si se proporciona
+      if (esquemaPrestacionesId) {
+        const esquema = await storage.getCatTablaPrestaciones(esquemaPrestacionesId);
+        if (!esquema) {
+          return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+        }
+      }
+      
+      // Actualizar el puesto
+      const updated = await storage.updatePuesto(id, { esquemaPrestacionesId });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Configurar override de prestaciones para un empleado
+  app.patch("/api/employees/:id/prestaciones", async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Validar el payload con Zod
+      const validation = updatePrestacionesSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ 
+          message: "Payload inválido",
+          errors: validation.error.errors 
+        });
+      }
+      
+      const { esquemaPrestacionesId } = validation.data;
+      
+      // Verificar que el empleado existe
+      const employee = await storage.getEmployee(id);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+      
+      // Verificar que el esquema existe si se proporciona
+      if (esquemaPrestacionesId) {
+        const esquema = await storage.getCatTablaPrestaciones(esquemaPrestacionesId);
+        if (!esquema) {
+          return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+        }
+      }
+      
+      // Actualizar el empleado
+      const updated = await storage.updateEmployee(id, { esquemaPrestacionesId });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
     }
   });
 
