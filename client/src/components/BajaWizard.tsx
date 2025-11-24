@@ -370,6 +370,15 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     }));
   };
 
+  const updateConceptoAdicional = (index: number, field: 'description' | 'amount', value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      conceptosAdicionales: prev.conceptosAdicionales.map((concepto, i) => 
+        i === index ? { ...concepto, [field]: value } : concepto
+      )
+    }));
+  };
+
   const addConceptoDescuento = () => {
     setFormData(prev => ({
       ...prev,
@@ -381,6 +390,15 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     setFormData(prev => ({
       ...prev,
       conceptosDescuentos: prev.conceptosDescuentos.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateConceptoDescuento = (index: number, field: 'description' | 'amount', value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      conceptosDescuentos: prev.conceptosDescuentos.map((concepto, i) => 
+        i === index ? { ...concepto, [field]: value } : concepto
+      )
     }));
   };
 
@@ -651,6 +669,117 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                         data-testid="input-dias-vacaciones-tomadas"
                       />
                     </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Conceptos Adicionales y Descuentos */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Conceptos Adicionales</CardTitle>
+                  <CardDescription>Agregue percepciones extras o descuentos personalizados</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Percepciones Adicionales */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Percepciones Adicionales</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addConceptoAdicional}
+                        data-testid="button-add-concepto-adicional"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+                    {formData.conceptosAdicionales.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay conceptos adicionales</p>
+                    ) : (
+                      formData.conceptosAdicionales.map((concepto, index) => (
+                        <div key={index} className="flex gap-2 items-start">
+                          <Input
+                            placeholder="Descripción del concepto"
+                            value={concepto.description}
+                            onChange={(e) => updateConceptoAdicional(index, 'description', e.target.value)}
+                            className="flex-1"
+                            data-testid={`input-concepto-adicional-description-${index}`}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Monto"
+                            value={concepto.amount}
+                            onChange={(e) => updateConceptoAdicional(index, 'amount', e.target.value)}
+                            className="w-32"
+                            data-testid={`input-concepto-adicional-amount-${index}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeConceptoAdicional(index)}
+                            data-testid={`button-remove-concepto-adicional-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Descuentos */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Descuentos</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addConceptoDescuento}
+                        data-testid="button-add-concepto-descuento"
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Agregar
+                      </Button>
+                    </div>
+                    {formData.conceptosDescuentos.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay descuentos</p>
+                    ) : (
+                      formData.conceptosDescuentos.map((concepto, index) => (
+                        <div key={index} className="flex gap-2 items-start">
+                          <Input
+                            placeholder="Descripción del descuento"
+                            value={concepto.description}
+                            onChange={(e) => updateConceptoDescuento(index, 'description', e.target.value)}
+                            className="flex-1"
+                            data-testid={`input-concepto-descuento-description-${index}`}
+                          />
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Monto"
+                            value={concepto.amount}
+                            onChange={(e) => updateConceptoDescuento(index, 'amount', e.target.value)}
+                            className="w-32"
+                            data-testid={`input-concepto-descuento-amount-${index}`}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeConceptoDescuento(index)}
+                            data-testid={`button-remove-concepto-descuento-${index}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
