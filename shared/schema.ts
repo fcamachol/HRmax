@@ -11,6 +11,7 @@ export const employees = pgTable("employees", {
   apellidoPaterno: varchar("apellido_paterno").notNull(),
   apellidoMaterno: varchar("apellido_materno"),
   genero: varchar("genero"),
+  fechaNacimiento: date("fecha_nacimiento"),
   curp: varchar("curp"),
   rfc: varchar("rfc"),
   nss: varchar("nss"),
@@ -741,6 +742,28 @@ export const hiringProcess = pgTable("hiring_process", {
   rfc: varchar("rfc", { length: 13 }),
   curp: varchar("curp", { length: 18 }),
   nss: varchar("nss", { length: 11 }),
+  genero: varchar("genero", { length: 1 }), // H o M extraído del CURP
+  fechaNacimiento: date("fecha_nacimiento"), // Extraída del CURP
+  lugarNacimiento: varchar("lugar_nacimiento"), // Estado de nacimiento extraído del CURP
+  // Domicilio
+  calle: varchar("calle"),
+  numeroExterior: varchar("numero_exterior"),
+  numeroInterior: varchar("numero_interior"),
+  colonia: varchar("colonia"),
+  municipio: varchar("municipio"),
+  estado: varchar("estado"),
+  codigoPostal: varchar("codigo_postal", { length: 5 }),
+  // Contacto de emergencia
+  contactoEmergencia: varchar("contacto_emergencia"),
+  parentescoEmergencia: varchar("parentesco_emergencia"),
+  telefonoEmergencia: varchar("telefono_emergencia", { length: 10 }),
+  // Datos bancarios
+  banco: varchar("banco"),
+  clabe: varchar("clabe", { length: 18 }),
+  sucursal: varchar("sucursal"),
+  formaPago: varchar("forma_pago"),
+  // Centro de trabajo
+  centroTrabajo: varchar("centro_trabajo"),
   // Datos de la oferta
   offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
   offerAcceptedDate: date("offer_accepted_date"),
