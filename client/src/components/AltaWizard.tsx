@@ -386,7 +386,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
   const handleNext = () => {
     // Validaciones por paso
     if (currentStep === 1) {
-      if (!formData.curp || !formData.nombre.trim() || !formData.apellidoPaterno.trim() || !formData.email || !formData.phone) {
+      if (!formData.curp || !formData.nombre.trim() || !formData.apellidoPaterno.trim() || !formData.email || !formData.phone || !formData.rfc) {
         toast({
           title: "Campos requeridos",
           description: "Por favor completa todos los campos obligatorios",
@@ -398,6 +398,14 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         toast({
           title: "CURP inválido",
           description: curpValidation.errores.join(", "),
+          variant: "destructive",
+        });
+        return;
+      }
+      if (formData.rfc.length < 13) {
+        toast({
+          title: "RFC incompleto",
+          description: "El RFC debe tener 13 caracteres (10 base + 3 homoclave)",
           variant: "destructive",
         });
         return;
@@ -596,18 +604,26 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="rfc" data-testid="label-rfc">
-                  RFC (Auto-generado)
+                  RFC <span className="text-destructive">*</span>
                 </Label>
-                <Input
-                  id="rfc"
-                  data-testid="input-rfc"
-                  value={formData.rfc}
-                  onChange={(e) => setFormData({ ...formData, rfc: e.target.value.toUpperCase() })}
-                  placeholder="Primeras 10 posiciones"
-                  maxLength={13}
-                />
+                <div className="relative">
+                  <Input
+                    id="rfc"
+                    data-testid="input-rfc"
+                    value={formData.rfc}
+                    onChange={(e) => setFormData({ ...formData, rfc: e.target.value.toUpperCase() })}
+                    placeholder="10 posiciones + 3 homoclave"
+                    maxLength={13}
+                    className={formData.rfc.length < 13 && formData.rfc.length >= 10 ? "pr-12" : ""}
+                  />
+                  {formData.rfc.length >= 10 && formData.rfc.length < 13 && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-destructive font-mono text-sm font-semibold">
+                      {Array(13 - formData.rfc.length).fill('_').join('')}
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Se auto-completan las primeras 10 posiciones. Agrega la homoclave si la conoces.
+                  Completar homoclave <span className="text-destructive font-semibold">(3 caracteres faltantes)</span>
                 </p>
               </div>
               
