@@ -61,9 +61,9 @@ interface AltaFormData {
   lugarNacimiento: string;
   
   // Paso 2: Datos de la Oferta
-  position: string;
-  department: string;
-  centroTrabajo: string;
+  puestoId: string; // ID del puesto (FK)
+  departamentoId: string; // ID del departamento (FK)
+  centroTrabajoId: string; // ID del centro de trabajo (FK)
   proposedSalary: string;
   contractType: string;
   contractDuration: string;
@@ -135,9 +135,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     lugarNacimiento: "",
     
     // Paso 2
-    position: "",
-    department: "",
-    centroTrabajo: "",
+    puestoId: "",
+    departamentoId: "",
+    centroTrabajoId: "",
     proposedSalary: "",
     contractType: "planta",
     contractDuration: "",
@@ -198,31 +198,31 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         phone: existingProcess.phone || "",
         curp: existingProcess.curp || "",
         rfc: existingProcess.rfc || "",
-        genero: "",
-        fechaNacimiento: "",
-        lugarNacimiento: "",
-        position: existingProcess.position || "",
-        department: existingProcess.department || "",
-        centroTrabajo: "",
+        genero: existingProcess.genero || "",
+        fechaNacimiento: existingProcess.fechaNacimiento || "",
+        lugarNacimiento: existingProcess.lugarNacimiento || "",
+        puestoId: (existingProcess as any).puestoId || "",
+        departamentoId: (existingProcess as any).departamentoId || "",
+        centroTrabajoId: (existingProcess as any).centroTrabajoId || "",
         proposedSalary: existingProcess.proposedSalary || "",
         contractType: existingProcess.contractType || "planta",
         contractDuration: existingProcess.contractDuration || "",
         startDate: existingProcess.startDate || new Date().toISOString().split('T')[0],
-        calle: "",
-        numeroExterior: "",
-        numeroInterior: "",
-        colonia: "",
-        municipio: "",
-        estado: "",
-        codigoPostal: "",
-        contactoEmergencia: "",
-        parentescoEmergencia: "",
-        telefonoEmergencia: "",
+        calle: (existingProcess as any).calle || "",
+        numeroExterior: (existingProcess as any).numeroExterior || "",
+        numeroInterior: (existingProcess as any).numeroInterior || "",
+        colonia: (existingProcess as any).colonia || "",
+        municipio: (existingProcess as any).municipio || "",
+        estado: (existingProcess as any).estado || "",
+        codigoPostal: (existingProcess as any).codigoPostal || "",
+        contactoEmergencia: (existingProcess as any).contactoEmergencia || "",
+        parentescoEmergencia: (existingProcess as any).parentescoEmergencia || "",
+        telefonoEmergencia: (existingProcess as any).telefonoEmergencia || "",
         nss: existingProcess.nss || "",
-        banco: "",
-        clabe: "",
-        sucursal: "",
-        formaPago: "transferencia",
+        banco: (existingProcess as any).banco || "",
+        clabe: (existingProcess as any).clabe || "",
+        sucursal: (existingProcess as any).sucursal || "",
+        formaPago: (existingProcess as any).formaPago || "transferencia",
         documentsChecklist: (existingProcess.documentsChecklist as DocumentInfo[]) || DOCUMENTOS_REQUERIDOS.map(name => ({ name, uploaded: false })),
         notes: existingProcess.notes || "",
       });
@@ -245,9 +245,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       genero: "",
       fechaNacimiento: "",
       lugarNacimiento: "",
-      position: "",
-      department: "",
-      centroTrabajo: "",
+      puestoId: "",
+      departamentoId: "",
+      centroTrabajoId: "",
       proposedSalary: "",
       contractType: "planta",
       contractDuration: "",
@@ -312,8 +312,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         nombre: data.nombre,
         apellidoPaterno: data.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno,
-        position: data.position,
-        department: data.department,
+        puestoId: data.puestoId,
+        departamentoId: data.departamentoId,
         proposedSalary: data.proposedSalary,
         startDate: data.startDate,
         contractType: data.contractType,
@@ -345,7 +345,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         sucursal: data.sucursal,
         formaPago: data.formaPago,
         // Centro trabajo
-        centroTrabajo: data.centroTrabajo,
+        centroTrabajoId: data.centroTrabajoId,
         notes: data.notes,
         documentsChecklist: data.documentsChecklist,
       };
@@ -413,7 +413,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     }
 
     if (currentStep === 2) {
-      if (!formData.position || !formData.proposedSalary) {
+      if (!formData.puestoId || !formData.proposedSalary) {
         toast({
           title: "Campos requeridos",
           description: "El puesto y salario son obligatorios",
@@ -623,7 +623,15 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Completar homoclave <span className="text-destructive font-semibold">(3 caracteres faltantes)</span>
+                  {formData.rfc.length >= 10 && formData.rfc.length < 13 ? (
+                    <>
+                      Completar homoclave <span className="text-destructive font-semibold">
+                        ({13 - formData.rfc.length} {13 - formData.rfc.length === 1 ? 'carácter faltante' : 'caracteres faltantes'})
+                      </span>
+                    </>
+                  ) : (
+                    "Se auto-completan las primeras 10 posiciones del CURP"
+                  )}
                 </p>
               </div>
               
@@ -686,17 +694,17 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   Puesto <span className="text-destructive">*</span>
                 </Label>
                 <Select 
-                  value={formData.position} 
-                  onValueChange={(value) => setFormData({ ...formData, position: value })}
+                  value={formData.puestoId} 
+                  onValueChange={(value) => setFormData({ ...formData, puestoId: value })}
                 >
                   <SelectTrigger data-testid="select-position">
                     <SelectValue placeholder="Selecciona un puesto" />
                   </SelectTrigger>
                   <SelectContent>
-                    {puestos && Array.isArray(puestos) && (puestos as Array<{id: string, nombre: string}>).map((puesto) => {
+                    {puestos && Array.isArray(puestos) && (puestos as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).map((puesto) => {
                       return (
-                        <SelectItem key={puesto.id} value={puesto.nombre}>
-                          {puesto.nombre}
+                        <SelectItem key={puesto.id} value={puesto.id}>
+                          {puesto.clavePuesto} - {puesto.nombrePuesto}
                         </SelectItem>
                       );
                     })}
@@ -709,8 +717,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   Departamento
                 </Label>
                 <Select 
-                  value={formData.department} 
-                  onValueChange={(value) => setFormData({ ...formData, department: value })}
+                  value={formData.departamentoId} 
+                  onValueChange={(value) => setFormData({ ...formData, departamentoId: value })}
                 >
                   <SelectTrigger data-testid="select-department">
                     <SelectValue placeholder="Selecciona un departamento" />
@@ -718,7 +726,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   <SelectContent>
                     {departamentos && Array.isArray(departamentos) && (departamentos as Array<{id: string, nombre: string}>).map((dept) => {
                       return (
-                        <SelectItem key={dept.id} value={dept.nombre}>
+                        <SelectItem key={dept.id} value={dept.id}>
                           {dept.nombre}
                         </SelectItem>
                       );
@@ -733,8 +741,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 Centro de Trabajo
               </Label>
               <Select 
-                value={formData.centroTrabajo} 
-                onValueChange={(value) => setFormData({ ...formData, centroTrabajo: value })}
+                value={formData.centroTrabajoId} 
+                onValueChange={(value) => setFormData({ ...formData, centroTrabajoId: value })}
               >
                 <SelectTrigger data-testid="select-centro-trabajo">
                   <SelectValue placeholder="Selecciona un centro de trabajo" />
@@ -742,7 +750,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 <SelectContent>
                   {centrosTrabajo && Array.isArray(centrosTrabajo) && (centrosTrabajo as Array<{id: string, nombre: string}>).map((centro) => {
                     return (
-                      <SelectItem key={centro.id} value={centro.nombre}>
+                      <SelectItem key={centro.id} value={centro.id}>
                         {centro.nombre}
                       </SelectItem>
                     );
@@ -754,7 +762,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="proposedSalary" data-testid="label-salary">
-                  Salario Mensual Bruto <span className="text-destructive">*</span>
+                  Salario Mensual Neto <span className="text-destructive">*</span>
                 </Label>
                 <Input
                   id="proposedSalary"
@@ -1188,31 +1196,59 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <h4 className="font-medium text-sm text-muted-foreground">Puesto</h4>
-                    <p className="text-base" data-testid="text-summary-position">{formData.position || "No especificado"}</p>
+                    <p className="text-base" data-testid="text-summary-position">
+                      {(() => {
+                        if (!formData.puestoId) return "No especificado";
+                        const puesto = puestos && Array.isArray(puestos) 
+                          ? (puestos as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).find(p => p.id === formData.puestoId)
+                          : null;
+                        return puesto ? `${puesto.clavePuesto} - ${puesto.nombrePuesto}` : formData.puestoId;
+                      })()}
+                    </p>
                   </div>
                   <div>
                     <h4 className="font-medium text-sm text-muted-foreground">Departamento</h4>
-                    <p className="text-base" data-testid="text-summary-department">{formData.department || "No especificado"}</p>
+                    <p className="text-base" data-testid="text-summary-department">
+                      {(() => {
+                        if (!formData.departamentoId) return "No especificado";
+                        const dept = departamentos && Array.isArray(departamentos)
+                          ? (departamentos as Array<{id: string, nombre: string}>).find(d => d.id === formData.departamentoId)
+                          : null;
+                        return dept ? dept.nombre : formData.departamentoId;
+                      })()}
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <h4 className="font-medium text-sm text-muted-foreground">Salario Mensual</h4>
+                    <h4 className="font-medium text-sm text-muted-foreground">Centro de Trabajo</h4>
+                    <p className="text-base" data-testid="text-summary-centro-trabajo">
+                      {(() => {
+                        if (!formData.centroTrabajoId) return "No especificado";
+                        const centro = centrosTrabajo && Array.isArray(centrosTrabajo)
+                          ? (centrosTrabajo as Array<{id: string, nombre: string}>).find(c => c.id === formData.centroTrabajoId)
+                          : null;
+                        return centro ? centro.nombre : formData.centroTrabajoId;
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Salario Mensual Neto</h4>
                     <p className="text-base" data-testid="text-summary-salary">
                       ${parseFloat(formData.proposedSalary || "0").toLocaleString('es-MX', {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
-                      })}
+                      })} MXN
                     </p>
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
-                    <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
+                    <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
+                  </div>
                   <div>
                     <h4 className="font-medium text-sm text-muted-foreground">Tipo de Contrato</h4>
                     <p className="text-base" data-testid="text-summary-contract">

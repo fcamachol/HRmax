@@ -728,8 +728,8 @@ export const hiringProcess = pgTable("hiring_process", {
   nombre: text("nombre").notNull(), // Nombre del candidato
   apellidoPaterno: text("apellido_paterno").notNull(), // Apellido paterno
   apellidoMaterno: text("apellido_materno"), // Apellido materno (opcional)
-  position: text("position").notNull(), // Puesto ofrecido
-  department: text("department").notNull(), // Departamento
+  puestoId: varchar("puesto_id").references(() => puestos.id, { onDelete: "set null" }), // Puesto ofrecido (FK)
+  departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }), // Departamento (FK)
   proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto
   startDate: date("start_date").notNull(), // Fecha propuesta de inicio
   stage: text("stage").notNull().default("oferta"), // Etapa actual del proceso
@@ -763,7 +763,7 @@ export const hiringProcess = pgTable("hiring_process", {
   sucursal: varchar("sucursal"),
   formaPago: varchar("forma_pago"),
   // Centro de trabajo
-  centroTrabajo: varchar("centro_trabajo"),
+  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }), // Centro de trabajo (FK)
   // Datos de la oferta
   offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
   offerAcceptedDate: date("offer_accepted_date"),
