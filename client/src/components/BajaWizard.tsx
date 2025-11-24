@@ -45,6 +45,8 @@ interface BajaWizardProps {
 interface BajaFormData {
   employeeId: string;
   employeeName: string;
+  clienteId: string;
+  empresaId: string;
   bajaCategory: BajaCategory;
   bajaType: BajaType;
   reason: string;
@@ -91,6 +93,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
   const [formData, setFormData] = useState<BajaFormData>({
     employeeId: "",
     employeeName: "",
+    clienteId: "",
+    empresaId: "",
     bajaCategory: "voluntaria",
     bajaType: "renuncia_voluntaria",
     reason: "",
@@ -128,6 +132,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
         ...prev,
         employeeId: employee.id,
         employeeName: `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno || ''}`.trim(),
+        clienteId: employee.clienteId,
+        empresaId: employee.empresaId,
         salarioDiario: salarioDiario,
         empleadoFechaInicio: employee.fechaIngreso || "",
       }));
@@ -154,6 +160,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
       setFormData({
         employeeId: existingCase.employeeId || "",
         employeeName: existingCase.employeeName,
+        clienteId: existingCase.clienteId,
+        empresaId: existingCase.empresaId,
         bajaCategory: existingCase.bajaCategory as BajaCategory,
         bajaType: existingCase.bajaType as BajaType,
         reason: existingCase.reason || "",
@@ -201,6 +209,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
       } else {
         // Modo creación: POST
         const response = await apiRequest("POST", "/api/legal/cases", {
+          clienteId: data.clienteId,
+          empresaId: data.empresaId,
           employeeId: data.employeeId,
           employeeName: data.employeeName,
           bajaCategory: data.bajaCategory,
@@ -263,6 +273,8 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     setFormData({
       employeeId: "",
       employeeName: "",
+      clienteId: "",
+      empresaId: "",
       bajaCategory: "voluntaria",
       bajaType: "renuncia_voluntaria",
       reason: "",
