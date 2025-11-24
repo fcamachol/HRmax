@@ -112,7 +112,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     enabled: open, // Solo cargar cuando el wizard está abierto
   });
 
-  const activeEmployees = employees.filter(emp => emp.status === 'active');
+  const activeEmployees = employees.filter(emp => emp.estatus === 'activo');
 
   const isEditMode = !!existingCase;
 
@@ -121,15 +121,15 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     const employee = employees.find(emp => emp.id === employeeId);
     if (employee) {
       // Calcular salario diario desde el salario mensual
-      const salarioMensual = parseFloat(employee.salary);
+      const salarioMensual = parseFloat(employee.salarioBrutoMensual);
       const salarioDiario = (salarioMensual / 30).toFixed(2);
 
       setFormData(prev => ({
         ...prev,
         employeeId: employee.id,
-        employeeName: `${employee.firstName} ${employee.lastName}`,
+        employeeName: `${employee.nombre} ${employee.apellidoPaterno} ${employee.apellidoMaterno || ''}`.trim(),
         salarioDiario: salarioDiario,
-        empleadoFechaInicio: employee.startDate || "",
+        empleadoFechaInicio: employee.fechaIngreso || "",
       }));
     }
   };
@@ -450,9 +450,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                       disabled={isLoadingEmployees || isEditMode}
                     >
                       <SelectTrigger data-testid="select-employee">
-                        <SelectValue placeholder={isLoadingEmployees ? "Cargando empleados..." : "Seleccionar empleado"}>
-                          {formData.employeeName || "Seleccionar empleado"}
-                        </SelectValue>
+                        <SelectValue placeholder={isLoadingEmployees ? "Cargando empleados..." : "Seleccionar empleado"} />
                       </SelectTrigger>
                       <SelectContent>
                         {activeEmployees.length === 0 ? (
@@ -462,7 +460,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                         ) : (
                           activeEmployees.map((employee) => (
                             <SelectItem key={employee.id} value={employee.id}>
-                              {employee.firstName} {employee.lastName} - {employee.position}
+                              {employee.nombre} {employee.apellidoPaterno} {employee.apellidoMaterno || ''} - {employee.puesto}
                             </SelectItem>
                           ))
                         )}
