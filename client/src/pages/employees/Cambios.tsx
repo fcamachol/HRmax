@@ -35,7 +35,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import type { ModificacionPersonal, Employee } from "@shared/schema";
+import type { ModificacionPersonal, Employee, Puesto, CentroTrabajo } from "@shared/schema";
 
 export default function Cambios() {
   const { toast } = useToast();
@@ -49,6 +49,14 @@ export default function Cambios() {
 
   const { data: empleados = [] } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
+  });
+
+  const { data: puestos = [] } = useQuery<Puesto[]>({
+    queryKey: ["/api/puestos"],
+  });
+
+  const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
+    queryKey: ["/api/centros-trabajo"],
   });
 
   const createMutation = useMutation({
@@ -237,6 +245,8 @@ export default function Cambios() {
             </DialogHeader>
             <ModificacionForm
               empleados={empleados}
+              puestos={puestos}
+              centrosTrabajo={centrosTrabajo}
               onSubmit={(data) => createMutation.mutate(data)}
               isPending={createMutation.isPending}
             />
@@ -357,10 +367,14 @@ type Cambio = {
 
 function ModificacionForm({
   empleados,
+  puestos,
+  centrosTrabajo,
   onSubmit,
   isPending,
 }: {
   empleados: Employee[];
+  puestos: Puesto[];
+  centrosTrabajo: CentroTrabajo[];
   onSubmit: (data: any) => void;
   isPending: boolean;
 }) {
@@ -552,6 +566,8 @@ function ModificacionForm({
               key={cambio.id}
               cambio={cambio}
               empleado={selectedEmployee}
+              puestos={puestos}
+              centrosTrabajo={centrosTrabajo}
               onUpdate={(updates) => actualizarCambio(cambio.id, updates)}
               onRemove={() => eliminarCambio(cambio.id)}
             />
@@ -575,14 +591,23 @@ function ModificacionForm({
 function CambioCard({
   cambio,
   empleado,
+  puestos,
+  centrosTrabajo,
   onUpdate,
   onRemove,
 }: {
   cambio: Cambio;
   empleado: Employee | undefined;
+  puestos: Puesto[];
+  centrosTrabajo: CentroTrabajo[];
   onUpdate: (updates: Partial<Cambio>) => void;
   onRemove: () => void;
 }) {
+  const [showNewPuestoDialog, setShowNewPuestoDialog] = useState(false);
+  const [showNewCentroDialog, setShowNewCentroDialog] = useState(false);
+  const [newPuestoName, setNewPuestoName] = useState("");
+  const [newCentroName, setNewCentroName] = useState("");
+  const { toast } = useToast();
   return (
     <Card>
       <CardContent className="p-4 space-y-3">
@@ -644,8 +669,29 @@ function CambioCard({
             </div>
 
             <div className="space-y-2">
-              <Label>Nuevo Valor</Label>
-              {cambio.tipoModificacion === "salario" ? (
+              <div className="flex items-center justify-between">
+                <Label>Nuevo Valor</Label>
+                {(cambio.tipoModificacion === "puesto" || cambio.tipoModificacion === "centro_trabajo") && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      if (cambio.tipoModificacion === "puesto") {
+                        setShowNewPuestoDialog(true);
+                      } else {
+                        setShowNewCentroDialog(true);
+                      }
+                    }}
+                    data-testid={`button-add-new-${cambio.id}`}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Nuevo
+                  </Button>
+                )}
+              </div>
+              
+              {cambio.tipoModificacion === "salario" && (
                 <Input
                   type="number"
                   step="0.01"
@@ -658,24 +704,60 @@ function CambioCard({
                   }
                   data-testid={`input-valor-${cambio.id}`}
                 />
-              ) : (
+              )}
+
+              {cambio.tipoModificacion === "puesto" && (
+                <Select
+                  value={cambio.valoresNuevos.puesto || ""}
+                  onValueChange={(value) =>
+                    onUpdate({
+                      valoresNuevos: { puesto: value },
+                    })
+                  }
+                >
+                  <SelectTrigger data-testid={`select-puesto-${cambio.id}`}>
+                    <SelectValue placeholder="Seleccionar puesto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {puestos.map((puesto) => (
+                      <SelectItem key={puesto.id} value={puesto.nombrePuesto}>
+                        {puesto.nombrePuesto}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {cambio.tipoModificacion === "centro_trabajo" && (
+                <Select
+                  value={cambio.valoresNuevos.lugarTrabajo || ""}
+                  onValueChange={(value) =>
+                    onUpdate({
+                      valoresNuevos: { lugarTrabajo: value },
+                    })
+                  }
+                >
+                  <SelectTrigger data-testid={`select-centro-${cambio.id}`}>
+                    <SelectValue placeholder="Seleccionar centro de trabajo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {centrosTrabajo.map((centro) => (
+                      <SelectItem key={centro.id} value={centro.nombre}>
+                        {centro.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {cambio.tipoModificacion === "departamento" && (
                 <Input
                   type="text"
-                  placeholder={`Nuevo ${cambio.tipoModificacion === "centro_trabajo" ? "centro de trabajo" : cambio.tipoModificacion}`}
-                  value={
-                    cambio.valoresNuevos[
-                      cambio.tipoModificacion === "centro_trabajo"
-                        ? "lugarTrabajo"
-                        : cambio.tipoModificacion
-                    ] || ""
-                  }
+                  placeholder="Nuevo departamento"
+                  value={cambio.valoresNuevos.departamento || ""}
                   onChange={(e) =>
                     onUpdate({
-                      valoresNuevos: {
-                        [cambio.tipoModificacion === "centro_trabajo"
-                          ? "lugarTrabajo"
-                          : cambio.tipoModificacion]: e.target.value,
-                      },
+                      valoresNuevos: { departamento: e.target.value },
                     })
                   }
                   data-testid={`input-valor-${cambio.id}`}
@@ -733,6 +815,132 @@ function CambioCard({
           </>
         )}
       </CardContent>
+
+      <Dialog open={showNewPuestoDialog} onOpenChange={setShowNewPuestoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear Nuevo Puesto</DialogTitle>
+            <DialogDescription>
+              Ingresa el nombre del nuevo puesto
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPuestoName">Nombre del Puesto</Label>
+              <Input
+                id="newPuestoName"
+                value={newPuestoName}
+                onChange={(e) => setNewPuestoName(e.target.value)}
+                placeholder="ej: Desarrollador Senior"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowNewPuestoDialog(false);
+                  setNewPuestoName("");
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  if (!newPuestoName.trim() || !empleado) return;
+                  try {
+                    await apiRequest("POST", "/api/puestos", {
+                      nombrePuesto: newPuestoName.trim(),
+                      clavePuesto: `PUESTO-${Date.now()}`,
+                      clienteId: empleado.clienteId,
+                      empresaId: empleado.empresaId,
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["/api/puestos"] });
+                    onUpdate({ valoresNuevos: { puesto: newPuestoName.trim() } });
+                    setShowNewPuestoDialog(false);
+                    setNewPuestoName("");
+                    toast({
+                      title: "Puesto creado",
+                      description: "El nuevo puesto se ha agregado correctamente",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "No se pudo crear el puesto",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Crear Puesto
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showNewCentroDialog} onOpenChange={setShowNewCentroDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear Nuevo Centro de Trabajo</DialogTitle>
+            <DialogDescription>
+              Ingresa el nombre del nuevo centro de trabajo
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="newCentroName">Nombre del Centro</Label>
+              <Input
+                id="newCentroName"
+                value={newCentroName}
+                onChange={(e) => setNewCentroName(e.target.value)}
+                placeholder="ej: Oficina Central CDMX"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowNewCentroDialog(false);
+                  setNewCentroName("");
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  if (!newCentroName.trim() || !empleado) return;
+                  try {
+                    await apiRequest("POST", "/api/centros-trabajo", {
+                      nombre: newCentroName.trim(),
+                      empresaId: empleado.empresaId,
+                    });
+                    queryClient.invalidateQueries({ queryKey: ["/api/centros-trabajo"] });
+                    onUpdate({ valoresNuevos: { lugarTrabajo: newCentroName.trim() } });
+                    setShowNewCentroDialog(false);
+                    setNewCentroName("");
+                    toast({
+                      title: "Centro de trabajo creado",
+                      description: "El nuevo centro de trabajo se ha agregado correctamente",
+                    });
+                  } catch (error: any) {
+                    toast({
+                      title: "Error",
+                      description: error.message || "No se pudo crear el centro de trabajo",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Crear Centro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
