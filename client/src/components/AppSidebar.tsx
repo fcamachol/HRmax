@@ -111,6 +111,11 @@ const organizacionSubItems = [
     url: "/organizacion/centros-trabajo",
     icon: MapPin,
   },
+  {
+    title: "Departamentos",
+    url: "/organizacion/departamentos",
+    icon: Building2,
+  },
 ];
 
 const reclutamientoSubItems = [

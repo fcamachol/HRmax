@@ -1082,6 +1082,34 @@ export const updateTurnoCentroTrabajoSchema = insertTurnoCentroTrabajoSchema.par
 export type TurnoCentroTrabajo = typeof turnosCentroTrabajo.$inferSelect;
 export type InsertTurnoCentroTrabajo = z.infer<typeof insertTurnoCentroTrabajoSchema>;
 
+// Departamentos
+export const departamentos = pgTable("departamentos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre").notNull(),
+  descripcion: text("descripcion"),
+  responsable: varchar("responsable"),
+  telefono: varchar("telefono"),
+  email: varchar("email"),
+  presupuestoAnual: numeric("presupuesto_anual", { precision: 15, scale: 2 }),
+  numeroEmpleados: integer("numero_empleados").default(0),
+  estatus: varchar("estatus").default("activo"),
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export const insertDepartamentoSchema = createInsertSchema(departamentos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updateDepartamentoSchema = insertDepartamentoSchema.partial();
+
+export type Departamento = typeof departamentos.$inferSelect;
+export type InsertDepartamento = z.infer<typeof insertDepartamentoSchema>;
+
 // Asignación de Empleados a Turnos de Centros de Trabajo
 export const empleadosCentrosTrabajo = pgTable("empleados_centros_trabajo", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -902,6 +902,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Departamentos
+  app.post("/api/departamentos", async (req, res) => {
+    try {
+      const { insertDepartamentoSchema } = await import("@shared/schema");
+      const validatedData = insertDepartamentoSchema.parse(req.body);
+      const departamento = await storage.createDepartamento(validatedData);
+      res.json(departamento);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/departamentos", async (req, res) => {
+    try {
+      const { empresaId } = req.query;
+      if (empresaId) {
+        const departamentos = await storage.getDepartamentosByEmpresa(empresaId as string);
+        return res.json(departamentos);
+      }
+      const departamentos = await storage.getDepartamentos();
+      res.json(departamentos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/departamentos/:id", async (req, res) => {
+    try {
+      const departamento = await storage.getDepartamento(req.params.id);
+      if (!departamento) {
+        return res.status(404).json({ message: "Departamento no encontrado" });
+      }
+      res.json(departamento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/departamentos/:id", async (req, res) => {
+    try {
+      const { updateDepartamentoSchema } = await import("@shared/schema");
+      const validatedData = updateDepartamentoSchema.parse(req.body);
+      const departamento = await storage.updateDepartamento(req.params.id, validatedData);
+      res.json(departamento);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/departamentos/:id", async (req, res) => {
+    try {
+      await storage.deleteDepartamento(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Turnos de Centro de Trabajo
   app.post("/api/turnos-centro-trabajo", async (req, res) => {
     try {

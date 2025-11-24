@@ -17,6 +17,7 @@ import Payroll from "@/pages/Payroll";
 import GruposNomina from "@/pages/payroll/GruposNomina";
 import Attendance from "@/pages/Attendance";
 import CentrosTrabajo from "@/pages/CentrosTrabajo";
+import Departamentos from "@/pages/Departamentos";
 import Reports from "@/pages/Reports";
 import Configuration from "@/pages/Configuration";
 import Empresas from "@/pages/Empresas";
@@ -55,6 +56,7 @@ function Router() {
       <Route path="/reloj-checador" component={RelojChecador} />
       <Route path="/organizacion/puestos" component={Puestos} />
       <Route path="/organizacion/centros-trabajo" component={CentrosTrabajo} />
+      <Route path="/organizacion/departamentos" component={Departamentos} />
       <Route path="/reclutamiento/vacantes" component={Vacantes} />
       <Route path="/reclutamiento/candidatos" component={Candidatos} />
       <Route path="/reclutamiento/proceso" component={ProcesoSeleccion} />

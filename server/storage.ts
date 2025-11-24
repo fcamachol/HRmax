@@ -30,6 +30,8 @@ import {
   type InsertCentroTrabajo,
   type TurnoCentroTrabajo,
   type InsertTurnoCentroTrabajo,
+  type Departamento,
+  type InsertDepartamento,
   type EmpleadoCentroTrabajo,
   type InsertEmpleadoCentroTrabajo,
   type HoraExtra,
@@ -123,6 +125,7 @@ import {
   credencialesSistemas,
   centrosTrabajo,
   turnosCentroTrabajo,
+  departamentos,
   empleadosCentrosTrabajo,
   horasExtras,
   attendance,
@@ -266,6 +269,14 @@ export interface IStorage {
   getCentrosTrabajoByEmpresa(empresaId: string): Promise<CentroTrabajo[]>;
   updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo>;
   deleteCentroTrabajo(id: string): Promise<void>;
+  
+  // Departamentos
+  createDepartamento(departamento: InsertDepartamento): Promise<Departamento>;
+  getDepartamento(id: string): Promise<Departamento | undefined>;
+  getDepartamentos(): Promise<Departamento[]>;
+  getDepartamentosByEmpresa(empresaId: string): Promise<Departamento[]>;
+  updateDepartamento(id: string, updates: Partial<InsertDepartamento>): Promise<Departamento>;
+  deleteDepartamento(id: string): Promise<void>;
   
   // Turnos de Centro de Trabajo
   createTurnoCentroTrabajo(turno: InsertTurnoCentroTrabajo): Promise<TurnoCentroTrabajo>;
@@ -1397,6 +1408,53 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(centrosTrabajo)
       .where(eq(centrosTrabajo.id, id));
+  }
+
+  // Departamentos
+  async createDepartamento(departamento: InsertDepartamento): Promise<Departamento> {
+    const [newDepartamento] = await db
+      .insert(departamentos)
+      .values(departamento)
+      .returning();
+    return newDepartamento;
+  }
+
+  async getDepartamento(id: string): Promise<Departamento | undefined> {
+    const [departamento] = await db
+      .select()
+      .from(departamentos)
+      .where(eq(departamentos.id, id));
+    return departamento || undefined;
+  }
+
+  async getDepartamentos(): Promise<Departamento[]> {
+    return await db
+      .select()
+      .from(departamentos)
+      .orderBy(desc(departamentos.createdAt));
+  }
+
+  async getDepartamentosByEmpresa(empresaId: string): Promise<Departamento[]> {
+    return await db
+      .select()
+      .from(departamentos)
+      .where(eq(departamentos.empresaId, empresaId))
+      .orderBy(desc(departamentos.createdAt));
+  }
+
+  async updateDepartamento(id: string, updates: Partial<InsertDepartamento>): Promise<Departamento> {
+    const [updated] = await db
+      .update(departamentos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(departamentos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDepartamento(id: string): Promise<void> {
+    await db
+      .delete(departamentos)
+      .where(eq(departamentos.id, id));
   }
 
   // Turnos de Centro de Trabajo
