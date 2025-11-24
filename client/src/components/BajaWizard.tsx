@@ -322,7 +322,7 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     }
 
     try {
-      return calcularFiniquito({
+      const calculoBase = calcularFiniquito({
         salarioDiario: salario,
         fechaInicio: formData.empleadoFechaInicio,
         fechaTerminacion: formData.endDate,
@@ -330,11 +330,70 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
         diasAguinaldoPagados: formData.diasAguinaldoPagados ? parseFloat(formData.diasAguinaldoPagados) : 0,
         diasVacacionesTomadas: formData.diasVacacionesTomadas ? parseFloat(formData.diasVacacionesTomadas) : 0,
       });
+
+      // Filtrar conceptos adicionales y descuentos válidos
+      const conceptosAdicionalesValidos = formData.conceptosAdicionales.filter(
+        c => c.description.trim() && c.amount && !isNaN(parseFloat(c.amount))
+      );
+      const conceptosDescuentosValidos = formData.conceptosDescuentos.filter(
+        c => c.description.trim() && c.amount && !isNaN(parseFloat(c.amount))
+      );
+
+      // Agregar conceptos adicionales al array de conceptos
+      const conceptosExtendidos = [
+        ...calculoBase.conceptos,
+        ...conceptosAdicionalesValidos.map(c => ({
+          concepto: c.description,
+          descripcion: "Concepto adicional",
+          calculo: `Monto agregado manualmente`,
+          monto: parseFloat(c.amount)
+        })),
+        ...conceptosDescuentosValidos.map(c => ({
+          concepto: c.description,
+          descripcion: "Descuento",
+          calculo: `Monto descontado manualmente`,
+          monto: -parseFloat(c.amount)
+        }))
+      ];
+
+      // Calcular nuevo total sumando todos los conceptos (base + adicionales tienen monto positivo, descuentos tienen monto negativo)
+      const nuevoTotal = conceptosExtendidos.reduce((sum, c) => sum + c.monto, 0);
+
+      // Recalcular subtotales basados en montos positivos y negativos
+      const nuevoSubtotalPercepciones = conceptosExtendidos
+        .filter(c => c.monto > 0)
+        .reduce((sum, c) => sum + c.monto, 0);
+      
+      const nuevoSubtotalDeducciones = Math.abs(
+        conceptosExtendidos
+          .filter(c => c.monto < 0)
+          .reduce((sum, c) => sum + c.monto, 0)
+      );
+
+      return {
+        ...calculoBase,
+        conceptos: conceptosExtendidos,
+        desglose: {
+          subtotalPercepciones: nuevoSubtotalPercepciones,
+          subtotalDeducciones: nuevoSubtotalDeducciones,
+          netoAPagar: nuevoTotal,
+        },
+        total: nuevoTotal
+      };
     } catch (error) {
       console.error("Error al calcular finiquito:", error);
       return null;
     }
-  }, [formData.salarioDiario, formData.empleadoFechaInicio, formData.endDate, formData.bajaType, formData.diasAguinaldoPagados, formData.diasVacacionesTomadas]);
+  }, [
+    formData.salarioDiario, 
+    formData.empleadoFechaInicio, 
+    formData.endDate, 
+    formData.bajaType, 
+    formData.diasAguinaldoPagados, 
+    formData.diasVacacionesTomadas,
+    formData.conceptosAdicionales,
+    formData.conceptosDescuentos
+  ]);
 
   const handleAprobarCalculo = () => {
     if (finiquitoCalculado) {
