@@ -732,11 +732,12 @@ export const hiringProcess = pgTable("hiring_process", {
   departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }), // Departamento (FK)
   proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto
   startDate: date("start_date").notNull(), // Fecha propuesta de inicio
-  endDate: date("end_date"), // Fecha de fin (para contratos temporales o por obra determinada)
+  endDate: date("end_date"), // Fecha de fin (para contratos temporales, por obra o prueba)
   stage: text("stage").notNull().default("oferta"), // Etapa actual del proceso
   status: text("status").notNull().default("activo"), // 'activo', 'cancelado', 'completado'
   contractType: text("contract_type").notNull(), // Tipo de contrato
   contractDuration: text("contract_duration"), // Duración del contrato (para contratos temporales o por obra)
+  diasPrueba: integer("dias_prueba"), // Días de prueba (30, 60, 90)
   // Datos personales del candidato
   email: text("email"),
   phone: text("phone"),

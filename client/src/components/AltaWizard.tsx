@@ -14,7 +14,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { HiringProcess } from "@shared/schema";
 import { extraerDatosCURP, validarFormatoCURP, obtenerNombreEstado } from "@shared/curpUtils";
-import { ESTADOS_MEXICO, BANCOS_MEXICO, FORMAS_PAGO, TIPOS_CONTRATO, PARENTESCOS } from "@shared/catalogos";
+import { ESTADOS_MEXICO, BANCOS_MEXICO, FORMAS_PAGO, TIPOS_CONTRATO, PARENTESCOS, DIAS_PRUEBA } from "@shared/catalogos";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { 
   CheckCircle2, 
@@ -67,7 +67,8 @@ interface AltaFormData {
   proposedSalary: string;
   contractType: string;
   contractDuration: string;
-  endDate: string; // Fecha de fin para contratos temporales o por obra determinada
+  diasPrueba: string; // Días de prueba (30, 60, 90)
+  endDate: string; // Fecha de fin para contratos temporales, por obra o prueba
   startDate: string;
   
   // Paso 3: Datos de Domicilio
@@ -142,6 +143,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     proposedSalary: "",
     contractType: "planta",
     contractDuration: "",
+    diasPrueba: "",
     endDate: "",
     startDate: new Date().toISOString().split('T')[0],
     
@@ -189,6 +191,21 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     queryKey: ["/api/organizacion/centros-trabajo"],
   });
 
+  // Efecto para recalcular la fecha de fin cuando cambia la fecha de inicio o los días de prueba
+  useEffect(() => {
+    if (formData.contractType === "prueba" && formData.diasPrueba && formData.startDate) {
+      const startDate = new Date(formData.startDate);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + parseInt(formData.diasPrueba));
+      const endDateStr = endDate.toISOString().split('T')[0];
+      
+      // Solo actualizar si la fecha calculada es diferente de la actual
+      if (endDateStr !== formData.endDate) {
+        setFormData(prev => ({ ...prev, endDate: endDateStr }));
+      }
+    }
+  }, [formData.startDate, formData.diasPrueba, formData.contractType, formData.endDate]);
+
   useEffect(() => {
     if (open && existingProcess) {
       // Cargar datos del proceso existente
@@ -209,6 +226,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         proposedSalary: existingProcess.proposedSalary || "",
         contractType: existingProcess.contractType || "planta",
         contractDuration: existingProcess.contractDuration || "",
+        diasPrueba: (existingProcess as any).diasPrueba || "",
         endDate: (existingProcess as any).endDate || "",
         startDate: existingProcess.startDate || new Date().toISOString().split('T')[0],
         calle: (existingProcess as any).calle || "",
@@ -254,6 +272,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       proposedSalary: "",
       contractType: "planta",
       contractDuration: "",
+      diasPrueba: "",
       endDate: "",
       startDate: new Date().toISOString().split('T')[0],
       calle: "",
@@ -323,6 +342,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         endDate: data.endDate || null,
         contractType: data.contractType,
         contractDuration: data.contractDuration,
+        diasPrueba: data.diasPrueba || null,
         email: data.email,
         phone: data.phone,
         rfc: data.rfc,
@@ -426,11 +446,20 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         });
         return;
       }
-      // Validar fecha de fin si el contrato es temporal o por obra
-      if ((formData.contractType === "temporal" || formData.contractType === "por_obra") && !formData.endDate) {
+      // Validar días de prueba si el contrato es de prueba
+      if (formData.contractType === "prueba" && !formData.diasPrueba) {
         toast({
           title: "Campo requerido",
-          description: "La fecha de fin es obligatoria para contratos temporales o por obra determinada",
+          description: "Debes seleccionar los días de prueba",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Validar fecha de fin si el contrato es temporal, por obra o prueba
+      if ((formData.contractType === "temporal" || formData.contractType === "por_obra" || formData.contractType === "prueba") && !formData.endDate) {
+        toast({
+          title: "Campo requerido",
+          description: "La fecha de fin es obligatoria para este tipo de contrato",
           variant: "destructive",
         });
         return;
@@ -804,7 +833,16 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 </Label>
                 <Select 
                   value={formData.contractType} 
-                  onValueChange={(value) => setFormData({ ...formData, contractType: value })}
+                  onValueChange={(value) => {
+                    // Resetear campos relacionados al cambiar tipo de contrato
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      contractType: value,
+                      // Siempre resetear diasPrueba y endDate al cambiar tipo
+                      diasPrueba: "",
+                      endDate: ""
+                    }));
+                  }}
                 >
                   <SelectTrigger data-testid="select-contract-type">
                     <SelectValue placeholder="Selecciona tipo de contrato" />
@@ -818,6 +856,41 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   </SelectContent>
                 </Select>
               </div>
+              
+              {formData.contractType === "prueba" && (
+                <div>
+                  <Label htmlFor="diasPrueba" data-testid="label-dias-prueba">
+                    Días de Prueba <span className="text-destructive">*</span>
+                  </Label>
+                  <Select 
+                    value={formData.diasPrueba} 
+                    onValueChange={(value) => {
+                      // Calcular fecha de fin automáticamente
+                      const startDate = new Date(formData.startDate);
+                      const endDate = new Date(startDate);
+                      endDate.setDate(startDate.getDate() + parseInt(value));
+                      const endDateStr = endDate.toISOString().split('T')[0];
+                      setFormData({ ...formData, diasPrueba: value, endDate: endDateStr });
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-dias-prueba">
+                      <SelectValue placeholder="Selecciona días de prueba" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DIAS_PRUEBA.map((dias) => (
+                        <SelectItem key={dias.value} value={dias.value}>
+                          {dias.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {formData.endDate && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Fecha de fin: {formData.endDate}
+                    </p>
+                  )}
+                </div>
+              )}
               
               {(formData.contractType === "temporal" || formData.contractType === "por_obra") && (
                 <div>
@@ -1257,7 +1330,15 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
                     <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
                   </div>
-                  {(formData.contractType === "temporal" || formData.contractType === "por_obra") && formData.endDate && (
+                  {formData.contractType === "prueba" && formData.diasPrueba && (
+                    <div>
+                      <h4 className="font-medium text-sm text-muted-foreground">Días de Prueba</h4>
+                      <p className="text-base" data-testid="text-summary-dias-prueba">
+                        {DIAS_PRUEBA.find(d => d.value === formData.diasPrueba)?.label || formData.diasPrueba + " días"}
+                      </p>
+                    </div>
+                  )}
+                  {(formData.contractType === "temporal" || formData.contractType === "por_obra" || formData.contractType === "prueba") && formData.endDate && (
                     <div>
                       <h4 className="font-medium text-sm text-muted-foreground">Fecha de Fin</h4>
                       <p className="text-base" data-testid="text-summary-end-date">{formData.endDate}</p>

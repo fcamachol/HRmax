@@ -90,8 +90,15 @@ export const TIPOS_CONTRATO = [
   { value: 'planta', label: 'Planta' },
   { value: 'temporal', label: 'Temporal' },
   { value: 'por_obra', label: 'Por Obra Determinada' },
+  { value: 'prueba', label: 'Prueba' },
   { value: 'honorarios', label: 'Honorarios' },
   { value: 'practicante', label: 'Practicante' },
+];
+
+export const DIAS_PRUEBA = [
+  { value: '30', label: '30 días' },
+  { value: '60', label: '60 días' },
+  { value: '90', label: '90 días' },
 ];
 
 export const PARENTESCOS = [
