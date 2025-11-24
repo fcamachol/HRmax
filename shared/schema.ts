@@ -769,6 +769,8 @@ export const hiringProcess = pgTable("hiring_process", {
   // Centro de trabajo
   centroTrabajo: varchar("centro_trabajo"), // Campo legacy - usar centroTrabajoId
   centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }), // Centro de trabajo (FK)
+  // Registro patronal
+  registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "set null" }), // Registro patronal (FK)
   // Datos de la oferta
   offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
   offerAcceptedDate: date("offer_accepted_date"),

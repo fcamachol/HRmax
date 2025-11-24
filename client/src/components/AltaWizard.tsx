@@ -61,6 +61,8 @@ interface AltaFormData {
   lugarNacimiento: string;
   
   // Paso 2: Datos de la Oferta
+  empresaId: string; // ID de la empresa (FK)
+  registroPatronalId: string; // ID del registro patronal (FK)
   puestoId: string; // ID del puesto (FK)
   departamentoId: string; // ID del departamento (FK)
   centroTrabajoId: string; // ID del centro de trabajo (FK)
@@ -137,6 +139,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     lugarNacimiento: "",
     
     // Paso 2
+    empresaId: "",
+    registroPatronalId: "",
     puestoId: "",
     departamentoId: "",
     centroTrabajoId: "",
@@ -191,6 +195,17 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     queryKey: ["/api/centros-trabajo"],
   });
 
+  // Query para obtener empresas del cliente
+  const { data: empresas } = useQuery<Array<{id: string, razonSocial: string}>>({
+    queryKey: ["/api/empresas"],
+  });
+
+  // Query para obtener registros patronales (filtrados por empresaId)
+  const { data: registrosPatronales } = useQuery<Array<{id: string, numeroRegistroPatronal: string, nombreCentroTrabajo: string}>>({
+    queryKey: [`/api/registros-patronales?empresaId=${formData.empresaId}`],
+    enabled: !!formData.empresaId,
+  });
+
   // Efecto para recalcular la fecha de fin cuando cambia la fecha de inicio o los días de prueba
   useEffect(() => {
     if (formData.contractType === "prueba" && formData.diasPrueba && formData.startDate) {
@@ -220,6 +235,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         genero: existingProcess.genero || "",
         fechaNacimiento: existingProcess.fechaNacimiento || "",
         lugarNacimiento: existingProcess.lugarNacimiento || "",
+        empresaId: existingProcess.empresaId || "",
+        registroPatronalId: (existingProcess as any).registroPatronalId || "",
         puestoId: (existingProcess as any).puestoId || "",
         departamentoId: (existingProcess as any).departamentoId || "",
         centroTrabajoId: (existingProcess as any).centroTrabajoId || "",
@@ -266,6 +283,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       genero: "",
       fechaNacimiento: "",
       lugarNacimiento: "",
+      empresaId: "",
+      registroPatronalId: "",
       puestoId: "",
       departamentoId: "",
       centroTrabajoId: "",
@@ -333,7 +352,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     mutationFn: async (data: AltaFormData) => {
       const payload = {
         clienteId: "209b253d-42ac-4ab6-8e1f-f6bfa0f801d3",
-        empresaId: "36613a3d-9b89-40bc-bc2b-9adb23943130",
+        empresaId: data.empresaId,
         nombre: data.nombre,
         apellidoPaterno: data.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno,
@@ -373,9 +392,10 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         clabe: data.clabe,
         sucursal: data.sucursal,
         formaPago: data.formaPago,
-        // Centro trabajo
+        // Centro trabajo y registro patronal
         centroTrabajo: data.centroTrabajoId || null,
         centroTrabajoId: data.centroTrabajoId,
+        registroPatronalId: data.registroPatronalId || null,
         notes: data.notes,
         documentsChecklist: data.documentsChecklist,
       };
@@ -736,6 +756,51 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         // Paso 2: Datos de la Oferta
         return (
           <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="empresa" data-testid="label-empresa">
+                  Empresa <span className="text-destructive">*</span>
+                </Label>
+                <Select 
+                  value={formData.empresaId} 
+                  onValueChange={(value) => setFormData({ ...formData, empresaId: value, registroPatronalId: "" })}
+                >
+                  <SelectTrigger data-testid="select-empresa">
+                    <SelectValue placeholder="Selecciona una empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas && Array.isArray(empresas) && empresas.map((empresa) => (
+                      <SelectItem key={empresa.id} value={empresa.id}>
+                        {empresa.razonSocial}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="registroPatronal" data-testid="label-registro-patronal">
+                  Registro Patronal
+                </Label>
+                <Select 
+                  value={formData.registroPatronalId} 
+                  onValueChange={(value) => setFormData({ ...formData, registroPatronalId: value })}
+                  disabled={!formData.empresaId}
+                >
+                  <SelectTrigger data-testid="select-registro-patronal">
+                    <SelectValue placeholder={formData.empresaId ? "Selecciona un registro patronal" : "Primero selecciona una empresa"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {registrosPatronales && Array.isArray(registrosPatronales) && registrosPatronales.map((registro) => (
+                      <SelectItem key={registro.id} value={registro.id}>
+                        {registro.numeroRegistroPatronal} - {registro.nombreCentroTrabajo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="position" data-testid="label-position">
