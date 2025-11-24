@@ -236,20 +236,22 @@ export default function Cambios() {
               Nueva Modificación
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
             <DialogHeader>
               <DialogTitle>Registrar Modificación de Personal</DialogTitle>
               <DialogDescription>
                 Registra un cambio en los datos de un empleado
               </DialogDescription>
             </DialogHeader>
-            <ModificacionForm
-              empleados={empleados}
-              puestos={puestos}
-              centrosTrabajo={centrosTrabajo}
-              onSubmit={(data) => createMutation.mutate(data)}
-              isPending={createMutation.isPending}
-            />
+            <div className="overflow-y-auto flex-1">
+              <ModificacionForm
+                empleados={empleados}
+                puestos={puestos}
+                centrosTrabajo={centrosTrabajo}
+                onSubmit={(data) => createMutation.mutate(data)}
+                isPending={createMutation.isPending}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       </div>
@@ -548,7 +550,7 @@ function ModificacionForm({
           </Button>
         </div>
 
-        <div className="max-h-[500px] overflow-y-auto space-y-3 pr-1">
+        <div className="space-y-3">
           {formData.cambios.length === 0 && (
             <div className="p-4 border border-dashed rounded-md text-center text-sm text-muted-foreground">
               Haz clic en "Agregar Cambio" para incluir modificaciones
@@ -569,7 +571,7 @@ function ModificacionForm({
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-4 border-t">
+      <div className="flex justify-end gap-2 pt-4 border-t sticky bottom-0 bg-background">
         <Button
           type="submit"
           disabled={isPending || formData.cambios.length === 0}
