@@ -86,9 +86,9 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
     defaultValues: defaultValues || {
       nombrePuesto: "",
       clavePuesto: "",
-      departamentoId: "",
+      departamentoId: undefined,
       area: "",
-      centroTrabajoId: "",
+      centroTrabajoId: undefined,
       nivelJerarquico: "",
       tipoPuesto: "",
       reportaA: "",
@@ -323,15 +323,14 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       name="departamentoId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Departamento</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormLabel>Departamento (opcional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || undefined}>
                             <FormControl>
                               <SelectTrigger data-testid="select-departamento">
-                                <SelectValue placeholder="Seleccionar departamento (opcional)" />
+                                <SelectValue placeholder="Sin departamento" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Sin departamento</SelectItem>
                               {departamentos.map((dept) => (
                                 <SelectItem key={dept.id} value={dept.id}>
                                   {dept.nombre}
@@ -363,15 +362,14 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
                       name="centroTrabajoId"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Centro de Trabajo</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <FormLabel>Centro de Trabajo (opcional)</FormLabel>
+                          <Select onValueChange={field.onChange} value={field.value || undefined}>
                             <FormControl>
                               <SelectTrigger data-testid="select-centro-trabajo">
-                                <SelectValue placeholder="Seleccionar centro de trabajo (opcional)" />
+                                <SelectValue placeholder="Sin centro de trabajo" />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value="">Sin centro de trabajo</SelectItem>
                               {centrosTrabajo.map((centro) => (
                                 <SelectItem key={centro.id} value={centro.id}>
                                   {centro.nombre}
