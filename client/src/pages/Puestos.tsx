@@ -99,7 +99,6 @@ export default function Puestos() {
       ? true
       : puesto.nombrePuesto.toLowerCase().includes(search.toLowerCase()) ||
         puesto.clavePuesto.toLowerCase().includes(search.toLowerCase()) ||
-        puesto.departamento?.toLowerCase().includes(search.toLowerCase()) ||
         puesto.area?.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -121,9 +120,9 @@ export default function Puestos() {
     return {
       nombrePuesto: puesto.nombrePuesto,
       clavePuesto: puesto.clavePuesto,
-      departamento: puesto.departamento,
+      departamentoId: puesto.departamentoId,
       area: puesto.area,
-      ubicacion: puesto.ubicacion,
+      centroTrabajoId: puesto.centroTrabajoId,
       nivelJerarquico: puesto.nivelJerarquico,
       tipoPuesto: puesto.tipoPuesto,
       reportaA: puesto.reportaA,
@@ -135,7 +134,7 @@ export default function Puestos() {
       relaciones: puesto.relaciones as any,
       formacionAcademica: puesto.formacionAcademica as any,
       experienciaLaboral: puesto.experienciaLaboral as any,
-      conocimientosTecnicos: puesto.conocimientosTecnicos as string[],
+      conocimientosTecnicos: puesto.conocimientosTecnicos as any,
       competenciasConductuales: puesto.competenciasConductuales as string[],
       idiomas: puesto.idiomas as any,
       certificaciones: puesto.certificaciones as string[],
@@ -285,16 +284,7 @@ export default function Puestos() {
                     </TableCell>
                     <TableCell>{puesto.nombrePuesto}</TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
-                        {puesto.area && (
-                          <span className="text-sm">{puesto.area}</span>
-                        )}
-                        {puesto.departamento && (
-                          <span className="text-sm text-muted-foreground">
-                            {puesto.departamento}
-                          </span>
-                        )}
-                      </div>
+                      {puesto.area || "No especificado"}
                     </TableCell>
                     <TableCell>
                       {puesto.nivelJerarquico || "No especificado"}
