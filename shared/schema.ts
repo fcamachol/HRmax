@@ -95,6 +95,64 @@ export const employees = pgTable("employees", {
   clienteEmpresaIdx: index("employees_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
+// ============================================================================
+// MODIFICACIONES DE PERSONAL - Historial de cambios en empleados
+// ============================================================================
+
+export const tiposModificacion = ["salario", "puesto", "centro_trabajo", "departamento", "jefe_directo", "otro"] as const;
+export type TipoModificacion = typeof tiposModificacion[number];
+
+export const modificacionesPersonal = pgTable("modificaciones_personal", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Tipo y fecha de la modificación
+  tipoModificacion: varchar("tipo_modificacion", { length: 50 }).notNull(), // salario, puesto, centro_trabajo, departamento, jefe_directo, otro
+  fechaEfectiva: date("fecha_efectiva").notNull(), // Fecha en que el cambio entra en vigor
+  
+  // Valores anteriores (JSON para flexibilidad)
+  valoresAnteriores: jsonb("valores_anteriores").notNull(),
+  
+  // Valores nuevos (JSON para flexibilidad)
+  valoresNuevos: jsonb("valores_nuevos").notNull(),
+  
+  // Motivo y justificación
+  motivo: text("motivo").notNull(), // promocion, ajuste_salarial, reestructura, transferencia, etc.
+  justificacion: text("justificacion"), // Detalles adicionales del cambio
+  
+  // Documentos de soporte
+  documentoUrl: varchar("documento_url", { length: 500 }), // URL del documento en object storage
+  
+  // Aprobación
+  aprobadoPor: varchar("aprobado_por"), // ID del usuario que aprobó
+  fechaAprobacion: timestamp("fecha_aprobacion"),
+  
+  // Estado de la modificación
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"), // pendiente, aprobada, rechazada, aplicada
+  notasRechazo: text("notas_rechazo"),
+  
+  // Auditoría
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"), // ID del usuario que creó la modificación
+}, (table) => ({
+  clienteEmpresaIdx: index("modificaciones_personal_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoIdx: index("modificaciones_personal_empleado_idx").on(table.empleadoId),
+  tipoIdx: index("modificaciones_personal_tipo_idx").on(table.tipoModificacion),
+  fechaEfectivaIdx: index("modificaciones_personal_fecha_efectiva_idx").on(table.fechaEfectiva),
+  estatusIdx: index("modificaciones_personal_estatus_idx").on(table.estatus),
+}));
+
+export type ModificacionPersonal = typeof modificacionesPersonal.$inferSelect;
+export const insertModificacionPersonalSchema = createInsertSchema(modificacionesPersonal).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertModificacionPersonal = z.infer<typeof insertModificacionPersonalSchema>;
+
 export const departments = pgTable("departments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
