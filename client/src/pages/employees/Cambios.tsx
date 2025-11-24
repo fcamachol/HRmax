@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RefreshCw, Plus, Check, X, Play, Filter } from "lucide-react";
+import { RefreshCw, Plus, Check, X, Play, Filter, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -52,14 +52,24 @@ export default function Cambios() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: any) => {
+    mutationFn: async (data: any | any[]) => {
+      // Si es un array, crear múltiples modificaciones
+      if (Array.isArray(data)) {
+        return Promise.all(
+          data.map((mod) => apiRequest("POST", "/api/modificaciones-personal", mod))
+        );
+      }
+      // Si es un solo objeto, crear una modificación
       return apiRequest("POST", "/api/modificaciones-personal", data);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/modificaciones-personal"] });
+      const count = Array.isArray(variables) ? variables.length : 1;
       toast({
-        title: "Modificación creada",
-        description: "La modificación se ha registrado correctamente",
+        title: count > 1 ? "Modificaciones creadas" : "Modificación creada",
+        description: count > 1
+          ? `Se han registrado ${count} modificaciones correctamente`
+          : "La modificación se ha registrado correctamente",
       });
       setIsDialogOpen(false);
     },
@@ -338,6 +348,13 @@ export default function Cambios() {
   );
 }
 
+type Cambio = {
+  id: string;
+  tipoModificacion: string;
+  valoresNuevos: Record<string, any>;
+  incluyeCambioSalario?: boolean;
+};
+
 function ModificacionForm({
   empleados,
   onSubmit,
@@ -349,79 +366,104 @@ function ModificacionForm({
 }) {
   const [formData, setFormData] = useState<{
     empleadoId: string;
-    tipoModificacion: string;
     fechaEfectiva: string;
     motivo: string;
     justificacion: string;
-    valoresAnteriores: Record<string, any>;
-    valoresNuevos: Record<string, any>;
-    incluyeCambioSalario?: boolean;
+    cambios: Cambio[];
   }>({
     empleadoId: "",
-    tipoModificacion: "",
     fechaEfectiva: format(new Date(), "yyyy-MM-dd"),
     motivo: "",
     justificacion: "",
-    valoresAnteriores: {},
-    valoresNuevos: {},
-    incluyeCambioSalario: false,
+    cambios: [],
   });
+
+  const agregarCambio = () => {
+    const nuevoCambio: Cambio = {
+      id: `cambio-${Date.now()}`,
+      tipoModificacion: "",
+      valoresNuevos: {},
+      incluyeCambioSalario: false,
+    };
+    setFormData({
+      ...formData,
+      cambios: [...formData.cambios, nuevoCambio],
+    });
+  };
+
+  const eliminarCambio = (id: string) => {
+    setFormData({
+      ...formData,
+      cambios: formData.cambios.filter((c) => c.id !== id),
+    });
+  };
+
+  const actualizarCambio = (id: string, updates: Partial<Cambio>) => {
+    setFormData({
+      ...formData,
+      cambios: formData.cambios.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    });
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Get employee data for current values
     const empleado = empleados.find((e) => e.id === formData.empleadoId);
     if (!empleado) return;
+    if (formData.cambios.length === 0) return;
 
-    // Build valores anteriores and nuevos based on tipo
-    let valoresAnteriores: any = {};
-    let valoresNuevos: any = {};
+    // Crear una modificación por cada cambio
+    const modificaciones = formData.cambios.map((cambio) => {
+      let valoresAnteriores: any = {};
+      let valoresNuevos: any = {};
 
-    switch (formData.tipoModificacion) {
-      case "salario":
-        valoresAnteriores = { salarioBrutoMensual: empleado.salarioBrutoMensual };
-        valoresNuevos = { salarioBrutoMensual: formData.valoresNuevos.salarioBrutoMensual };
-        break;
-      case "puesto":
-        valoresAnteriores = { puesto: empleado.puesto };
-        valoresNuevos = { puesto: formData.valoresNuevos.puesto };
-        // Si se incluye cambio de salario opcional
-        if (formData.incluyeCambioSalario && formData.valoresNuevos.salarioBrutoMensual) {
-          valoresAnteriores.salarioBrutoMensual = empleado.salarioBrutoMensual;
-          valoresNuevos.salarioBrutoMensual = formData.valoresNuevos.salarioBrutoMensual;
-        }
-        break;
-      case "centro_trabajo":
-        valoresAnteriores = { lugarTrabajo: empleado.lugarTrabajo };
-        valoresNuevos = { lugarTrabajo: formData.valoresNuevos.lugarTrabajo };
-        break;
-      case "departamento":
-        valoresAnteriores = { departamento: empleado.departamento };
-        valoresNuevos = { departamento: formData.valoresNuevos.departamento };
-        break;
-    }
+      switch (cambio.tipoModificacion) {
+        case "salario":
+          valoresAnteriores = { salarioBrutoMensual: empleado.salarioBrutoMensual };
+          valoresNuevos = { salarioBrutoMensual: cambio.valoresNuevos.salarioBrutoMensual };
+          break;
+        case "puesto":
+          valoresAnteriores = { puesto: empleado.puesto };
+          valoresNuevos = { puesto: cambio.valoresNuevos.puesto };
+          if (cambio.incluyeCambioSalario && cambio.valoresNuevos.salarioBrutoMensual) {
+            valoresAnteriores.salarioBrutoMensual = empleado.salarioBrutoMensual;
+            valoresNuevos.salarioBrutoMensual = cambio.valoresNuevos.salarioBrutoMensual;
+          }
+          break;
+        case "centro_trabajo":
+          valoresAnteriores = { lugarTrabajo: empleado.lugarTrabajo };
+          valoresNuevos = { lugarTrabajo: cambio.valoresNuevos.lugarTrabajo };
+          break;
+        case "departamento":
+          valoresAnteriores = { departamento: empleado.departamento };
+          valoresNuevos = { departamento: cambio.valoresNuevos.departamento };
+          break;
+      }
 
-    const payload = {
-      empleadoId: formData.empleadoId,
-      tipoModificacion: formData.tipoModificacion,
-      fechaEfectiva: formData.fechaEfectiva,
-      motivo: formData.motivo,
-      justificacion: formData.justificacion,
-      valoresAnteriores,
-      valoresNuevos,
-      clienteId: empleado.clienteId,
-      empresaId: empleado.empresaId,
-      estatus: "pendiente",
-    };
+      return {
+        empleadoId: formData.empleadoId,
+        tipoModificacion: cambio.tipoModificacion,
+        fechaEfectiva: formData.fechaEfectiva,
+        motivo: formData.motivo,
+        justificacion: formData.justificacion,
+        valoresAnteriores,
+        valoresNuevos,
+        clienteId: empleado.clienteId,
+        empresaId: empleado.empresaId,
+        estatus: "pendiente",
+      };
+    });
 
-    onSubmit(payload);
+    // Enviar todas las modificaciones
+    onSubmit(modificaciones);
   };
 
   const selectedEmployee = empleados.find((e) => e.id === formData.empleadoId);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="empleadoId">Empleado</Label>
         <Select
@@ -443,185 +485,252 @@ function ModificacionForm({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="tipoModificacion">Tipo de Modificación</Label>
-        <Select
-          value={formData.tipoModificacion}
-          onValueChange={(value) =>
-            setFormData({ ...formData, tipoModificacion: value })
-          }
-        >
-          <SelectTrigger data-testid="select-tipo">
-            <SelectValue placeholder="Seleccionar tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="salario">Cambio de Salario</SelectItem>
-            <SelectItem value="puesto">Cambio de Puesto</SelectItem>
-            <SelectItem value="centro_trabajo">Cambio de Centro de Trabajo</SelectItem>
-            <SelectItem value="departamento">Cambio de Departamento</SelectItem>
-            <SelectItem value="jefe_directo">Cambio de Jefe Directo</SelectItem>
-            <SelectItem value="otro">Otro</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="fechaEfectiva">Fecha Efectiva</Label>
-        <Input
-          id="fechaEfectiva"
-          type="date"
-          value={formData.fechaEfectiva}
-          onChange={(e) =>
-            setFormData({ ...formData, fechaEfectiva: e.target.value })
-          }
-          data-testid="input-fecha-efectiva"
-        />
-      </div>
-
-      {selectedEmployee && formData.tipoModificacion && (
+      <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Valor Actual</Label>
-          <div className="p-3 bg-muted rounded-md text-sm space-y-1">
-            {formData.tipoModificacion === "salario" && (
-              <div>Salario Actual: ${selectedEmployee.salarioBrutoMensual}</div>
-            )}
-            {formData.tipoModificacion === "puesto" && (
-              <>
-                <div>Puesto Actual: {selectedEmployee.puesto}</div>
-                {formData.incluyeCambioSalario && (
-                  <div>Salario Actual: ${selectedEmployee.salarioBrutoMensual}</div>
-                )}
-              </>
-            )}
-            {formData.tipoModificacion === "centro_trabajo" && (
-              <div>Centro Actual: {selectedEmployee.lugarTrabajo || "No especificado"}</div>
-            )}
-            {formData.tipoModificacion === "departamento" && (
-              <div>Departamento Actual: {selectedEmployee.departamento}</div>
-            )}
-          </div>
+          <Label htmlFor="fechaEfectiva">Fecha Efectiva</Label>
+          <Input
+            id="fechaEfectiva"
+            type="date"
+            value={formData.fechaEfectiva}
+            onChange={(e) =>
+              setFormData({ ...formData, fechaEfectiva: e.target.value })
+            }
+            data-testid="input-fecha-efectiva"
+          />
         </div>
-      )}
 
-      {formData.tipoModificacion && (
         <div className="space-y-2">
-          <Label htmlFor="nuevoValor">Nuevo Valor</Label>
-          {formData.tipoModificacion === "salario" ? (
-            <Input
-              id="nuevoValor"
-              type="number"
-              step="0.01"
-              placeholder="Nuevo salario"
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  valoresNuevos: { salarioBrutoMensual: e.target.value },
-                })
-              }
-              data-testid="input-nuevo-valor"
-            />
-          ) : (
-            <Input
-              id="nuevoValor"
-              type="text"
-              placeholder="Nuevo valor"
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  valoresNuevos: {
-                    [formData.tipoModificacion === "centro_trabajo"
-                      ? "lugarTrabajo"
-                      : formData.tipoModificacion]: e.target.value,
-                  },
-                })
-              }
-              data-testid="input-nuevo-valor"
-            />
-          )}
+          <Label htmlFor="motivo">Motivo General</Label>
+          <Input
+            id="motivo"
+            value={formData.motivo}
+            onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
+            placeholder="ej: Promoción, Reubicación"
+            data-testid="input-motivo"
+          />
         </div>
-      )}
-
-      {formData.tipoModificacion === "puesto" && (
-        <>
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="incluyeCambioSalario"
-              checked={formData.incluyeCambioSalario}
-              onCheckedChange={(checked) =>
-                setFormData({
-                  ...formData,
-                  incluyeCambioSalario: checked === true,
-                  valoresNuevos: {
-                    ...formData.valoresNuevos,
-                    ...(checked !== true && { salarioBrutoMensual: undefined }),
-                  },
-                })
-              }
-              data-testid="checkbox-cambio-salario"
-            />
-            <Label
-              htmlFor="incluyeCambioSalario"
-              className="text-sm font-normal cursor-pointer"
-            >
-              Incluir cambio de salario (opcional)
-            </Label>
-          </div>
-
-          {formData.incluyeCambioSalario && (
-            <div className="space-y-2">
-              <Label htmlFor="nuevoSalario">Nuevo Salario</Label>
-              <Input
-                id="nuevoSalario"
-                type="number"
-                step="0.01"
-                placeholder="Nuevo salario bruto mensual"
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    valoresNuevos: {
-                      ...formData.valoresNuevos,
-                      salarioBrutoMensual: e.target.value,
-                    },
-                  })
-                }
-                data-testid="input-nuevo-salario"
-              />
-            </div>
-          )}
-        </>
-      )}
-
-      <div className="space-y-2">
-        <Label htmlFor="motivo">Motivo</Label>
-        <Input
-          id="motivo"
-          value={formData.motivo}
-          onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
-          placeholder="ej: Promoción, Ajuste de mercado"
-          required
-          data-testid="input-motivo"
-        />
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="justificacion">Justificación (opcional)</Label>
+        <Label htmlFor="justificacion">Justificación General (opcional)</Label>
         <Textarea
           id="justificacion"
           value={formData.justificacion}
           onChange={(e) =>
             setFormData({ ...formData, justificacion: e.target.value })
           }
-          placeholder="Detalles adicionales sobre el cambio"
-          rows={3}
+          placeholder="Detalles adicionales sobre los cambios"
+          rows={2}
           data-testid="input-justificacion"
         />
       </div>
 
-      <div className="flex justify-end gap-2 pt-4">
-        <Button type="submit" disabled={isPending} data-testid="button-submit">
-          {isPending ? "Guardando..." : "Registrar Modificación"}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-base">Cambios a Aplicar</Label>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={agregarCambio}
+            data-testid="button-agregar-cambio"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Agregar Cambio
+          </Button>
+        </div>
+
+        {formData.cambios.length === 0 && (
+          <div className="p-4 border border-dashed rounded-md text-center text-sm text-muted-foreground">
+            Haz clic en "Agregar Cambio" para incluir modificaciones
+          </div>
+        )}
+
+        {formData.cambios.map((cambio) => (
+          <CambioCard
+            key={cambio.id}
+            cambio={cambio}
+            empleado={selectedEmployee}
+            onUpdate={(updates) => actualizarCambio(cambio.id, updates)}
+            onRemove={() => eliminarCambio(cambio.id)}
+          />
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button
+          type="submit"
+          disabled={isPending || formData.cambios.length === 0}
+          data-testid="button-submit"
+        >
+          {isPending ? "Guardando..." : `Registrar ${formData.cambios.length} Cambio${formData.cambios.length !== 1 ? 's' : ''}`}
         </Button>
       </div>
     </form>
+  );
+}
+
+function CambioCard({
+  cambio,
+  empleado,
+  onUpdate,
+  onRemove,
+}: {
+  cambio: Cambio;
+  empleado: Employee | undefined;
+  onUpdate: (updates: Partial<Cambio>) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 space-y-2">
+            <Label>Tipo de Cambio</Label>
+            <Select
+              value={cambio.tipoModificacion}
+              onValueChange={(value) =>
+                onUpdate({ tipoModificacion: value, valoresNuevos: {}, incluyeCambioSalario: false })
+              }
+            >
+              <SelectTrigger data-testid={`select-tipo-${cambio.id}`}>
+                <SelectValue placeholder="Seleccionar tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="salario">Cambio de Salario</SelectItem>
+                <SelectItem value="puesto">Cambio de Puesto</SelectItem>
+                <SelectItem value="centro_trabajo">Cambio de Centro de Trabajo</SelectItem>
+                <SelectItem value="departamento">Cambio de Departamento</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onRemove}
+            data-testid={`button-remove-${cambio.id}`}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {empleado && cambio.tipoModificacion && (
+          <>
+            <div className="space-y-2">
+              <Label>Valor Actual</Label>
+              <div className="p-2 bg-muted rounded-md text-sm">
+                {cambio.tipoModificacion === "salario" && (
+                  <div>Salario: ${empleado.salarioBrutoMensual}</div>
+                )}
+                {cambio.tipoModificacion === "puesto" && (
+                  <>
+                    <div>Puesto: {empleado.puesto}</div>
+                    {cambio.incluyeCambioSalario && (
+                      <div className="mt-1">Salario: ${empleado.salarioBrutoMensual}</div>
+                    )}
+                  </>
+                )}
+                {cambio.tipoModificacion === "centro_trabajo" && (
+                  <div>Centro: {empleado.lugarTrabajo || "No especificado"}</div>
+                )}
+                {cambio.tipoModificacion === "departamento" && (
+                  <div>Departamento: {empleado.departamento}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nuevo Valor</Label>
+              {cambio.tipoModificacion === "salario" ? (
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder="Nuevo salario"
+                  value={cambio.valoresNuevos.salarioBrutoMensual || ""}
+                  onChange={(e) =>
+                    onUpdate({
+                      valoresNuevos: { salarioBrutoMensual: e.target.value },
+                    })
+                  }
+                  data-testid={`input-valor-${cambio.id}`}
+                />
+              ) : (
+                <Input
+                  type="text"
+                  placeholder={`Nuevo ${cambio.tipoModificacion === "centro_trabajo" ? "centro de trabajo" : cambio.tipoModificacion}`}
+                  value={
+                    cambio.valoresNuevos[
+                      cambio.tipoModificacion === "centro_trabajo"
+                        ? "lugarTrabajo"
+                        : cambio.tipoModificacion
+                    ] || ""
+                  }
+                  onChange={(e) =>
+                    onUpdate({
+                      valoresNuevos: {
+                        [cambio.tipoModificacion === "centro_trabajo"
+                          ? "lugarTrabajo"
+                          : cambio.tipoModificacion]: e.target.value,
+                      },
+                    })
+                  }
+                  data-testid={`input-valor-${cambio.id}`}
+                />
+              )}
+            </div>
+
+            {cambio.tipoModificacion === "puesto" && (
+              <>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`incluye-salario-${cambio.id}`}
+                    checked={cambio.incluyeCambioSalario}
+                    onCheckedChange={(checked) =>
+                      onUpdate({
+                        incluyeCambioSalario: checked === true,
+                        valoresNuevos: {
+                          ...cambio.valoresNuevos,
+                          ...(checked !== true && { salarioBrutoMensual: undefined }),
+                        },
+                      })
+                    }
+                    data-testid={`checkbox-salario-${cambio.id}`}
+                  />
+                  <Label
+                    htmlFor={`incluye-salario-${cambio.id}`}
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Incluir cambio de salario
+                  </Label>
+                </div>
+
+                {cambio.incluyeCambioSalario && (
+                  <div className="space-y-2">
+                    <Label>Nuevo Salario</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Nuevo salario"
+                      value={cambio.valoresNuevos.salarioBrutoMensual || ""}
+                      onChange={(e) =>
+                        onUpdate({
+                          valoresNuevos: {
+                            ...cambio.valoresNuevos,
+                            salarioBrutoMensual: e.target.value,
+                          },
+                        })
+                      }
+                      data-testid={`input-salario-${cambio.id}`}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
