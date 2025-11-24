@@ -68,25 +68,25 @@ function obtenerDiasAguinaldoAnual(): number {
 
 /**
  * Determina los días de vacaciones según la antigüedad
- * LFT Art. 76: 
- * - 1er año: 12 días
- * - 2do año: 14 días
- * - 3er año: 16 días
- * - 4to año: 18 días
- * - 5to-9no año: 20 días
- * - A partir del 10mo: +2 días cada 5 años
+ * LFT Art. 76 (REFORMADO 2024 - TABLA CORRECTA):
+ * - Primer año de servicio (0-1 año): 12 días
+ * - Segundo año de servicio (1-2 años): 14 días
+ * - Tercer año de servicio (2-3 años): 16 días
+ * - Cuarto año de servicio (3-4 años): 18 días
+ * - Quinto al noveno año (4-9 años): 20 días
+ * - A partir del décimo: +2 días cada 5 años (22, 24, 26...)
  */
 function obtenerDiasVacaciones(años: number): number {
-  if (años < 1) return 12;
-  if (años < 2) return 12;
-  if (años < 3) return 14;
-  if (años < 4) return 16;
-  if (años < 5) return 18;
-  if (años < 10) return 20;
+  if (años < 1) return 12;  // Primer año (0-1 año trabajado)
+  if (años < 2) return 14;  // Segundo año (1-2 años trabajados)
+  if (años < 3) return 16;  // Tercer año (2-3 años trabajados)
+  if (años < 4) return 18;  // Cuarto año (3-4 años trabajados)
+  if (años < 10) return 20; // Quinto al noveno año (4-9 años trabajados)
   
-  // A partir del año 10, se agregan 2 días cada 5 años
-  const añosAdicionales = Math.floor((años - 10) / 5);
-  return 20 + (añosAdicionales * 2);
+  // A partir del décimo año: 20 días base + 2 días cada 5 años después del quinto
+  // Año 10-14: 22 días, Año 15-19: 24 días, etc.
+  const quinqueniosAdicionales = Math.floor((años - 5) / 5);
+  return 20 + (quinqueniosAdicionales * 2);
 }
 
 /**

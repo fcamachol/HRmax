@@ -66,6 +66,11 @@ export const employees = pgTable("employees", {
   diasVacacionesUsados: integer("dias_vacaciones_usados").default(0),
   diasAguinaldoAdicionales: integer("dias_aguinaldo_adicionales").default(0),
   diasVacacionesAdicionales: integer("dias_vacaciones_adicionales").default(0),
+  
+  // NUEVO SISTEMA DE PRESTACIONES Y KARDEX
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id"), // FK a cat_tablas_prestaciones (NULL = usa regla general)
+  saldoVacacionesActual: numeric("saldo_vacaciones_actual", { precision: 10, scale: 2 }).default("0"), // Cache READ-ONLY del saldo (se calcula desde kardex)
+  
   creditoInfonavit: varchar("credito_infonavit"),
   numeroFonacot: varchar("numero_fonacot"),
   otrosCreditos: jsonb("otros_creditos").default(sql`'{}'::jsonb`),
@@ -2126,6 +2131,116 @@ export type InsertEvaluacion = z.infer<typeof insertEvaluacionSchema>;
 
 export type Oferta = typeof ofertas.$inferSelect;
 export type InsertOferta = z.infer<typeof insertOfertaSchema>;
+
+// ============================================================================
+// CATÁLOGO DE TABLAS DE PRESTACIONES (Benefit Tables Catalog)
+// ============================================================================
+// Define cuántos días tocan por año según esquema (Ley, Sindicalizado, Confianza, etc.)
+// Esta es la "Fuente de la Verdad" para prestaciones
+
+export const catTablasPrestaciones = pgTable("cat_tablas_prestaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }), // NULL = Regla General del Sistema
+  clienteId: varchar("cliente_id").references(() => clientes.id, { onDelete: "cascade" }), // Para multi-tenant
+  
+  // Ej: "Ley Federal del Trabajo 2024", "Directivos", "Operativos A", "Sindicalizados"
+  nombreEsquema: varchar("nombre_esquema").notNull(),
+  
+  // La llave maestra: Años cumplidos
+  aniosAntiguedad: integer("anios_antiguedad").notNull(), // 1, 2, 3...
+  
+  // Los Beneficios de ese año
+  diasVacaciones: integer("dias_vacaciones").notNull(), // Ej: 12, 14, 16...
+  diasAguinaldo: integer("dias_aguinaldo").notNull(), // Ej: 15, 20, 30...
+  primaVacacionalPct: numeric("prima_vacacional_pct", { precision: 5, scale: 2 }).notNull(), // Ej: 25.00
+  
+  // El impacto financiero (Factor de Integración para SBC)
+  // Fórmula: 1 + ((dias_aguinaldo + (dias_vacaciones * prima_vac_pct/100)) / 365)
+  factorIntegracion: numeric("factor_integracion", { precision: 10, scale: 6 }), 
+  
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("cat_tablas_prestaciones_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  esquemaAniosIdx: index("cat_tablas_prestaciones_esquema_anios_idx").on(table.nombreEsquema, table.aniosAntiguedad),
+}));
+
+export const insertCatTablasPrestacionesSchema = createInsertSchema(catTablasPrestaciones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  aniosAntiguedad: z.coerce.number().int().min(1),
+  diasVacaciones: z.coerce.number().int().min(6),
+  diasAguinaldo: z.coerce.number().int().min(15),
+  primaVacacionalPct: z.coerce.number().min(25),
+});
+
+export type CatTablaPrestaciones = typeof catTablasPrestaciones.$inferSelect;
+export type InsertCatTablaPrestaciones = z.infer<typeof insertCatTablasPrestacionesSchema>;
+
+// ============================================================================
+// KARDEX DE VACACIONES (Vacation Ledger)
+// ============================================================================
+// Aquí se registran los abonos (aniversarios) y cargos (vacaciones tomadas)
+// Funciona como una "cuenta bancaria" de días de vacaciones
+
+export const tiposMovimientoKardex = ["devengo", "disfrute", "caducidad", "finiquito", "ajuste"] as const;
+export type TipoMovimientoKardex = typeof tiposMovimientoKardex[number];
+
+export const kardexVacaciones = pgTable("kardex_vacaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  
+  // Vital para la caducidad (Los días prescriben a los 18 meses del año correspondiente)
+  anioAntiguedad: integer("anio_antiguedad").notNull(), 
+  
+  // Tipo de movimiento:
+  // 'devengo'   -> Aniversario laboral (Suma días, ej: +12)
+  // 'disfrute'  -> Vacaciones tomadas (Resta días, ej: -3)
+  // 'caducidad' -> Días perdidos por prescripción (Resta días)
+  // 'finiquito' -> Días pagados al terminar relación laboral (Resta días)
+  // 'ajuste'    -> Ajuste manual por corrección (Suma o resta)
+  tipoMovimiento: varchar("tipo_movimiento").notNull(), 
+  
+  // Cantidad: Positivo suma saldo, Negativo resta saldo
+  dias: numeric("dias", { precision: 10, scale: 2 }).notNull(), 
+  
+  // Snapshot del saldo después de este movimiento (para auditoría rápida)
+  saldoDespuesMovimiento: numeric("saldo_despues_movimiento", { precision: 10, scale: 2 }), 
+  
+  // Control Financiero: ¿Ya se pagó la prima de estos días?
+  primaPagada: boolean("prima_pagada").default(false),
+  
+  // Trazabilidad
+  fechaMovimiento: date("fecha_movimiento").notNull().default(sql`CURRENT_DATE`),
+  periodoNominaId: varchar("periodo_nomina_id"), // ¿En qué nómina se reflejó?
+  solicitudVacacionesId: varchar("solicitud_vacaciones_id"), // Relación con solicitud si aplica
+  observaciones: text("observaciones"), // Ej: "Solicitud #505 Semana Santa", "Aniversario año 3"
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"), // Usuario que creó el registro
+}, (table) => ({
+  empleadoIdx: index("kardex_vacaciones_empleado_idx").on(table.empleadoId),
+  empleadoAnioIdx: index("kardex_vacaciones_empleado_anio_idx").on(table.empleadoId, table.anioAntiguedad),
+  clienteEmpresaIdx: index("kardex_vacaciones_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  tipoMovimientoIdx: index("kardex_vacaciones_tipo_movimiento_idx").on(table.tipoMovimiento),
+}));
+
+export const insertKardexVacacionesSchema = createInsertSchema(kardexVacaciones).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  tipoMovimiento: z.enum(tiposMovimientoKardex),
+  anioAntiguedad: z.coerce.number().int().min(1),
+  dias: z.coerce.number(),
+});
+
+export type KardexVacaciones = typeof kardexVacaciones.$inferSelect;
+export type InsertKardexVacaciones = z.infer<typeof insertKardexVacacionesSchema>;
 
 // ============================================================================
 // MÓDULO DE VACACIONES (Vacation Management)

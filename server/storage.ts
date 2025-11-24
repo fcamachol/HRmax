@@ -83,6 +83,10 @@ import {
   type InsertOferta,
   type SolicitudVacaciones,
   type InsertSolicitudVacaciones,
+  type CatTablaPrestaciones,
+  type InsertCatTablaPrestaciones,
+  type KardexVacaciones,
+  type InsertKardexVacaciones,
   type Incapacidad,
   type InsertIncapacidad,
   type SolicitudPermiso,
@@ -153,6 +157,8 @@ import {
   evaluaciones,
   ofertas,
   solicitudesVacaciones,
+  catTablasPrestaciones,
+  kardexVacaciones,
   incapacidades,
   bancosLayouts,
   nominas,
@@ -507,6 +513,25 @@ export interface IStorage {
   getSolicitudesVacacionesByEstatus(estatus: string): Promise<SolicitudVacaciones[]>;
   updateSolicitudVacaciones(id: string, updates: Partial<InsertSolicitudVacaciones>): Promise<SolicitudVacaciones>;
   deleteSolicitudVacaciones(id: string): Promise<void>;
+  
+  // Catálogo de Tablas de Prestaciones
+  createCatTablaPrestaciones(tabla: InsertCatTablaPrestaciones): Promise<CatTablaPrestaciones>;
+  getCatTablaPrestaciones(id: string): Promise<CatTablaPrestaciones | undefined>;
+  getCatTablasPrestaciones(): Promise<CatTablaPrestaciones[]>;
+  getCatTablasPrestacionesByEsquema(nombreEsquema: string): Promise<CatTablaPrestaciones[]>;
+  getCatTablasPrestacionesByEmpresa(empresaId: string): Promise<CatTablaPrestaciones[]>;
+  getCatTablaPrestacionesByAnios(nombreEsquema: string, anios: number): Promise<CatTablaPrestaciones | undefined>;
+  updateCatTablaPrestaciones(id: string, updates: Partial<InsertCatTablaPrestaciones>): Promise<CatTablaPrestaciones>;
+  deleteCatTablaPrestaciones(id: string): Promise<void>;
+  
+  // Kardex de Vacaciones
+  createKardexVacaciones(kardex: InsertKardexVacaciones): Promise<KardexVacaciones>;
+  getKardexVacaciones(id: string): Promise<KardexVacaciones | undefined>;
+  getKardexVacacionesByEmpleado(empleadoId: string): Promise<KardexVacaciones[]>;
+  getKardexVacacionesByEmpleadoYAnio(empleadoId: string, anioAntiguedad: number): Promise<KardexVacaciones[]>;
+  getSaldoVacacionesEmpleado(empleadoId: string): Promise<number>;
+  updateKardexVacaciones(id: string, updates: Partial<InsertKardexVacaciones>): Promise<KardexVacaciones>;
+  deleteKardexVacaciones(id: string): Promise<void>;
   
   // Incapacidades (Sick Leave Management)
   createIncapacidad(incapacidad: InsertIncapacidad): Promise<Incapacidad>;
@@ -3044,6 +3069,121 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSolicitudVacaciones(id: string): Promise<void> {
     await db.delete(solicitudesVacaciones).where(eq(solicitudesVacaciones.id, id));
+  }
+
+  // ==================== Catálogo de Tablas de Prestaciones ====================
+  
+  async createCatTablaPrestaciones(tabla: InsertCatTablaPrestaciones): Promise<CatTablaPrestaciones> {
+    const data = {
+      ...tabla,
+      primaVacacionalPct: tabla.primaVacacionalPct !== undefined ? String(tabla.primaVacacionalPct) : undefined,
+      factorIntegracion: tabla.factorIntegracion !== undefined ? String(tabla.factorIntegracion) : undefined,
+    };
+    const [created] = await db.insert(catTablasPrestaciones).values(data as any).returning();
+    return created;
+  }
+
+  async getCatTablaPrestaciones(id: string): Promise<CatTablaPrestaciones | undefined> {
+    const [tabla] = await db.select().from(catTablasPrestaciones).where(eq(catTablasPrestaciones.id, id));
+    return tabla;
+  }
+
+  async getCatTablasPrestaciones(): Promise<CatTablaPrestaciones[]> {
+    return db.select().from(catTablasPrestaciones).orderBy(catTablasPrestaciones.nombreEsquema, catTablasPrestaciones.aniosAntiguedad);
+  }
+
+  async getCatTablasPrestacionesByEsquema(nombreEsquema: string): Promise<CatTablaPrestaciones[]> {
+    return db.select().from(catTablasPrestaciones)
+      .where(eq(catTablasPrestaciones.nombreEsquema, nombreEsquema))
+      .orderBy(catTablasPrestaciones.aniosAntiguedad);
+  }
+
+  async getCatTablasPrestacionesByEmpresa(empresaId: string): Promise<CatTablaPrestaciones[]> {
+    return db.select().from(catTablasPrestaciones)
+      .where(eq(catTablasPrestaciones.empresaId, empresaId))
+      .orderBy(catTablasPrestaciones.nombreEsquema, catTablasPrestaciones.aniosAntiguedad);
+  }
+
+  async getCatTablaPrestacionesByAnios(nombreEsquema: string, anios: number): Promise<CatTablaPrestaciones | undefined> {
+    const [tabla] = await db.select().from(catTablasPrestaciones)
+      .where(and(
+        eq(catTablasPrestaciones.nombreEsquema, nombreEsquema),
+        eq(catTablasPrestaciones.aniosAntiguedad, anios)
+      ));
+    return tabla;
+  }
+
+  async updateCatTablaPrestaciones(id: string, updates: Partial<InsertCatTablaPrestaciones>): Promise<CatTablaPrestaciones> {
+    const data = {
+      ...updates,
+      primaVacacionalPct: updates.primaVacacionalPct !== undefined ? String(updates.primaVacacionalPct) : undefined,
+      factorIntegracion: updates.factorIntegracion !== undefined ? String(updates.factorIntegracion) : undefined,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(catTablasPrestaciones).set(data as any).where(eq(catTablasPrestaciones.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCatTablaPrestaciones(id: string): Promise<void> {
+    await db.delete(catTablasPrestaciones).where(eq(catTablasPrestaciones.id, id));
+  }
+
+  // ==================== Kardex de Vacaciones ====================
+  
+  async createKardexVacaciones(kardex: InsertKardexVacaciones): Promise<KardexVacaciones> {
+    const data = {
+      ...kardex,
+      dias: String(kardex.dias),
+      saldoDespuesMovimiento: kardex.saldoDespuesMovimiento !== undefined ? String(kardex.saldoDespuesMovimiento) : undefined,
+    };
+    const [created] = await db.insert(kardexVacaciones).values(data as any).returning();
+    return created;
+  }
+
+  async getKardexVacaciones(id: string): Promise<KardexVacaciones | undefined> {
+    const [kardex] = await db.select().from(kardexVacaciones).where(eq(kardexVacaciones.id, id));
+    return kardex;
+  }
+
+  async getKardexVacacionesByEmpleado(empleadoId: string): Promise<KardexVacaciones[]> {
+    return db.select().from(kardexVacaciones)
+      .where(eq(kardexVacaciones.empleadoId, empleadoId))
+      .orderBy(kardexVacaciones.fechaMovimiento, kardexVacaciones.createdAt);
+  }
+
+  async getKardexVacacionesByEmpleadoYAnio(empleadoId: string, anioAntiguedad: number): Promise<KardexVacaciones[]> {
+    return db.select().from(kardexVacaciones)
+      .where(and(
+        eq(kardexVacaciones.empleadoId, empleadoId),
+        eq(kardexVacaciones.anioAntiguedad, anioAntiguedad)
+      ))
+      .orderBy(kardexVacaciones.fechaMovimiento);
+  }
+
+  async getSaldoVacacionesEmpleado(empleadoId: string): Promise<number> {
+    const movimientos = await this.getKardexVacacionesByEmpleado(empleadoId);
+    
+    // Sumar todos los movimientos (positivos y negativos)
+    const saldo = movimientos.reduce((total, mov) => {
+      const dias = typeof mov.dias === 'string' ? parseFloat(mov.dias) : Number(mov.dias);
+      return total + dias;
+    }, 0);
+    
+    return saldo;
+  }
+
+  async updateKardexVacaciones(id: string, updates: Partial<InsertKardexVacaciones>): Promise<KardexVacaciones> {
+    const data = {
+      ...updates,
+      dias: updates.dias !== undefined ? String(updates.dias) : undefined,
+      saldoDespuesMovimiento: updates.saldoDespuesMovimiento !== undefined ? String(updates.saldoDespuesMovimiento) : undefined,
+    };
+    const [updated] = await db.update(kardexVacaciones).set(data as any).where(eq(kardexVacaciones.id, id)).returning();
+    return updated;
+  }
+
+  async deleteKardexVacaciones(id: string): Promise<void> {
+    await db.delete(kardexVacaciones).where(eq(kardexVacaciones.id, id));
   }
 
   // ==================== Incapacidades (Sick Leave Management) ====================

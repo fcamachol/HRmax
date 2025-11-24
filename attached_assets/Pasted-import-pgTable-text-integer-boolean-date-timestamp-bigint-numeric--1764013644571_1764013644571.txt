@@ -1,0 +1,96 @@
+import { 
+  pgTable, 
+  text, 
+  integer, 
+  boolean, 
+  date, 
+  timestamp, 
+  bigint, 
+  numeric 
+} from "drizzle-orm/pg-core";
+
+// ==========================================
+// 1. REGLAS DE PRESTACIONES (La "Fuente de la Verdad")
+// ==========================================
+// Define cuántos días tocan por año (Ley, Sindicalizado, Confianza, etc.)
+// Esto reemplaza tener los días "quemados" en la tabla de empleados.
+
+export const cat_tablas_prestaciones = pgTable("cat_tablas_prestaciones", {
+  id: text("id").primaryKey(),
+  empresa_id: text("empresa_id"), // Opcional: NULL = Regla General del Sistema
+  
+  // Ej: "Ley Reformada 2024", "Directivos", "Operativos A"
+  nombre_esquema: text("nombre_esquema").notNull(), 
+  
+  // La llave maestra: Años cumplidos
+  anios_antiguedad: integer("anios_antiguedad").notNull(), // 1, 2, 3...
+  
+  // Los Beneficios de ese año
+  dias_vacaciones: integer("dias_vacaciones").notNull(), // Ej: 12
+  dias_aguinaldo: integer("dias_aguinaldo").notNull(), // Ej: 15
+  prima_vacacional_pct: numeric("prima_vacacional_pct").notNull(), // Ej: 25.00
+  
+  // El impacto financiero (Factor de Integración para SBC)
+  // Fórmula: 1 + ((dias_aguinaldo + (dias_vacaciones * prima_vac_pct)) / 365)
+  factor_integracion: numeric("factor_integracion"), 
+  
+  activo: boolean("activo").default(true),
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+
+// ==========================================
+// 2. KARDEX DE VACACIONES (La "Cuenta Bancaria" de Días)
+// ==========================================
+// Aquí se registran los abonos (aniversarios) y cargos (vacaciones tomadas)
+
+export const kardex_vacaciones = pgTable("kardex_vacaciones", {
+  id: text("id").primaryKey(),
+  empleado_id: text("empleado_id").notNull(),
+  
+  // Vital para la caducidad (Los días prescriben a los 18 meses del año correspondiente)
+  anio_antiguedad: integer("anio_antiguedad").notNull(), 
+  
+  // Tipo de movimiento:
+  // 'devengo'  -> Aniversario (Suma días, ej: +12)
+  // 'disfrute' -> Vacaciones tomadas (Resta días, ej: -3)
+  // 'caducidad'-> Días perdidos por no usarlos (Resta días)
+  // 'finiquito'-> Días pagados al salir (Resta días)
+  tipo_movimiento: text("tipo_movimiento").notNull(), 
+  
+  // Cantidad: Positivo suma saldo, Negativo resta saldo
+  dias: numeric("dias").notNull(), 
+  
+  // Snapshot del saldo en ese momento (opcional, para auditoría rápida)
+  saldo_despues_movimiento: numeric("saldo_despues_movimiento"), 
+  
+  // Control Financiero: ¿Ya se pagó la prima de estos días?
+  prima_pagada: boolean("prima_pagada").default(false),
+  
+  // Trazabilidad
+  fecha_movimiento: date("fecha_movimiento").defaultNow(),
+  periodo_nomina_id: text("periodo_nomina_id"), // ¿En qué nómina se reflejó?
+  observaciones: text("observaciones"), // Ej: "Solicitud #505 Semana Santa"
+  
+  created_at: timestamp("created_at").defaultNow(),
+});
+
+// ==========================================
+// 3. ACTUALIZACIÓN A EMPLEADOS (Solo referencia)
+// ==========================================
+/* NOTA: No vuelvas a crear la tabla employees entera.
+   Solo asegúrate de agregar estas columnas a tu definición existente de 'employees':
+*/
+
+/*
+export const employees = pgTable("employees", {
+  // ... tus campos existentes ...
+
+  // VINCULACIÓN: ¿Qué regla de la tabla cat_tablas_prestaciones le aplica?
+  esquema_prestaciones_id: text("esquema_prestaciones_id"), 
+
+  // CACHE: Saldo actual calculado (Suma del Kardex) para lectura rápida en UI.
+  // Es READ-ONLY, se actualiza vía triggers o lógica de backend.
+  saldo_vacaciones_actual: numeric("saldo_vacaciones_actual").default("0"),
+});
+*/
