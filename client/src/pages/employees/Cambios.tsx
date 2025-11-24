@@ -721,19 +721,23 @@ function CambioCard({
 
               {cambio.tipoModificacion === "centro_trabajo" && (
                 <Select
-                  value={cambio.valoresNuevos.lugarTrabajo || ""}
-                  onValueChange={(value) =>
+                  value={cambio.valoresNuevos.centroTrabajoId || ""}
+                  onValueChange={(value) => {
+                    const centro = centrosTrabajo.find(c => c.id === value);
                     onUpdate({
-                      valoresNuevos: { lugarTrabajo: value },
-                    })
-                  }
+                      valoresNuevos: { 
+                        centroTrabajoId: value,
+                        lugarTrabajo: centro?.nombre || ""
+                      },
+                    });
+                  }}
                 >
                   <SelectTrigger data-testid={`select-centro-${cambio.id}`}>
                     <SelectValue placeholder="Seleccionar centro de trabajo" />
                   </SelectTrigger>
                   <SelectContent>
                     {centrosTrabajo.map((centro) => (
-                      <SelectItem key={centro.id} value={centro.nombre}>
+                      <SelectItem key={centro.id} value={centro.id}>
                         {centro.nombre}
                       </SelectItem>
                     ))}

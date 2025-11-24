@@ -166,7 +166,7 @@ import {
   adminAuditLogs
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, not, inArray } from "drizzle-orm";
+import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -777,6 +777,36 @@ export class DatabaseStorage implements IStorage {
       case 'centro_trabajo':
         if (valoresNuevos.lugarTrabajo !== undefined) {
           empleadoUpdate.lugarTrabajo = valoresNuevos.lugarTrabajo;
+        }
+        
+        if (valoresNuevos.centroTrabajoId) {
+          await db
+            .update(empleadosCentrosTrabajo)
+            .set({ fechaFin: modificacion.fechaEfectiva })
+            .where(
+              and(
+                eq(empleadosCentrosTrabajo.empleadoId, modificacion.empleadoId),
+                isNull(empleadosCentrosTrabajo.fechaFin)
+              )
+            );
+
+          const turnos = await db
+            .select()
+            .from(turnosCentroTrabajo)
+            .where(eq(turnosCentroTrabajo.centroTrabajoId, valoresNuevos.centroTrabajoId))
+            .limit(1);
+
+          if (turnos.length > 0) {
+            await db
+              .insert(empleadosCentrosTrabajo)
+              .values({
+                empleadoId: modificacion.empleadoId,
+                centroTrabajoId: valoresNuevos.centroTrabajoId,
+                turnoId: turnos[0].id,
+                fechaInicio: modificacion.fechaEfectiva,
+                esPrincipal: true,
+              });
+          }
         }
         break;
       case 'departamento':
