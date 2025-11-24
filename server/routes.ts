@@ -220,6 +220,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Modificaciones de Personal
+  app.post("/api/modificaciones-personal", async (req, res) => {
+    try {
+      const { insertModificacionPersonalSchema } = await import("@shared/schema");
+      const validatedData = insertModificacionPersonalSchema.parse(req.body);
+      const modificacion = await storage.createModificacionPersonal(validatedData);
+      res.json(modificacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/modificaciones-personal", async (req, res) => {
+    try {
+      const { empleadoId, tipo, estatus } = req.query;
+      
+      if (empleadoId) {
+        const modificaciones = await storage.getModificacionesPersonalByEmpleado(empleadoId as string);
+        return res.json(modificaciones);
+      }
+      
+      if (tipo) {
+        const modificaciones = await storage.getModificacionesPersonalByTipo(tipo as string);
+        return res.json(modificaciones);
+      }
+      
+      if (estatus) {
+        const modificaciones = await storage.getModificacionesPersonalByEstatus(estatus as string);
+        return res.json(modificaciones);
+      }
+      
+      const modificaciones = await storage.getModificacionesPersonal();
+      res.json(modificaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/modificaciones-personal/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const modificacion = await storage.getModificacionPersonal(id);
+      if (!modificacion) {
+        return res.status(404).json({ message: "Modificación no encontrada" });
+      }
+      res.json(modificacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/modificaciones-personal/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { insertModificacionPersonalSchema } = await import("@shared/schema");
+      const validatedData = insertModificacionPersonalSchema.partial().parse(req.body);
+      const updated = await storage.updateModificacionPersonal(id, validatedData);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/modificaciones-personal/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteModificacionPersonal(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/modificaciones-personal/:id/aprobar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { aprobadoPor } = req.body;
+      if (!aprobadoPor) {
+        return res.status(400).json({ message: "aprobadoPor es requerido" });
+      }
+      const modificacion = await storage.aprobarModificacionPersonal(id, aprobadoPor);
+      res.json(modificacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/modificaciones-personal/:id/rechazar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { notasRechazo } = req.body;
+      if (!notasRechazo) {
+        return res.status(400).json({ message: "notasRechazo es requerido" });
+      }
+      const modificacion = await storage.rechazarModificacionPersonal(id, notasRechazo);
+      res.json(modificacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/modificaciones-personal/:id/aplicar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const modificacion = await storage.aplicarModificacionPersonal(id);
+      res.json(modificacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Legal Cases
   app.post("/api/legal/cases", async (req, res) => {
     try {
