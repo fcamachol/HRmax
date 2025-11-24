@@ -93,11 +93,6 @@ const payrollSubItems = [
     url: "/payroll/grupos",
     icon: Users,
   },
-  {
-    title: "Créditos y Descuentos",
-    url: "/creditos",
-    icon: CreditCard,
-  },
 ];
 
 const organizacionSubItems = [
@@ -157,6 +152,11 @@ const gestionPersonalSubItems = [
     url: "/actas-administrativas",
     icon: FileWarning,
   },
+  {
+    title: "Créditos y Descuentos",
+    url: "/creditos",
+    icon: CreditCard,
+  },
 ];
 
 const configuracionSubItems = [
@@ -208,10 +208,10 @@ const mainMenuItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const isEmployeesActive = location.startsWith("/employees");
-  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance") || location.startsWith("/creditos");
+  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance");
   const isOrganizacionActive = location.startsWith("/organizacion");
   const isReclutamientoActive = location.startsWith("/reclutamiento");
-  const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos");
+  const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos") || location.startsWith("/creditos") || location.startsWith("/actas-administrativas");
   const isConfiguracionActive = location.startsWith("/configuration");
 
   return (
