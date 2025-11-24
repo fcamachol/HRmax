@@ -141,7 +141,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     departamentoId: "",
     centroTrabajoId: "",
     proposedSalary: "",
-    contractType: "planta",
+    contractType: "indeterminado",
     contractDuration: "",
     diasPrueba: "",
     endDate: "",
@@ -177,18 +177,18 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
   const isEditMode = !!existingProcess;
 
   // Query para obtener puestos
-  const { data: puestos } = useQuery<{ data: Array<{id: string, nombrePuesto: string, clavePuesto: string}> }>({
-    queryKey: ["/api/organizacion/puestos"],
+  const { data: puestos } = useQuery<Array<{id: string, nombrePuesto: string, clavePuesto: string}>>({
+    queryKey: ["/api/puestos"],
   });
 
   // Query para obtener departamentos
-  const { data: departamentos } = useQuery<{ data: Array<{id: string, nombre: string}> }>({
-    queryKey: ["/api/organizacion/departamentos"],
+  const { data: departamentos } = useQuery<Array<{id: string, nombre: string}>>({
+    queryKey: ["/api/departamentos"],
   });
 
   // Query para obtener centros de trabajo
-  const { data: centrosTrabajo } = useQuery<{ data: Array<{id: string, nombre: string}> }>({
-    queryKey: ["/api/organizacion/centros-trabajo"],
+  const { data: centrosTrabajo } = useQuery<Array<{id: string, nombre: string}>>({
+    queryKey: ["/api/centros-trabajo"],
   });
 
   // Efecto para recalcular la fecha de fin cuando cambia la fecha de inicio o los días de prueba
@@ -224,7 +224,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         departamentoId: (existingProcess as any).departamentoId || "",
         centroTrabajoId: (existingProcess as any).centroTrabajoId || "",
         proposedSalary: existingProcess.proposedSalary || "",
-        contractType: existingProcess.contractType || "planta",
+        contractType: existingProcess.contractType || "indeterminado",
         contractDuration: existingProcess.contractDuration || "",
         diasPrueba: (existingProcess as any).diasPrueba || "",
         endDate: (existingProcess as any).endDate || "",
@@ -270,7 +270,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       departamentoId: "",
       centroTrabajoId: "",
       proposedSalary: "",
-      contractType: "planta",
+      contractType: "indeterminado",
       contractDuration: "",
       diasPrueba: "",
       endDate: "",
@@ -744,7 +744,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <SelectValue placeholder="Selecciona un puesto" />
                   </SelectTrigger>
                   <SelectContent>
-                    {puestos?.data && Array.isArray(puestos.data) && (puestos.data as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).map((puesto) => (
+                    {puestos && Array.isArray(puestos) && puestos.map((puesto) => (
                       <SelectItem key={puesto.id} value={puesto.id}>
                         {puesto.clavePuesto} - {puesto.nombrePuesto}
                       </SelectItem>
@@ -765,7 +765,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentos?.data && Array.isArray(departamentos.data) && (departamentos.data as Array<{id: string, nombre: string}>).map((dept) => (
+                    {departamentos && Array.isArray(departamentos) && departamentos.map((dept) => (
                       <SelectItem key={dept.id} value={dept.id}>
                         {dept.nombre}
                       </SelectItem>
@@ -787,7 +787,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   <SelectValue placeholder="Selecciona un centro de trabajo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {centrosTrabajo?.data && Array.isArray(centrosTrabajo.data) && (centrosTrabajo.data as Array<{id: string, nombre: string}>).map((centro) => (
+                  {centrosTrabajo && Array.isArray(centrosTrabajo) && centrosTrabajo.map((centro) => (
                     <SelectItem key={centro.id} value={centro.id}>
                       {centro.nombre}
                     </SelectItem>
@@ -838,9 +838,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     setFormData(prev => ({ 
                       ...prev, 
                       contractType: value,
-                      // Siempre resetear diasPrueba y endDate al cambiar tipo
+                      // Resetear diasPrueba y endDate al cambiar tipo
                       diasPrueba: "",
-                      endDate: ""
+                      endDate: value === "indeterminado" || value === "honorarios" || value === "practicante" ? "" : prev.endDate
                     }));
                   }}
                 >
@@ -1280,8 +1280,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-position">
                       {(() => {
                         if (!formData.puestoId) return "No especificado";
-                        const puesto = puestos?.data && Array.isArray(puestos.data) 
-                          ? (puestos.data as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).find(p => p.id === formData.puestoId)
+                        const puesto = puestos && Array.isArray(puestos) 
+                          ? puestos.find(p => p.id === formData.puestoId)
                           : null;
                         return puesto ? `${puesto.clavePuesto} - ${puesto.nombrePuesto}` : formData.puestoId;
                       })()}
@@ -1292,8 +1292,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-department">
                       {(() => {
                         if (!formData.departamentoId) return "No especificado";
-                        const dept = departamentos?.data && Array.isArray(departamentos.data)
-                          ? (departamentos.data as Array<{id: string, nombre: string}>).find(d => d.id === formData.departamentoId)
+                        const dept = departamentos && Array.isArray(departamentos)
+                          ? departamentos.find(d => d.id === formData.departamentoId)
                           : null;
                         return dept ? dept.nombre : formData.departamentoId;
                       })()}
@@ -1307,8 +1307,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-centro-trabajo">
                       {(() => {
                         if (!formData.centroTrabajoId) return "No especificado";
-                        const centro = centrosTrabajo?.data && Array.isArray(centrosTrabajo.data)
-                          ? (centrosTrabajo.data as Array<{id: string, nombre: string}>).find(c => c.id === formData.centroTrabajoId)
+                        const centro = centrosTrabajo && Array.isArray(centrosTrabajo)
+                          ? centrosTrabajo.find(c => c.id === formData.centroTrabajoId)
                           : null;
                         return centro ? centro.nombre : formData.centroTrabajoId;
                       })()}

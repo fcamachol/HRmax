@@ -87,7 +87,7 @@ export const PERIODICIDAD_PAGO = [
 ];
 
 export const TIPOS_CONTRATO = [
-  { value: 'planta', label: 'Planta' },
+  { value: 'indeterminado', label: 'Indeterminado' },
   { value: 'temporal', label: 'Temporal' },
   { value: 'por_obra', label: 'Por Obra Determinada' },
   { value: 'prueba', label: 'Prueba' },
