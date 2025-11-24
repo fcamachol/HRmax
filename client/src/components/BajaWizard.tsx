@@ -347,6 +347,15 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
     }
   };
 
+  const handleModificarCalculo = () => {
+    updateFormData("calculoAprobado", false);
+    updateFormData("calculoData", null);
+    toast({
+      title: "Cálculo desbloqueado",
+      description: "Ahora puede modificar los datos del cálculo.",
+    });
+  };
+
   const addConceptoAdicional = () => {
     setFormData(prev => ({
       ...prev,
@@ -737,15 +746,24 @@ export function BajaWizard({ open, onOpenChange, existingCase }: BajaWizardProps
                           </Button>
                         </div>
                       ) : (
-                        <div className="flex gap-2 pt-4">
+                        <div className="space-y-2 pt-4">
                           <Button 
                             onClick={() => setShowCartaModal(true)}
                             variant="default"
-                            className="flex-1"
+                            className="w-full"
                             data-testid="button-ver-carta"
                           >
                             <FileText className="h-4 w-4 mr-2" />
                             Ver Carta de {finiquitoCalculado.informacionLaboral.añosTrabajados >= 1 && (formData.bajaType === 'despido_injustificado' || formData.bajaType === 'renuncia_con_causa') ? 'Liquidación' : 'Finiquito'}
+                          </Button>
+                          <Button 
+                            onClick={handleModificarCalculo}
+                            variant="outline"
+                            className="w-full"
+                            data-testid="button-modificar-calculo"
+                          >
+                            <Calculator className="h-4 w-4 mr-2" />
+                            Modificar Cálculo
                           </Button>
                         </div>
                       )}
