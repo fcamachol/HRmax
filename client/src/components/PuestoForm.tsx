@@ -88,7 +88,7 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
       clavePuesto: "",
       departamentoId: undefined,
       area: "",
-      centroTrabajoId: undefined,
+      centrosTrabajoIds: [],
       nivelJerarquico: "",
       tipoPuesto: "",
       reportaA: "",
@@ -359,24 +359,48 @@ export function PuestoForm({ open, onOpenChange, onSubmit, defaultValues, mode =
 
                     <FormField
                       control={form.control}
-                      name="centroTrabajoId"
+                      name="centrosTrabajoIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Centro de Trabajo (opcional)</FormLabel>
-                          <Select onValueChange={field.onChange} value={field.value || undefined}>
-                            <FormControl>
-                              <SelectTrigger data-testid="select-centro-trabajo">
-                                <SelectValue placeholder="Sin centro de trabajo" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              {centrosTrabajo.map((centro) => (
-                                <SelectItem key={centro.id} value={centro.id}>
-                                  {centro.nombre}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <FormLabel>Centros de Trabajo (opcional)</FormLabel>
+                          <FormControl>
+                            <div className="border rounded-md p-3 space-y-2 max-h-[200px] overflow-y-auto">
+                              {centrosTrabajo.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No hay centros de trabajo disponibles</p>
+                              ) : (
+                                centrosTrabajo.map((centro) => (
+                                  <div key={centro.id} className="flex items-center space-x-2">
+                                    <Checkbox
+                                      checked={field.value?.includes(centro.id)}
+                                      onCheckedChange={(checked) => {
+                                        const currentValues = field.value || [];
+                                        if (checked) {
+                                          field.onChange([...currentValues, centro.id]);
+                                        } else {
+                                          field.onChange(currentValues.filter((id) => id !== centro.id));
+                                        }
+                                      }}
+                                      data-testid={`checkbox-centro-trabajo-${centro.id}`}
+                                    />
+                                    <label className="text-sm cursor-pointer" onClick={() => {
+                                      const currentValues = field.value || [];
+                                      const isChecked = currentValues.includes(centro.id);
+                                      if (isChecked) {
+                                        field.onChange(currentValues.filter((id) => id !== centro.id));
+                                      } else {
+                                        field.onChange([...currentValues, centro.id]);
+                                      }
+                                    }}>
+                                      {centro.nombre}
+                                    </label>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </FormControl>
+                          <FormDescription className="text-xs">
+                            Selecciona uno o más centros de trabajo donde aplica este puesto
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

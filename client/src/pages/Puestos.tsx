@@ -122,7 +122,7 @@ export default function Puestos() {
       clavePuesto: puesto.clavePuesto,
       departamentoId: puesto.departamentoId,
       area: puesto.area,
-      centroTrabajoId: puesto.centroTrabajoId,
+      centrosTrabajoIds: puesto.centrosTrabajoIds as string[],
       nivelJerarquico: puesto.nivelJerarquico,
       tipoPuesto: puesto.tipoPuesto,
       reportaA: puesto.reportaA,

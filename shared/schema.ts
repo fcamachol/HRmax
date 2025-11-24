@@ -1578,7 +1578,7 @@ export const puestos = pgTable("puestos", {
   // Ubicación Organizacional
   area: varchar("area"),
   departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }),
-  centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }),
+  centrosTrabajoIds: jsonb("centros_trabajo_ids").default(sql`'[]'::jsonb`), // Array de IDs de centros de trabajo
   nivelJerarquico: varchar("nivel_jerarquico"), // Operativo, Supervisor, Gerente, Director
   tipoPuesto: varchar("tipo_puesto"), // Operativo, Administrativo, Directivo
   
@@ -1639,6 +1639,7 @@ export const insertPuestoSchema = createInsertSchema(puestos).omit({
   ultimaActualizacion: true,
 }).extend({
   estatus: z.enum(["activo", "inactivo"]).default("activo"),
+  centrosTrabajoIds: z.array(z.string()).default([]),
   puestosQueReportan: z.array(z.string()).default([]),
   funcionesPrincipales: z.array(z.string()).default([]),
   funcionesSecundarias: z.array(z.string()).default([]),
