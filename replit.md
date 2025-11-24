@@ -6,6 +6,44 @@ NominaHub is a comprehensive HR and payroll management system for Mexican busine
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes - Vacation & Benefits System (2025-01-24)
+
+**Status**: ✅ COMPLETE - Configurable vacation/benefits management with ledger-based tracking and LFT Art. 76 compliance
+
+### Completed Components:
+1. ✅ **Database Schema** - Architect approved
+   - `cat_tablas_prestaciones`: Configurable benefits catalog (vacation days, aguinaldo, prima vacacional by year)
+   - `kardex_vacaciones`: Ledger system tracking devengo, disfrute, caducidad, finiquito movements
+   - Extended `employees` table with `esquema_prestaciones_id` and `saldo_vacaciones_actual` fields
+
+2. ✅ **LFT Art. 76 Bug Fix** - Architect approved
+   - Corrected `obtenerDiasVacaciones()` in finiquitoCalculations.ts
+   - Fixed 2-day deficit: year 2 now correctly returns 14 días (was 12)
+   - Proper interpretation: "segundo año de servicio" = 1-2 años trabajados, not 2-3 años
+
+3. ✅ **Seed Data** - `server/seeds/prestacionesLFT.ts`
+   - 60 rows total: 30 for LFT 2024 + 30 for Puestos de Confianza
+   - Accurate vacation progression: 12→14→16→18→20 (años 1-5), then +2 every 5 years
+   - Auto-calculates factor de integración for SBC
+   - Executable script: `npx tsx server/seeds/prestacionesLFT.ts`
+
+4. ✅ **Storage Layer** - Architect approved
+   - CRUD operations for `cat_tablas_prestaciones` and `kardex_vacaciones`
+   - `getSaldoVacacionesEmpleado()`: Calculates current balance from ledger
+   - Proper numeric-to-string conversions for PostgreSQL numeric fields
+
+5. ✅ **Database Migration** - Applied manually via execute_sql_tool
+   - Created both new tables with indexes
+   - Extended employees table with ALTER TABLE
+   - Seed executed successfully with 60 prestaciones rows
+
+### Technical Decisions:
+- **Why catalog system?** Different companies/unions have varying vacation policies beyond LFT minimum
+- **Why kardex ledger?** Audit trail for devengo (accrual), disfrute (usage), caducidad (18-month expiration per LFT Art. 81)
+- **Schema naming?** Spanish fields match existing convention (aniosAntiguedad, diasVacaciones, primaVacacionalPct)
+- **Factor de integración?** Pre-calculated for SBC: 1 + ((aguinaldo + (vacaciones × prima%)) / 365)
+- **Saldo cache?** READ-ONLY field in employees for performance; source of truth is kardex
+
 ## Recent Changes - Payroll System Complete (2025-01-12)
 
 **Status**: ✅ COMPLETE - Full payroll infrastructure with seed data, calculations, and Mexican tax compliance
