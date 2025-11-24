@@ -67,6 +67,7 @@ interface AltaFormData {
   proposedSalary: string;
   contractType: string;
   contractDuration: string;
+  endDate: string; // Fecha de fin para contratos temporales o por obra determinada
   startDate: string;
   
   // Paso 3: Datos de Domicilio
@@ -141,6 +142,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     proposedSalary: "",
     contractType: "planta",
     contractDuration: "",
+    endDate: "",
     startDate: new Date().toISOString().split('T')[0],
     
     // Paso 3
@@ -173,17 +175,17 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
   const isEditMode = !!existingProcess;
 
   // Query para obtener puestos
-  const { data: puestos } = useQuery({
+  const { data: puestos } = useQuery<{ data: Array<{id: string, nombrePuesto: string, clavePuesto: string}> }>({
     queryKey: ["/api/organizacion/puestos"],
   });
 
   // Query para obtener departamentos
-  const { data: departamentos } = useQuery({
+  const { data: departamentos } = useQuery<{ data: Array<{id: string, nombre: string}> }>({
     queryKey: ["/api/organizacion/departamentos"],
   });
 
   // Query para obtener centros de trabajo
-  const { data: centrosTrabajo } = useQuery({
+  const { data: centrosTrabajo } = useQuery<{ data: Array<{id: string, nombre: string}> }>({
     queryKey: ["/api/organizacion/centros-trabajo"],
   });
 
@@ -207,6 +209,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         proposedSalary: existingProcess.proposedSalary || "",
         contractType: existingProcess.contractType || "planta",
         contractDuration: existingProcess.contractDuration || "",
+        endDate: (existingProcess as any).endDate || "",
         startDate: existingProcess.startDate || new Date().toISOString().split('T')[0],
         calle: (existingProcess as any).calle || "",
         numeroExterior: (existingProcess as any).numeroExterior || "",
@@ -251,6 +254,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       proposedSalary: "",
       contractType: "planta",
       contractDuration: "",
+      endDate: "",
       startDate: new Date().toISOString().split('T')[0],
       calle: "",
       numeroExterior: "",
@@ -316,6 +320,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         departamentoId: data.departamentoId,
         proposedSalary: data.proposedSalary,
         startDate: data.startDate,
+        endDate: data.endDate || null,
         contractType: data.contractType,
         contractDuration: data.contractDuration,
         email: data.email,
@@ -417,6 +422,15 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         toast({
           title: "Campos requeridos",
           description: "El puesto y salario son obligatorios",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Validar fecha de fin si el contrato es temporal o por obra
+      if ((formData.contractType === "temporal" || formData.contractType === "por_obra") && !formData.endDate) {
+        toast({
+          title: "Campo requerido",
+          description: "La fecha de fin es obligatoria para contratos temporales o por obra determinada",
           variant: "destructive",
         });
         return;
@@ -701,13 +715,11 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <SelectValue placeholder="Selecciona un puesto" />
                   </SelectTrigger>
                   <SelectContent>
-                    {puestos && Array.isArray(puestos) && (puestos as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).map((puesto) => {
-                      return (
-                        <SelectItem key={puesto.id} value={puesto.id}>
-                          {puesto.clavePuesto} - {puesto.nombrePuesto}
-                        </SelectItem>
-                      );
-                    })}
+                    {puestos?.data && Array.isArray(puestos.data) && (puestos.data as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).map((puesto) => (
+                      <SelectItem key={puesto.id} value={puesto.id}>
+                        {puesto.clavePuesto} - {puesto.nombrePuesto}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -724,13 +736,11 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <SelectValue placeholder="Selecciona un departamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {departamentos && Array.isArray(departamentos) && (departamentos as Array<{id: string, nombre: string}>).map((dept) => {
-                      return (
-                        <SelectItem key={dept.id} value={dept.id}>
-                          {dept.nombre}
-                        </SelectItem>
-                      );
-                    })}
+                    {departamentos?.data && Array.isArray(departamentos.data) && (departamentos.data as Array<{id: string, nombre: string}>).map((dept) => (
+                      <SelectItem key={dept.id} value={dept.id}>
+                        {dept.nombre}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -748,13 +758,11 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   <SelectValue placeholder="Selecciona un centro de trabajo" />
                 </SelectTrigger>
                 <SelectContent>
-                  {centrosTrabajo && Array.isArray(centrosTrabajo) && (centrosTrabajo as Array<{id: string, nombre: string}>).map((centro) => {
-                    return (
-                      <SelectItem key={centro.id} value={centro.id}>
-                        {centro.nombre}
-                      </SelectItem>
-                    );
-                  })}
+                  {centrosTrabajo?.data && Array.isArray(centrosTrabajo.data) && (centrosTrabajo.data as Array<{id: string, nombre: string}>).map((centro) => (
+                    <SelectItem key={centro.id} value={centro.id}>
+                      {centro.nombre}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -813,15 +821,15 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
               
               {(formData.contractType === "temporal" || formData.contractType === "por_obra") && (
                 <div>
-                  <Label htmlFor="contractDuration" data-testid="label-contract-duration">
-                    Duración del Contrato
+                  <Label htmlFor="endDate" data-testid="label-end-date">
+                    Fecha de Fin <span className="text-destructive">*</span>
                   </Label>
                   <Input
-                    id="contractDuration"
-                    data-testid="input-contract-duration"
-                    value={formData.contractDuration}
-                    onChange={(e) => setFormData({ ...formData, contractDuration: e.target.value })}
-                    placeholder="Ej: 6 meses, 1 año"
+                    id="endDate"
+                    type="date"
+                    data-testid="input-end-date"
+                    value={formData.endDate}
+                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
                   />
                 </div>
               )}
@@ -1199,8 +1207,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-position">
                       {(() => {
                         if (!formData.puestoId) return "No especificado";
-                        const puesto = puestos && Array.isArray(puestos) 
-                          ? (puestos as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).find(p => p.id === formData.puestoId)
+                        const puesto = puestos?.data && Array.isArray(puestos.data) 
+                          ? (puestos.data as Array<{id: string, nombrePuesto: string, clavePuesto: string}>).find(p => p.id === formData.puestoId)
                           : null;
                         return puesto ? `${puesto.clavePuesto} - ${puesto.nombrePuesto}` : formData.puestoId;
                       })()}
@@ -1211,8 +1219,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-department">
                       {(() => {
                         if (!formData.departamentoId) return "No especificado";
-                        const dept = departamentos && Array.isArray(departamentos)
-                          ? (departamentos as Array<{id: string, nombre: string}>).find(d => d.id === formData.departamentoId)
+                        const dept = departamentos?.data && Array.isArray(departamentos.data)
+                          ? (departamentos.data as Array<{id: string, nombre: string}>).find(d => d.id === formData.departamentoId)
                           : null;
                         return dept ? dept.nombre : formData.departamentoId;
                       })()}
@@ -1226,8 +1234,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <p className="text-base" data-testid="text-summary-centro-trabajo">
                       {(() => {
                         if (!formData.centroTrabajoId) return "No especificado";
-                        const centro = centrosTrabajo && Array.isArray(centrosTrabajo)
-                          ? (centrosTrabajo as Array<{id: string, nombre: string}>).find(c => c.id === formData.centroTrabajoId)
+                        const centro = centrosTrabajo?.data && Array.isArray(centrosTrabajo.data)
+                          ? (centrosTrabajo.data as Array<{id: string, nombre: string}>).find(c => c.id === formData.centroTrabajoId)
                           : null;
                         return centro ? centro.nombre : formData.centroTrabajoId;
                       })()}
@@ -1249,6 +1257,12 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     <h4 className="font-medium text-sm text-muted-foreground">Fecha de Inicio</h4>
                     <p className="text-base" data-testid="text-summary-start-date">{formData.startDate}</p>
                   </div>
+                  {(formData.contractType === "temporal" || formData.contractType === "por_obra") && formData.endDate && (
+                    <div>
+                      <h4 className="font-medium text-sm text-muted-foreground">Fecha de Fin</h4>
+                      <p className="text-base" data-testid="text-summary-end-date">{formData.endDate}</p>
+                    </div>
+                  )}
                   <div>
                     <h4 className="font-medium text-sm text-muted-foreground">Tipo de Contrato</h4>
                     <p className="text-base" data-testid="text-summary-contract">
