@@ -1103,6 +1103,8 @@ export const insertDepartamentoSchema = createInsertSchema(departamentos).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  presupuestoAnual: z.string().transform(val => val === "" ? null : val).optional().nullable(),
 });
 
 export const updateDepartamentoSchema = insertDepartamentoSchema.partial();
