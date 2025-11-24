@@ -362,7 +362,6 @@ type Cambio = {
   id: string;
   tipoModificacion: string;
   valoresNuevos: Record<string, any>;
-  incluyeCambioSalario?: boolean;
 };
 
 function ModificacionForm({
@@ -397,7 +396,6 @@ function ModificacionForm({
       id: `cambio-${Date.now()}`,
       tipoModificacion: "",
       valoresNuevos: {},
-      incluyeCambioSalario: false,
     };
     setFormData({
       ...formData,
@@ -441,10 +439,6 @@ function ModificacionForm({
         case "puesto":
           valoresAnteriores = { puesto: empleado.puesto };
           valoresNuevos = { puesto: cambio.valoresNuevos.puesto };
-          if (cambio.incluyeCambioSalario && cambio.valoresNuevos.salarioBrutoMensual) {
-            valoresAnteriores.salarioBrutoMensual = empleado.salarioBrutoMensual;
-            valoresNuevos.salarioBrutoMensual = cambio.valoresNuevos.salarioBrutoMensual;
-          }
           break;
         case "centro_trabajo":
           valoresAnteriores = { lugarTrabajo: empleado.lugarTrabajo };
@@ -617,7 +611,7 @@ function CambioCard({
             <Select
               value={cambio.tipoModificacion}
               onValueChange={(value) =>
-                onUpdate({ tipoModificacion: value, valoresNuevos: {}, incluyeCambioSalario: false })
+                onUpdate({ tipoModificacion: value, valoresNuevos: {} })
               }
             >
               <SelectTrigger data-testid={`select-tipo-${cambio.id}`}>
@@ -652,12 +646,7 @@ function CambioCard({
                   <div>Salario: ${empleado.salarioBrutoMensual}</div>
                 )}
                 {cambio.tipoModificacion === "puesto" && (
-                  <>
-                    <div>Puesto: {empleado.puesto}</div>
-                    {cambio.incluyeCambioSalario && (
-                      <div className="mt-1">Salario: ${empleado.salarioBrutoMensual}</div>
-                    )}
-                  </>
+                  <div>Puesto: {empleado.puesto}</div>
                 )}
                 {cambio.tipoModificacion === "centro_trabajo" && (
                   <div>Centro: {empleado.lugarTrabajo || "No especificado"}</div>
@@ -765,53 +754,6 @@ function CambioCard({
               )}
             </div>
 
-            {cambio.tipoModificacion === "puesto" && (
-              <>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`incluye-salario-${cambio.id}`}
-                    checked={cambio.incluyeCambioSalario}
-                    onCheckedChange={(checked) =>
-                      onUpdate({
-                        incluyeCambioSalario: checked === true,
-                        valoresNuevos: {
-                          ...cambio.valoresNuevos,
-                          ...(checked !== true && { salarioBrutoMensual: undefined }),
-                        },
-                      })
-                    }
-                    data-testid={`checkbox-salario-${cambio.id}`}
-                  />
-                  <Label
-                    htmlFor={`incluye-salario-${cambio.id}`}
-                    className="text-sm font-normal cursor-pointer"
-                  >
-                    Incluir cambio de salario
-                  </Label>
-                </div>
-
-                {cambio.incluyeCambioSalario && (
-                  <div className="space-y-2">
-                    <Label>Nuevo Salario</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Nuevo salario"
-                      value={cambio.valoresNuevos.salarioBrutoMensual || ""}
-                      onChange={(e) =>
-                        onUpdate({
-                          valoresNuevos: {
-                            ...cambio.valoresNuevos,
-                            salarioBrutoMensual: e.target.value,
-                          },
-                        })
-                      }
-                      data-testid={`input-salario-${cambio.id}`}
-                    />
-                  </div>
-                )}
-              </>
-            )}
           </>
         )}
       </CardContent>
