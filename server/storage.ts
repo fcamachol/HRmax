@@ -753,6 +753,108 @@ export class DatabaseStorage implements IStorage {
       .where(eq(employees.id, id));
   }
 
+  // Modificaciones de Personal
+  async createModificacionPersonal(modificacion: InsertModificacionPersonal): Promise<ModificacionPersonal> {
+    const [newModificacion] = await db
+      .insert(modificacionesPersonal)
+      .values(modificacion)
+      .returning();
+    return newModificacion;
+  }
+
+  async getModificacionPersonal(id: string): Promise<ModificacionPersonal | undefined> {
+    const [modificacion] = await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.id, id));
+    return modificacion || undefined;
+  }
+
+  async getModificacionesPersonal(): Promise<ModificacionPersonal[]> {
+    return await db
+      .select()
+      .from(modificacionesPersonal)
+      .orderBy(desc(modificacionesPersonal.createdAt));
+  }
+
+  async getModificacionesPersonalByEmpleado(empleadoId: string): Promise<ModificacionPersonal[]> {
+    return await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.empleadoId, empleadoId))
+      .orderBy(desc(modificacionesPersonal.fechaEfectiva));
+  }
+
+  async getModificacionesPersonalByTipo(tipoModificacion: string): Promise<ModificacionPersonal[]> {
+    return await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.tipoModificacion, tipoModificacion))
+      .orderBy(desc(modificacionesPersonal.createdAt));
+  }
+
+  async getModificacionesPersonalByEstatus(estatus: string): Promise<ModificacionPersonal[]> {
+    return await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.estatus, estatus))
+      .orderBy(desc(modificacionesPersonal.createdAt));
+  }
+
+  async updateModificacionPersonal(id: string, updates: Partial<InsertModificacionPersonal>): Promise<ModificacionPersonal> {
+    const [updated] = await db
+      .update(modificacionesPersonal)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(modificacionesPersonal.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteModificacionPersonal(id: string): Promise<void> {
+    await db
+      .delete(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.id, id));
+  }
+
+  async aprobarModificacionPersonal(id: string, aprobadoPor: string): Promise<ModificacionPersonal> {
+    const [updated] = await db
+      .update(modificacionesPersonal)
+      .set({ 
+        estatus: 'aprobada',
+        aprobadoPor,
+        fechaAprobacion: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(modificacionesPersonal.id, id))
+      .returning();
+    return updated;
+  }
+
+  async rechazarModificacionPersonal(id: string, notasRechazo: string): Promise<ModificacionPersonal> {
+    const [updated] = await db
+      .update(modificacionesPersonal)
+      .set({ 
+        estatus: 'rechazada',
+        notasRechazo,
+        updatedAt: new Date()
+      })
+      .where(eq(modificacionesPersonal.id, id))
+      .returning();
+    return updated;
+  }
+
+  async aplicarModificacionPersonal(id: string): Promise<ModificacionPersonal> {
+    const [updated] = await db
+      .update(modificacionesPersonal)
+      .set({ 
+        estatus: 'aplicada',
+        updatedAt: new Date()
+      })
+      .where(eq(modificacionesPersonal.id, id))
+      .returning();
+    return updated;
+  }
+
   async createChangeLog(log: InsertConfigurationChangeLog): Promise<ConfigurationChangeLog> {
     const [changeLog] = await db
       .insert(configurationChangeLogs)
