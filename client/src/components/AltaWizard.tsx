@@ -332,6 +332,8 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
   const saveProcessMutation = useMutation({
     mutationFn: async (data: AltaFormData) => {
       const payload = {
+        clienteId: "209b253d-42ac-4ab6-8e1f-f6bfa0f801d3",
+        empresaId: "36613a3d-9b89-40bc-bc2b-9adb23943130",
         nombre: data.nombre,
         apellidoPaterno: data.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno,
