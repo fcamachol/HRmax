@@ -3999,6 +3999,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Crear un nuevo esquema de prestaciones
+  app.post("/api/cat-tablas-prestaciones", async (req, res) => {
+    try {
+      const newEsquema = await storage.createCatTablaPrestaciones(req.body);
+      res.status(201).json(newEsquema);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Actualizar un esquema de prestaciones
+  app.patch("/api/cat-tablas-prestaciones/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tabla = await storage.getCatTablaPrestaciones(id);
+      
+      if (!tabla) {
+        return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+      }
+      
+      const updated = await storage.updateCatTablaPrestaciones(id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Eliminar un esquema de prestaciones
+  app.delete("/api/cat-tablas-prestaciones/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const tabla = await storage.getCatTablaPrestaciones(id);
+      
+      if (!tabla) {
+        return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+      }
+      
+      await storage.deleteCatTablaPrestaciones(id);
+      res.status(204).send();
+    } catch (error: any) {
+      if (error.message?.includes("foreign key") || error.message?.includes("referenced")) {
+        return res.status(409).json({ 
+          message: "No se puede eliminar este esquema porque está siendo usado por puestos o empleados" 
+        });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Schema de validación para prestaciones
   const updatePrestacionesSchema = z.object({
     esquemaPrestacionesId: z.union([

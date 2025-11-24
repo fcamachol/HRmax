@@ -27,6 +27,7 @@ import {
   UserCog,
   FileWarning,
   Wallet,
+  Gift,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -164,6 +165,11 @@ const configuracionSubItems = [
     title: "General",
     url: "/configuration",
     icon: Settings,
+  },
+  {
+    title: "Prestaciones",
+    url: "/configuration/prestaciones",
+    icon: Gift,
   },
   {
     title: "Medios de Pago",
