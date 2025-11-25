@@ -4136,6 +4136,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== Nuevo Sistema Modular de Prestaciones ====================
+
+  // Tipos de Beneficio (catalog - read only)
+  app.get("/api/tipos-beneficio", async (req, res) => {
+    try {
+      const tipos = await storage.getTiposBeneficio();
+      res.json(tipos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Esquemas de Prestaciones
+  app.get("/api/esquemas-prestaciones", async (req, res) => {
+    try {
+      const { activos } = req.query;
+      const esquemas = activos === "true" 
+        ? await storage.getEsquemasPrestaActivos()
+        : await storage.getEsquemasPresta();
+      res.json(esquemas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/esquemas-prestaciones/:id", async (req, res) => {
+    try {
+      const esquema = await storage.getEsquemaPresta(req.params.id);
+      if (!esquema) {
+        return res.status(404).json({ message: "Esquema no encontrado" });
+      }
+      res.json(esquema);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/esquemas-prestaciones", async (req, res) => {
+    try {
+      const esquema = await storage.createEsquemaPresta(req.body);
+      res.status(201).json(esquema);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/esquemas-prestaciones/:id", async (req, res) => {
+    try {
+      const esquema = await storage.getEsquemaPresta(req.params.id);
+      if (!esquema) {
+        return res.status(404).json({ message: "Esquema no encontrado" });
+      }
+      if (esquema.esLey) {
+        return res.status(403).json({ message: "No se puede modificar el esquema de ley" });
+      }
+      const updated = await storage.updateEsquemaPresta(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/esquemas-prestaciones/:id", async (req, res) => {
+    try {
+      const esquema = await storage.getEsquemaPresta(req.params.id);
+      if (!esquema) {
+        return res.status(404).json({ message: "Esquema no encontrado" });
+      }
+      if (esquema.esLey) {
+        return res.status(403).json({ message: "No se puede eliminar el esquema de ley" });
+      }
+      await storage.deleteEsquemaPresta(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Tabla de Vacaciones por Esquema
+  app.get("/api/esquemas-prestaciones/:id/vacaciones", async (req, res) => {
+    try {
+      const vacaciones = await storage.getEsquemaVacaciones(req.params.id);
+      res.json(vacaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/esquemas-prestaciones/:id/vacaciones", async (req, res) => {
+    try {
+      const esquema = await storage.getEsquemaPresta(req.params.id);
+      if (!esquema) {
+        return res.status(404).json({ message: "Esquema no encontrado" });
+      }
+      if (esquema.esLey) {
+        return res.status(403).json({ message: "No se puede modificar el esquema de ley" });
+      }
+      const row = await storage.createEsquemaVacaciones({
+        ...req.body,
+        esquemaId: req.params.id,
+      });
+      res.status(201).json(row);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/esquema-vacaciones/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateEsquemaVacacionesRow(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/esquema-vacaciones/:id", async (req, res) => {
+    try {
+      await storage.deleteEsquemaVacacionesRow(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Beneficios por Esquema
+  app.get("/api/esquemas-prestaciones/:id/beneficios", async (req, res) => {
+    try {
+      const beneficios = await storage.getEsquemaBeneficios(req.params.id);
+      res.json(beneficios);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/esquemas-prestaciones/:id/beneficios", async (req, res) => {
+    try {
+      const esquema = await storage.getEsquemaPresta(req.params.id);
+      if (!esquema) {
+        return res.status(404).json({ message: "Esquema no encontrado" });
+      }
+      if (esquema.esLey) {
+        return res.status(403).json({ message: "No se puede modificar el esquema de ley" });
+      }
+      const beneficio = await storage.createEsquemaBeneficio({
+        ...req.body,
+        esquemaId: req.params.id,
+      });
+      res.status(201).json(beneficio);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/esquema-beneficios/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateEsquemaBeneficio(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/esquema-beneficios/:id", async (req, res) => {
+    try {
+      await storage.deleteEsquemaBeneficio(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Beneficios Extra por Puesto
+  app.get("/api/puestos/:id/beneficios-extra", async (req, res) => {
+    try {
+      const beneficios = await storage.getPuestoBeneficiosExtra(req.params.id);
+      res.json(beneficios);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/puestos/:id/beneficios-extra", async (req, res) => {
+    try {
+      const beneficio = await storage.createPuestoBeneficioExtra({
+        ...req.body,
+        puestoId: req.params.id,
+      });
+      res.status(201).json(beneficio);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/puesto-beneficios-extra/:id", async (req, res) => {
+    try {
+      const updated = await storage.updatePuestoBeneficioExtra(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/puesto-beneficios-extra/:id", async (req, res) => {
+    try {
+      await storage.deletePuestoBeneficioExtra(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Beneficios Extra por Empleado
+  app.get("/api/employees/:id/beneficios-extra", async (req, res) => {
+    try {
+      const beneficios = await storage.getEmpleadoBeneficiosExtra(req.params.id);
+      res.json(beneficios);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/employees/:id/beneficios-extra", async (req, res) => {
+    try {
+      const beneficio = await storage.createEmpleadoBeneficioExtra({
+        ...req.body,
+        empleadoId: req.params.id,
+      });
+      res.status(201).json(beneficio);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/empleado-beneficios-extra/:id", async (req, res) => {
+    try {
+      const updated = await storage.updateEmpleadoBeneficioExtra(req.params.id, req.body);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/empleado-beneficios-extra/:id", async (req, res) => {
+    try {
+      await storage.deleteEmpleadoBeneficioExtra(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

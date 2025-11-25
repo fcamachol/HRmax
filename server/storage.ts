@@ -103,6 +103,18 @@ import {
   type InsertPeriodoNomina,
   type IncidenciaNomina,
   type InsertIncidenciaNomina,
+  type TipoBeneficio,
+  type InsertTipoBeneficio,
+  type EsquemaPresta,
+  type InsertEsquemaPresta,
+  type EsquemaVacacionesRow,
+  type InsertEsquemaVacacionesRow,
+  type EsquemaBeneficio,
+  type InsertEsquemaBeneficio,
+  type PuestoBeneficioExtra,
+  type InsertPuestoBeneficioExtra,
+  type EmpleadoBeneficioExtra,
+  type InsertEmpleadoBeneficioExtra,
   type NominaMovimiento,
   type InsertNominaMovimiento,
   type NominaResumen,
@@ -172,7 +184,13 @@ import {
   clientes,
   modulos,
   usuariosPermisos,
-  adminAuditLogs
+  adminAuditLogs,
+  tiposBeneficio,
+  esquemasPresta,
+  esquemaVacaciones,
+  esquemaBeneficios,
+  puestoBeneficiosExtra,
+  empleadoBeneficiosExtra
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -532,6 +550,46 @@ export interface IStorage {
   getSaldoVacacionesEmpleado(empleadoId: string): Promise<number>;
   updateKardexVacaciones(id: string, updates: Partial<InsertKardexVacaciones>): Promise<KardexVacaciones>;
   deleteKardexVacaciones(id: string): Promise<void>;
+  
+  // Nuevo Sistema Modular de Prestaciones
+  // Tipos de Beneficio (catalog)
+  getTiposBeneficio(): Promise<TipoBeneficio[]>;
+  getTipoBeneficio(id: string): Promise<TipoBeneficio | undefined>;
+  getTipoBeneficioByCodigo(codigo: string): Promise<TipoBeneficio | undefined>;
+  
+  // Esquemas de Prestaciones
+  createEsquemaPresta(esquema: InsertEsquemaPresta): Promise<EsquemaPresta>;
+  getEsquemaPresta(id: string): Promise<EsquemaPresta | undefined>;
+  getEsquemasPresta(): Promise<EsquemaPresta[]>;
+  getEsquemasPrestaActivos(): Promise<EsquemaPresta[]>;
+  updateEsquemaPresta(id: string, updates: Partial<InsertEsquemaPresta>): Promise<EsquemaPresta>;
+  deleteEsquemaPresta(id: string): Promise<void>;
+  
+  // Tabla de Vacaciones por Esquema
+  createEsquemaVacaciones(row: InsertEsquemaVacacionesRow): Promise<EsquemaVacacionesRow>;
+  getEsquemaVacaciones(esquemaId: string): Promise<EsquemaVacacionesRow[]>;
+  updateEsquemaVacacionesRow(id: string, updates: Partial<InsertEsquemaVacacionesRow>): Promise<EsquemaVacacionesRow>;
+  deleteEsquemaVacacionesRow(id: string): Promise<void>;
+  deleteEsquemaVacacionesByEsquema(esquemaId: string): Promise<void>;
+  
+  // Beneficios por Esquema
+  createEsquemaBeneficio(beneficio: InsertEsquemaBeneficio): Promise<EsquemaBeneficio>;
+  getEsquemaBeneficios(esquemaId: string): Promise<EsquemaBeneficio[]>;
+  updateEsquemaBeneficio(id: string, updates: Partial<InsertEsquemaBeneficio>): Promise<EsquemaBeneficio>;
+  deleteEsquemaBeneficio(id: string): Promise<void>;
+  deleteEsquemaBeneficiosByEsquema(esquemaId: string): Promise<void>;
+  
+  // Beneficios Extra por Puesto
+  createPuestoBeneficioExtra(beneficio: InsertPuestoBeneficioExtra): Promise<PuestoBeneficioExtra>;
+  getPuestoBeneficiosExtra(puestoId: string): Promise<PuestoBeneficioExtra[]>;
+  updatePuestoBeneficioExtra(id: string, updates: Partial<InsertPuestoBeneficioExtra>): Promise<PuestoBeneficioExtra>;
+  deletePuestoBeneficioExtra(id: string): Promise<void>;
+  
+  // Beneficios Extra por Empleado
+  createEmpleadoBeneficioExtra(beneficio: InsertEmpleadoBeneficioExtra): Promise<EmpleadoBeneficioExtra>;
+  getEmpleadoBeneficiosExtra(empleadoId: string): Promise<EmpleadoBeneficioExtra[]>;
+  updateEmpleadoBeneficioExtra(id: string, updates: Partial<InsertEmpleadoBeneficioExtra>): Promise<EmpleadoBeneficioExtra>;
+  deleteEmpleadoBeneficioExtra(id: string): Promise<void>;
   
   // Incapacidades (Sick Leave Management)
   createIncapacidad(incapacidad: InsertIncapacidad): Promise<Incapacidad>;
@@ -4018,6 +4076,184 @@ export class DatabaseStorage implements IStorage {
       return query.limit(limit);
     }
     return query;
+  }
+
+  // ==================== Nuevo Sistema Modular de Prestaciones ====================
+
+  // Tipos de Beneficio
+  async getTiposBeneficio(): Promise<TipoBeneficio[]> {
+    return db.select().from(tiposBeneficio).orderBy(tiposBeneficio.orden);
+  }
+
+  async getTipoBeneficio(id: string): Promise<TipoBeneficio | undefined> {
+    const [result] = await db.select().from(tiposBeneficio).where(eq(tiposBeneficio.id, id));
+    return result;
+  }
+
+  async getTipoBeneficioByCodigo(codigo: string): Promise<TipoBeneficio | undefined> {
+    const [result] = await db.select().from(tiposBeneficio).where(eq(tiposBeneficio.codigo, codigo));
+    return result;
+  }
+
+  // Esquemas de Prestaciones
+  async createEsquemaPresta(esquema: InsertEsquemaPresta): Promise<EsquemaPresta> {
+    const [result] = await db.insert(esquemasPresta).values(esquema).returning();
+    return result;
+  }
+
+  async getEsquemaPresta(id: string): Promise<EsquemaPresta | undefined> {
+    const [result] = await db.select().from(esquemasPresta).where(eq(esquemasPresta.id, id));
+    return result;
+  }
+
+  async getEsquemasPresta(): Promise<EsquemaPresta[]> {
+    return db.select().from(esquemasPresta).orderBy(esquemasPresta.nombre);
+  }
+
+  async getEsquemasPrestaActivos(): Promise<EsquemaPresta[]> {
+    return db.select().from(esquemasPresta)
+      .where(eq(esquemasPresta.activo, true))
+      .orderBy(esquemasPresta.nombre);
+  }
+
+  async updateEsquemaPresta(id: string, updates: Partial<InsertEsquemaPresta>): Promise<EsquemaPresta> {
+    const [result] = await db.update(esquemasPresta)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(esquemasPresta.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteEsquemaPresta(id: string): Promise<void> {
+    await db.delete(esquemasPresta).where(eq(esquemasPresta.id, id));
+  }
+
+  // Tabla de Vacaciones por Esquema
+  async createEsquemaVacaciones(row: InsertEsquemaVacacionesRow): Promise<EsquemaVacacionesRow> {
+    const [result] = await db.insert(esquemaVacaciones).values(row).returning();
+    return result;
+  }
+
+  async getEsquemaVacaciones(esquemaId: string): Promise<EsquemaVacacionesRow[]> {
+    return db.select().from(esquemaVacaciones)
+      .where(eq(esquemaVacaciones.esquemaId, esquemaId))
+      .orderBy(esquemaVacaciones.aniosAntiguedad);
+  }
+
+  async updateEsquemaVacacionesRow(id: string, updates: Partial<InsertEsquemaVacacionesRow>): Promise<EsquemaVacacionesRow> {
+    const [result] = await db.update(esquemaVacaciones)
+      .set(updates)
+      .where(eq(esquemaVacaciones.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteEsquemaVacacionesRow(id: string): Promise<void> {
+    await db.delete(esquemaVacaciones).where(eq(esquemaVacaciones.id, id));
+  }
+
+  async deleteEsquemaVacacionesByEsquema(esquemaId: string): Promise<void> {
+    await db.delete(esquemaVacaciones).where(eq(esquemaVacaciones.esquemaId, esquemaId));
+  }
+
+  // Beneficios por Esquema
+  async createEsquemaBeneficio(beneficio: InsertEsquemaBeneficio): Promise<EsquemaBeneficio> {
+    const data = {
+      ...beneficio,
+      valor: String(beneficio.valor),
+    };
+    const [result] = await db.insert(esquemaBeneficios).values(data as any).returning();
+    return result;
+  }
+
+  async getEsquemaBeneficios(esquemaId: string): Promise<EsquemaBeneficio[]> {
+    return db.select().from(esquemaBeneficios)
+      .where(eq(esquemaBeneficios.esquemaId, esquemaId));
+  }
+
+  async updateEsquemaBeneficio(id: string, updates: Partial<InsertEsquemaBeneficio>): Promise<EsquemaBeneficio> {
+    const data = {
+      ...updates,
+      valor: updates.valor !== undefined ? String(updates.valor) : undefined,
+      updatedAt: new Date(),
+    };
+    const [result] = await db.update(esquemaBeneficios)
+      .set(data as any)
+      .where(eq(esquemaBeneficios.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteEsquemaBeneficio(id: string): Promise<void> {
+    await db.delete(esquemaBeneficios).where(eq(esquemaBeneficios.id, id));
+  }
+
+  async deleteEsquemaBeneficiosByEsquema(esquemaId: string): Promise<void> {
+    await db.delete(esquemaBeneficios).where(eq(esquemaBeneficios.esquemaId, esquemaId));
+  }
+
+  // Beneficios Extra por Puesto
+  async createPuestoBeneficioExtra(beneficio: InsertPuestoBeneficioExtra): Promise<PuestoBeneficioExtra> {
+    const data = {
+      ...beneficio,
+      valorExtra: String(beneficio.valorExtra),
+    };
+    const [result] = await db.insert(puestoBeneficiosExtra).values(data as any).returning();
+    return result;
+  }
+
+  async getPuestoBeneficiosExtra(puestoId: string): Promise<PuestoBeneficioExtra[]> {
+    return db.select().from(puestoBeneficiosExtra)
+      .where(eq(puestoBeneficiosExtra.puestoId, puestoId));
+  }
+
+  async updatePuestoBeneficioExtra(id: string, updates: Partial<InsertPuestoBeneficioExtra>): Promise<PuestoBeneficioExtra> {
+    const data = {
+      ...updates,
+      valorExtra: updates.valorExtra !== undefined ? String(updates.valorExtra) : undefined,
+      updatedAt: new Date(),
+    };
+    const [result] = await db.update(puestoBeneficiosExtra)
+      .set(data as any)
+      .where(eq(puestoBeneficiosExtra.id, id))
+      .returning();
+    return result;
+  }
+
+  async deletePuestoBeneficioExtra(id: string): Promise<void> {
+    await db.delete(puestoBeneficiosExtra).where(eq(puestoBeneficiosExtra.id, id));
+  }
+
+  // Beneficios Extra por Empleado
+  async createEmpleadoBeneficioExtra(beneficio: InsertEmpleadoBeneficioExtra): Promise<EmpleadoBeneficioExtra> {
+    const data = {
+      ...beneficio,
+      valorExtra: String(beneficio.valorExtra),
+    };
+    const [result] = await db.insert(empleadoBeneficiosExtra).values(data as any).returning();
+    return result;
+  }
+
+  async getEmpleadoBeneficiosExtra(empleadoId: string): Promise<EmpleadoBeneficioExtra[]> {
+    return db.select().from(empleadoBeneficiosExtra)
+      .where(eq(empleadoBeneficiosExtra.empleadoId, empleadoId));
+  }
+
+  async updateEmpleadoBeneficioExtra(id: string, updates: Partial<InsertEmpleadoBeneficioExtra>): Promise<EmpleadoBeneficioExtra> {
+    const data = {
+      ...updates,
+      valorExtra: updates.valorExtra !== undefined ? String(updates.valorExtra) : undefined,
+      updatedAt: new Date(),
+    };
+    const [result] = await db.update(empleadoBeneficiosExtra)
+      .set(data as any)
+      .where(eq(empleadoBeneficiosExtra.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteEmpleadoBeneficioExtra(id: string): Promise<void> {
+    await db.delete(empleadoBeneficiosExtra).where(eq(empleadoBeneficiosExtra.id, id));
   }
 }
 
