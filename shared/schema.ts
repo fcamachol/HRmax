@@ -3239,3 +3239,159 @@ export const insertNominaResumenSchema = createInsertSchema(nominaResumen).omit(
   updatedAt: true,
 });
 export type InsertNominaResumen = z.infer<typeof insertNominaResumenSchema>;
+
+// ============================================================================
+// NUEVO SISTEMA MODULAR DE PRESTACIONES
+// ============================================================================
+// Sistema de tres niveles: Esquema → Puesto → Empleado (aditivo)
+// LFT es siempre la base, los "superiores" son adicionales
+
+// Catálogo de tipos de beneficio
+export const categoriasBeneficio = ["legal", "adicional"] as const;
+export type CategoriaBeneficio = typeof categoriasBeneficio[number];
+
+export const unidadesBeneficio = ["dias", "porcentaje", "monto_fijo", "porcentaje_salario"] as const;
+export type UnidadBeneficio = typeof unidadesBeneficio[number];
+
+export const tiposBeneficio = pgTable("tipos_beneficio", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codigo: varchar("codigo", { length: 50 }).notNull().unique(),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  descripcion: text("descripcion"),
+  categoria: varchar("categoria", { length: 20 }).notNull(), // legal, adicional
+  unidad: varchar("unidad", { length: 30 }).notNull(), // dias, porcentaje, monto_fijo, porcentaje_salario
+  valorMinimoLegal: numeric("valor_minimo_legal", { precision: 10, scale: 2 }), // Valor mínimo según LFT (NULL si no aplica)
+  afectaFactorIntegracion: boolean("afecta_factor_integracion").default(false),
+  orden: integer("orden").default(0), // Para ordenar en UI
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertTipoBeneficioSchema = createInsertSchema(tiposBeneficio).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  categoria: z.enum(categoriasBeneficio),
+  unidad: z.enum(unidadesBeneficio),
+});
+
+export type TipoBeneficio = typeof tiposBeneficio.$inferSelect;
+export type InsertTipoBeneficio = z.infer<typeof insertTipoBeneficioSchema>;
+
+// Esquemas de prestaciones (nombrados y configurables)
+export const esquemasPresta = pgTable("esquemas_prestaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  descripcion: text("descripcion"),
+  esLey: boolean("es_ley").default(false), // TRUE = Es el esquema LFT base (read-only)
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("esquemas_prestaciones_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export const insertEsquemaPrestaSchema = createInsertSchema(esquemasPresta).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type EsquemaPresta = typeof esquemasPresta.$inferSelect;
+export type InsertEsquemaPresta = z.infer<typeof insertEsquemaPrestaSchema>;
+
+// Tabla de vacaciones por esquema (años → días)
+export const esquemaVacaciones = pgTable("esquema_vacaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  esquemaId: varchar("esquema_id").notNull().references(() => esquemasPresta.id, { onDelete: "cascade" }),
+  aniosAntiguedad: integer("anios_antiguedad").notNull(), // 0, 1, 2, 3...
+  diasVacaciones: integer("dias_vacaciones").notNull(),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  esquemaAniosIdx: unique().on(table.esquemaId, table.aniosAntiguedad),
+}));
+
+export const insertEsquemaVacacionesSchema = createInsertSchema(esquemaVacaciones).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  aniosAntiguedad: z.coerce.number().int().min(0),
+  diasVacaciones: z.coerce.number().int().min(1),
+});
+
+export type EsquemaVacacionesRow = typeof esquemaVacaciones.$inferSelect;
+export type InsertEsquemaVacacionesRow = z.infer<typeof insertEsquemaVacacionesSchema>;
+
+// Beneficios configurados por esquema (primas, aguinaldo, vales, etc.)
+export const esquemaBeneficios = pgTable("esquema_beneficios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  esquemaId: varchar("esquema_id").notNull().references(() => esquemasPresta.id, { onDelete: "cascade" }),
+  tipoBeneficioId: varchar("tipo_beneficio_id").notNull().references(() => tiposBeneficio.id, { onDelete: "cascade" }),
+  valor: numeric("valor", { precision: 10, scale: 2 }).notNull(), // Según unidad del tipo
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  esquemaTipoIdx: unique().on(table.esquemaId, table.tipoBeneficioId),
+}));
+
+export const insertEsquemaBeneficioSchema = createInsertSchema(esquemaBeneficios).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  valor: z.coerce.number(),
+});
+
+export type EsquemaBeneficio = typeof esquemaBeneficios.$inferSelect;
+export type InsertEsquemaBeneficio = z.infer<typeof insertEsquemaBeneficioSchema>;
+
+// Beneficios adicionales por puesto (sobre el esquema)
+export const puestoBeneficiosExtra = pgTable("puesto_beneficios_extra", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  puestoId: varchar("puesto_id").notNull().references(() => puestos.id, { onDelete: "cascade" }),
+  tipoBeneficioId: varchar("tipo_beneficio_id").notNull().references(() => tiposBeneficio.id, { onDelete: "cascade" }),
+  valorExtra: numeric("valor_extra", { precision: 10, scale: 2 }).notNull(), // Adicional al esquema
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  puestoTipoIdx: unique().on(table.puestoId, table.tipoBeneficioId),
+}));
+
+export const insertPuestoBeneficioExtraSchema = createInsertSchema(puestoBeneficiosExtra).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  valorExtra: z.coerce.number(),
+});
+
+export type PuestoBeneficioExtra = typeof puestoBeneficiosExtra.$inferSelect;
+export type InsertPuestoBeneficioExtra = z.infer<typeof insertPuestoBeneficioExtraSchema>;
+
+// Beneficios adicionales por empleado (sobre puesto + esquema)
+export const empleadoBeneficiosExtra = pgTable("empleado_beneficios_extra", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  tipoBeneficioId: varchar("tipo_beneficio_id").notNull().references(() => tiposBeneficio.id, { onDelete: "cascade" }),
+  valorExtra: numeric("valor_extra", { precision: 10, scale: 2 }).notNull(), // Adicional al puesto
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoTipoIdx: unique().on(table.empleadoId, table.tipoBeneficioId),
+}));
+
+export const insertEmpleadoBeneficioExtraSchema = createInsertSchema(empleadoBeneficiosExtra).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  valorExtra: z.coerce.number(),
+});
+
+export type EmpleadoBeneficioExtra = typeof empleadoBeneficiosExtra.$inferSelect;
+export type InsertEmpleadoBeneficioExtra = z.infer<typeof insertEmpleadoBeneficioExtraSchema>;
