@@ -563,11 +563,12 @@ export default function Payroll() {
     const totalIMSS = imssExcedente3Umas + imssPrestacionesDinero + imssGastosMedicos + imssInvalidezVida + imssCesantiaVejez;
     
     // ========== ISR (Impuesto Sobre la Renta) ==========
-    // Base gravable = Todas las percepciones gravables - IMSS
+    // Base gravable = Todas las percepciones gravables - descuentos - IMSS
     // Percepciones gravables: salario, horas extra gravado, prima dominical, vacaciones, prima vacacional, bonos
+    // Descuentos: horas descontadas (retardos, ausencias parciales) reducen la base gravable
     // Exenciones: horas extra exentas (ya consideradas)
     const percepcionesGravables = baseSalary + horasExtraGravado + primaDominical + vacacionesPago + primaVacacional + bonuses;
-    const baseGravable = Math.max(0, percepcionesGravables - totalIMSS);
+    const baseGravable = Math.max(0, percepcionesGravables - descuentoHoras - totalIMSS);
     
     // Tabla ISR 2025 según período (DOF Anexo 8 RMF 2025)
     const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number } => {
