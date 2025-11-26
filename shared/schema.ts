@@ -1662,7 +1662,7 @@ export const puestos = pgTable("puestos", {
   estatus: varchar("estatus").default("activo"), // activo, inactivo
   
   // Prestaciones
-  esquemaPrestacionesId: varchar("esquema_prestaciones_id").references(() => catTablasPrestaciones.id),
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id"),
   
   // Auditoría
   fechaCreacion: timestamp("fecha_creacion").notNull().default(sql`now()`),

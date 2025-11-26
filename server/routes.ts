@@ -4388,6 +4388,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ===== BENEFITS RESOLUTION API =====
+  // Returns total resolved benefits for an employee using 3-tier additive cascade
+  // Supports both new modular system (esquemasPresta) and legacy (catTablasPrestaciones)
+  app.get("/api/employees/:id/beneficios-resueltos", async (req, res) => {
+    try {
+      const result = await storage.resolveEmployeeBenefits(req.params.id);
+      const totalesArray = Array.from(result.totales.entries()).map(([tipoBeneficioId, data]) => ({
+        tipoBeneficioId,
+        tipoBeneficio: data.tipoBeneficio,
+        valorTotal: data.valorTotal,
+        fuentes: data.fuentes,
+      }));
+      res.json({
+        esquema: result.esquema,
+        vacacionesPorAnio: result.vacacionesPorAnio,
+        beneficiosBase: result.beneficiosBase,
+        puestoExtras: result.puestoExtras,
+        empleadoExtras: result.empleadoExtras,
+        totales: totalesArray,
+        usandoSistemaLegacy: result.usandoSistemaLegacy || false,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Returns vacation days for an employee based on seniority
+  app.get("/api/employees/:id/vacaciones-resueltas", async (req, res) => {
+    try {
+      const aniosAntiguedad = parseInt(req.query.anios as string) || 0;
+      const result = await storage.resolveVacationDays(req.params.id, aniosAntiguedad);
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

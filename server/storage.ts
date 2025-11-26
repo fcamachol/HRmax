@@ -4255,6 +4255,301 @@ export class DatabaseStorage implements IStorage {
   async deleteEmpleadoBeneficioExtra(id: string): Promise<void> {
     await db.delete(empleadoBeneficiosExtra).where(eq(empleadoBeneficiosExtra.id, id));
   }
+
+  // ===== BENEFITS RESOLUTION ENGINE =====
+  // Resolves total benefits for an employee using 3-tier additive cascade:
+  // 1. LFT baseline (minimum by law)
+  // 2. Esquema level (from puesto or employee's assigned scheme)
+  // 3. Puesto extras (additive benefits at position level)
+  // 4. Empleado extras (additive benefits at employee level)
+
+  async getLFTEsquemaId(): Promise<string | undefined> {
+    const [lftEsquema] = await db.select({ id: esquemasPresta.id })
+      .from(esquemasPresta)
+      .where(eq(esquemasPresta.esLey, true))
+      .limit(1);
+    return lftEsquema?.id;
+  }
+
+  async resolveEmployeeBenefits(empleadoId: string): Promise<{
+    esquema: EsquemaPresta | null;
+    vacacionesPorAnio: EsquemaVacacionesRow[];
+    beneficiosBase: Array<EsquemaBeneficio & { tipoBeneficio: TipoBeneficio }>;
+    puestoExtras: Array<PuestoBeneficioExtra & { tipoBeneficio: TipoBeneficio }>;
+    empleadoExtras: Array<EmpleadoBeneficioExtra & { tipoBeneficio: TipoBeneficio }>;
+    totales: Map<string, { tipoBeneficio: TipoBeneficio; valorTotal: number; fuentes: string[] }>;
+    usandoSistemaLegacy?: boolean;
+  }> {
+    const employee = await this.getEmployee(empleadoId);
+    if (!employee) {
+      throw new Error(`Empleado no encontrado: ${empleadoId}`);
+    }
+
+    const tiposList = await db.select().from(tiposBeneficio);
+    const tiposMap = new Map<string, TipoBeneficio>(tiposList.map(t => [t.id, t]));
+
+    let esquemaId: string | undefined;
+    let puestoId: string | undefined;
+    let legacyEsquemaId: string | undefined;
+
+    if (employee.puestoId) {
+      const puesto = await this.getPuesto(employee.puestoId);
+      if (puesto) {
+        puestoId = puesto.id;
+        if (puesto.esquemaPrestacionesId) {
+          const esquemaCheck = await this.getEsquemaPresta(puesto.esquemaPrestacionesId);
+          if (esquemaCheck) {
+            esquemaId = puesto.esquemaPrestacionesId;
+          } else {
+            legacyEsquemaId = puesto.esquemaPrestacionesId;
+          }
+        }
+      }
+    }
+
+    const lftEsquemaId = await this.getLFTEsquemaId();
+    if (!esquemaId && !legacyEsquemaId) {
+      esquemaId = lftEsquemaId;
+    }
+
+    let esquema: EsquemaPresta | null = null;
+    let vacacionesPorAnio: EsquemaVacacionesRow[] = [];
+    let beneficiosBase: Array<EsquemaBeneficio & { tipoBeneficio: TipoBeneficio }> = [];
+    let usandoSistemaLegacy = false;
+
+    if (legacyEsquemaId && !esquemaId) {
+      let legacyRows = await db.select().from(catTablasPrestaciones)
+        .where(eq(catTablasPrestaciones.id, legacyEsquemaId))
+        .limit(1);
+      
+      if (legacyRows.length === 0) {
+        legacyRows = await db.select().from(catTablasPrestaciones)
+          .where(eq(catTablasPrestaciones.nombreEsquema, legacyEsquemaId))
+          .limit(1);
+      }
+      
+      const legacyRow = legacyRows[0];
+      if (legacyRow) {
+        usandoSistemaLegacy = true;
+        const allLegacyRows = await db.select().from(catTablasPrestaciones)
+          .where(eq(catTablasPrestaciones.nombreEsquema, legacyRow.nombreEsquema))
+          .orderBy(catTablasPrestaciones.aniosAntiguedad);
+        
+        vacacionesPorAnio = allLegacyRows.map(row => ({
+          id: row.id,
+          esquemaId: legacyRow.nombreEsquema,
+          aniosAntiguedad: row.aniosAntiguedad,
+          diasVacaciones: row.diasVacaciones,
+          createdAt: row.createdAt,
+        }));
+
+        const aguinaldoTipo = tiposList.find(t => t.codigo === "aguinaldo");
+        const primaVacTipo = tiposList.find(t => t.codigo === "prima_vacacional");
+        
+        if (aguinaldoTipo) {
+          beneficiosBase.push({
+            id: `legacy-aguinaldo-${legacyRow.nombreEsquema}`,
+            esquemaId: legacyRow.nombreEsquema,
+            tipoBeneficioId: aguinaldoTipo.id,
+            valor: String(legacyRow.diasAguinaldo),
+            activo: true,
+            createdAt: legacyRow.createdAt,
+            updatedAt: legacyRow.updatedAt,
+            tipoBeneficio: aguinaldoTipo,
+          });
+        }
+        if (primaVacTipo && legacyRow.primaVacacionalPct) {
+          beneficiosBase.push({
+            id: `legacy-primavac-${legacyRow.nombreEsquema}`,
+            esquemaId: legacyRow.nombreEsquema,
+            tipoBeneficioId: primaVacTipo.id,
+            valor: String(legacyRow.primaVacacionalPct),
+            activo: true,
+            createdAt: legacyRow.createdAt,
+            updatedAt: legacyRow.updatedAt,
+            tipoBeneficio: primaVacTipo,
+          });
+        }
+      } else {
+        esquemaId = lftEsquemaId;
+      }
+    }
+
+    if (!usandoSistemaLegacy && esquemaId) {
+      esquema = await this.getEsquemaPresta(esquemaId) || null;
+      vacacionesPorAnio = await this.getEsquemaVacaciones(esquemaId);
+      const esquemaBeneficiosList = await this.getEsquemaBeneficios(esquemaId);
+      beneficiosBase = esquemaBeneficiosList
+        .filter(b => b.activo)
+        .map(b => ({
+          ...b,
+          tipoBeneficio: tiposMap.get(b.tipoBeneficioId)!,
+        }))
+        .filter(b => b.tipoBeneficio);
+    }
+
+    let puestoExtras: Array<PuestoBeneficioExtra & { tipoBeneficio: TipoBeneficio }> = [];
+    if (puestoId) {
+      const puestoExtrasList = await this.getPuestoBeneficiosExtra(puestoId);
+      puestoExtras = puestoExtrasList
+        .filter(b => b.activo)
+        .map(b => ({
+          ...b,
+          tipoBeneficio: tiposMap.get(b.tipoBeneficioId)!,
+        }))
+        .filter(b => b.tipoBeneficio);
+    }
+
+    const empleadoExtrasList = await this.getEmpleadoBeneficiosExtra(empleadoId);
+    const empleadoExtras = empleadoExtrasList
+      .filter(b => b.activo)
+      .map(b => ({
+        ...b,
+        tipoBeneficio: tiposMap.get(b.tipoBeneficioId)!,
+      }))
+      .filter(b => b.tipoBeneficio);
+
+    const totales = new Map<string, { tipoBeneficio: TipoBeneficio; valorTotal: number; fuentes: string[] }>();
+
+    for (const ben of beneficiosBase) {
+      const existing = totales.get(ben.tipoBeneficioId);
+      const valor = parseFloat(ben.valor);
+      if (existing) {
+        existing.valorTotal += valor;
+        existing.fuentes.push("esquema");
+      } else {
+        totales.set(ben.tipoBeneficioId, {
+          tipoBeneficio: ben.tipoBeneficio,
+          valorTotal: valor,
+          fuentes: ["esquema"],
+        });
+      }
+    }
+
+    for (const ben of puestoExtras) {
+      const existing = totales.get(ben.tipoBeneficioId);
+      const valor = parseFloat(ben.valorExtra);
+      if (existing) {
+        existing.valorTotal += valor;
+        existing.fuentes.push("puesto");
+      } else {
+        totales.set(ben.tipoBeneficioId, {
+          tipoBeneficio: ben.tipoBeneficio,
+          valorTotal: valor,
+          fuentes: ["puesto"],
+        });
+      }
+    }
+
+    for (const ben of empleadoExtras) {
+      const existing = totales.get(ben.tipoBeneficioId);
+      const valor = parseFloat(ben.valorExtra);
+      if (existing) {
+        existing.valorTotal += valor;
+        existing.fuentes.push("empleado");
+      } else {
+        totales.set(ben.tipoBeneficioId, {
+          tipoBeneficio: ben.tipoBeneficio,
+          valorTotal: valor,
+          fuentes: ["empleado"],
+        });
+      }
+    }
+
+    return {
+      esquema,
+      vacacionesPorAnio,
+      beneficiosBase,
+      puestoExtras,
+      empleadoExtras,
+      totales,
+      usandoSistemaLegacy,
+    };
+  }
+
+  async resolveVacationDays(empleadoId: string, aniosAntiguedad: number): Promise<{
+    diasVacaciones: number;
+    esquema: EsquemaPresta | null;
+    fuente: "esquema" | "lft" | "legacy";
+  }> {
+    const employee = await this.getEmployee(empleadoId);
+    if (!employee) {
+      throw new Error(`Empleado no encontrado: ${empleadoId}`);
+    }
+
+    let esquemaId: string | undefined;
+    let legacyEsquemaId: string | undefined;
+
+    if (employee.puestoId) {
+      const puesto = await this.getPuesto(employee.puestoId);
+      if (puesto?.esquemaPrestacionesId) {
+        const esquemaCheck = await this.getEsquemaPresta(puesto.esquemaPrestacionesId);
+        if (esquemaCheck) {
+          esquemaId = puesto.esquemaPrestacionesId;
+        } else {
+          legacyEsquemaId = puesto.esquemaPrestacionesId;
+        }
+      }
+    }
+
+    const lftEsquemaId = await this.getLFTEsquemaId();
+
+    let vacaciones: EsquemaVacacionesRow[] = [];
+    let esquema: EsquemaPresta | null = null;
+    let fuente: "esquema" | "lft" | "legacy" = "lft";
+
+    if (esquemaId) {
+      vacaciones = await this.getEsquemaVacaciones(esquemaId);
+      if (vacaciones.length > 0) {
+        esquema = await this.getEsquemaPresta(esquemaId) || null;
+        fuente = "esquema";
+      }
+    }
+
+    if (vacaciones.length === 0 && legacyEsquemaId) {
+      let legacyRows = await db.select().from(catTablasPrestaciones)
+        .where(eq(catTablasPrestaciones.id, legacyEsquemaId))
+        .limit(1);
+      
+      if (legacyRows.length === 0) {
+        legacyRows = await db.select().from(catTablasPrestaciones)
+          .where(eq(catTablasPrestaciones.nombreEsquema, legacyEsquemaId))
+          .limit(1);
+      }
+      
+      const legacyRow = legacyRows[0];
+      if (legacyRow) {
+        const allLegacyRows = await db.select().from(catTablasPrestaciones)
+          .where(eq(catTablasPrestaciones.nombreEsquema, legacyRow.nombreEsquema))
+          .orderBy(catTablasPrestaciones.aniosAntiguedad);
+        vacaciones = allLegacyRows.map(row => ({
+          id: row.id,
+          esquemaId: legacyRow.nombreEsquema,
+          aniosAntiguedad: row.aniosAntiguedad,
+          diasVacaciones: row.diasVacaciones,
+          createdAt: row.createdAt,
+        }));
+        fuente = "legacy";
+      }
+    }
+
+    if (vacaciones.length === 0 && lftEsquemaId) {
+      vacaciones = await this.getEsquemaVacaciones(lftEsquemaId);
+      esquema = await this.getEsquemaPresta(lftEsquemaId) || null;
+      fuente = "lft";
+    }
+
+    let diasVacaciones = 12;
+    for (const row of vacaciones) {
+      if (aniosAntiguedad >= row.aniosAntiguedad) {
+        diasVacaciones = row.diasVacaciones;
+      } else {
+        break;
+      }
+    }
+
+    return { diasVacaciones, esquema, fuente };
+  }
 }
 
 export const storage = new DatabaseStorage();
