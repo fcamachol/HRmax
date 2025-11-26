@@ -111,9 +111,55 @@ export default function Payroll() {
     queryKey: ["/api/employees"],
   });
 
-  // Fetch incidencias de asistencia from API
+  // Get period range for incidencias query
+  const getQueryPeriodRange = () => {
+    if (!selectedPeriod) {
+      const today = new Date();
+      if (selectedFrequency === "semanal") {
+        return {
+          start: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+          end: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
+        };
+      } else if (selectedFrequency === "quincenal") {
+        const day = today.getDate();
+        if (day <= 15) {
+          return {
+            start: format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd"),
+            end: format(new Date(today.getFullYear(), today.getMonth(), 15), "yyyy-MM-dd"),
+          };
+        } else {
+          return {
+            start: format(new Date(today.getFullYear(), today.getMonth(), 16), "yyyy-MM-dd"),
+            end: format(endOfMonth(today), "yyyy-MM-dd"),
+          };
+        }
+      } else {
+        return {
+          start: format(startOfMonth(today), "yyyy-MM-dd"),
+          end: format(endOfMonth(today), "yyyy-MM-dd"),
+        };
+      }
+    }
+    return getPeriodDateRange();
+  };
+
+  const queryPeriodRange = getQueryPeriodRange();
+
+  // Fetch incidencias de asistencia from API filtered by period
   const { data: incidenciasAsistencia = [] } = useQuery<IncidenciaAsistencia[]>({
-    queryKey: ["/api/incidencias-asistencia"],
+    queryKey: ["/api/incidencias-asistencia", { fechaInicio: queryPeriodRange.start, fechaFin: queryPeriodRange.end }],
+    queryFn: async ({ queryKey }) => {
+      const [path, params] = queryKey as [string, { fechaInicio: string; fechaFin: string }];
+      const searchParams = new URLSearchParams();
+      searchParams.append("fechaInicio", params.fechaInicio);
+      searchParams.append("fechaFin", params.fechaFin);
+      const url = `${path}?${searchParams.toString()}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        throw new Error(`${res.status}: ${res.statusText}`);
+      }
+      return res.json();
+    },
   });
   
   // Form state
@@ -320,13 +366,15 @@ export default function Payroll() {
     const employee = allEmployees.find(e => e.id === employeeId);
     if (!employee) return { 
       baseSalary: 0,
+      primaDominical: 0,
       earnings: 0, 
       deductions: 0, 
       netPay: 0,
       daysWorked: 0,
       periodDays: 0,
       absences: 0,
-      incapacities: 0
+      incapacities: 0,
+      diasDomingo: 0
     };
 
     // Calcular días del periodo según frecuencia
