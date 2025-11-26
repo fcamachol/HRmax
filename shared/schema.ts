@@ -274,7 +274,7 @@ export const attendance = pgTable("attendance", {
 }));
 
 // Tipos de incidencias de asistencia
-export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso", "prima_dominical"] as const;
+export const tiposIncidenciaAsistencia = ["falta", "retardo", "horas_extra", "horas_descontadas", "incapacidad", "permiso", "prima_dominical", "dia_festivo"] as const;
 export type TipoIncidenciaAsistencia = typeof tiposIncidenciaAsistencia[number];
 
 export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
@@ -285,7 +285,78 @@ export const tipoIncidenciaLabels: Record<TipoIncidenciaAsistencia, string> = {
   incapacidad: "Incapacidad",
   permiso: "Permiso",
   prima_dominical: "Prima Dominical",
+  dia_festivo: "Día Festivo",
 };
+
+// Días festivos oficiales DOF - LFT Artículo 74
+// Estos son los días de descanso obligatorio con goce de salario
+export const diasFestivosOficialesDOF: { fecha: string; nombre: string; tipo: 'fijo' | 'movil' }[] = [
+  // Días fijos
+  { fecha: "01-01", nombre: "Año Nuevo", tipo: "fijo" },
+  { fecha: "05-01", nombre: "Día del Trabajo", tipo: "fijo" },
+  { fecha: "09-16", nombre: "Día de la Independencia", tipo: "fijo" },
+  { fecha: "12-25", nombre: "Navidad", tipo: "fijo" },
+  // Días móviles (primer lunes de febrero, tercer lunes de marzo, tercer lunes de noviembre)
+  // Nota: Estos se calculan dinámicamente
+];
+
+// Función para calcular días festivos móviles para un año específico
+export function calcularDiasFestivosMoviles(year: number): { fecha: string; nombre: string }[] {
+  const result: { fecha: string; nombre: string }[] = [];
+  
+  // Primer lunes de febrero - Día de la Constitución
+  const feb1 = new Date(year, 1, 1);
+  const primerLunesFeb = new Date(feb1);
+  primerLunesFeb.setDate(1 + ((8 - feb1.getDay()) % 7));
+  result.push({ 
+    fecha: `${year}-02-${primerLunesFeb.getDate().toString().padStart(2, '0')}`, 
+    nombre: "Día de la Constitución" 
+  });
+  
+  // Tercer lunes de marzo - Natalicio de Benito Juárez
+  const mar1 = new Date(year, 2, 1);
+  const primerLunesMar = new Date(mar1);
+  primerLunesMar.setDate(1 + ((8 - mar1.getDay()) % 7));
+  const tercerLunesMar = new Date(primerLunesMar);
+  tercerLunesMar.setDate(primerLunesMar.getDate() + 14);
+  result.push({ 
+    fecha: `${year}-03-${tercerLunesMar.getDate().toString().padStart(2, '0')}`, 
+    nombre: "Natalicio de Benito Juárez" 
+  });
+  
+  // Tercer lunes de noviembre - Día de la Revolución
+  const nov1 = new Date(year, 10, 1);
+  const primerLunesNov = new Date(nov1);
+  primerLunesNov.setDate(1 + ((8 - nov1.getDay()) % 7));
+  const tercerLunesNov = new Date(primerLunesNov);
+  tercerLunesNov.setDate(primerLunesNov.getDate() + 14);
+  result.push({ 
+    fecha: `${year}-11-${tercerLunesNov.getDate().toString().padStart(2, '0')}`, 
+    nombre: "Día de la Revolución" 
+  });
+  
+  // 1 de diciembre cada 6 años (cambio de gobierno federal)
+  // Próximo: 2024, 2030, 2036...
+  if ((year - 2024) % 6 === 0) {
+    result.push({ 
+      fecha: `${year}-12-01`, 
+      nombre: "Transmisión del Poder Ejecutivo Federal" 
+    });
+  }
+  
+  return result;
+}
+
+// Obtener todos los días festivos de un año
+export function obtenerDiasFestivosDelAnio(year: number): { fecha: string; nombre: string }[] {
+  const fijos = diasFestivosOficialesDOF
+    .filter(d => d.tipo === 'fijo')
+    .map(d => ({ fecha: `${year}-${d.fecha}`, nombre: d.nombre }));
+  
+  const moviles = calcularDiasFestivosMoviles(year);
+  
+  return [...fijos, ...moviles].sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
 
 // Incidencias de asistencia por día con columnas expandibles
 // Una fila por empleado por día con columnas para cada tipo de incidencia
@@ -305,6 +376,7 @@ export const incidenciasAsistencia = pgTable("incidencias_asistencia", {
   permisos: integer("permisos").notNull().default(0), // Días de permiso (0 o 1 por día)
   vacaciones: integer("vacaciones").notNull().default(0), // Días de vacaciones (0 o 1 por día)
   diasDomingo: integer("dias_domingo").notNull().default(0), // Días domingo trabajados (0 o 1 por día) - Prima Dominical 25%
+  diasFestivos: integer("dias_festivos").notNull().default(0), // Días festivos trabajados (0 o 1 por día) - LFT Art. 74, pago doble
   notas: text("notas"), // Observaciones del día
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),

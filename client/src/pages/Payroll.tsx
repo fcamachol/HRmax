@@ -338,6 +338,8 @@ export default function Payroll() {
       horasDobles: 0,
       horasTriples: 0,
       primaDominical: 0,
+      diasFestivos: 0,
+      pagoFestivos: 0,
       vacacionesPago: 0,
       primaVacacional: 0,
       earnings: 0, 
@@ -378,6 +380,7 @@ export default function Payroll() {
     const totalAbsences = employeeIncidencias.reduce((sum, inc) => sum + (inc.faltas || 0), 0);
     const totalIncapacities = employeeIncidencias.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0);
     const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
+    const totalDiasFestivos = employeeIncidencias.reduce((sum, inc) => sum + ((inc as any).diasFestivos || 0), 0);
     const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
     const totalHorasExtra = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasExtra || "0"), 0);
     const totalHorasDescontadas = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasDescontadas || "0"), 0);
@@ -502,6 +505,12 @@ export default function Payroll() {
     // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
     const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
     
+    // Calcular pago de días festivos trabajados (LFT Art. 75)
+    // Si el empleado trabaja en día festivo, se le paga salario doble adicional al ordinario
+    // Total: salario triple (1 ordinario + 2 adicionales)
+    // Como el salario ordinario ya está incluido en baseSalary, solo agregamos el doble adicional
+    const pagoFestivos = salarioDiario * 2 * totalDiasFestivos;
+    
     // Calcular pago de vacaciones (salario diario * días de vacaciones)
     const vacacionesPago = salarioDiario * totalVacaciones;
     
@@ -529,7 +538,7 @@ export default function Payroll() {
       .reduce((sum, cv) => sum + cv.amount, 0);
 
     // Total de percepciones: salario base + horas extra + prima dominical + vacaciones + prima vacacional + bonos
-    const earnings = baseSalary + horasExtraPago + primaDominical + vacacionesPago + primaVacacional + bonuses;
+    const earnings = baseSalary + horasExtraPago + primaDominical + pagoFestivos + vacacionesPago + primaVacacional + bonuses;
     
     // ========== CÁLCULO DE DEDUCCIONES POR CONCEPTO ==========
     // Factor de integración para SBC (Salario Base de Cotización)
@@ -568,7 +577,7 @@ export default function Payroll() {
     // Percepciones gravables: salario, horas extra gravado, prima dominical, vacaciones, prima vacacional, bonos
     // Descuentos: horas descontadas (retardos, ausencias parciales) reducen la base gravable
     // Exenciones: horas extra exentas (ya consideradas)
-    const percepcionesGravables = baseSalary + horasExtraGravado + primaDominical + vacacionesPago + primaVacacional + bonuses;
+    const percepcionesGravables = baseSalary + horasExtraGravado + primaDominical + pagoFestivos + vacacionesPago + primaVacacional + bonuses;
     const baseGravable = Math.max(0, percepcionesGravables - descuentoHoras - totalIMSS);
     
     // Tabla ISR 2025 según período (DOF Anexo 8 RMF 2025)
@@ -706,6 +715,8 @@ export default function Payroll() {
       horasDobles,
       horasTriples,
       primaDominical,
+      diasFestivos: totalDiasFestivos,
+      pagoFestivos,
       vacacionesPago,
       primaVacacional,
       earnings, 
@@ -1656,6 +1667,12 @@ export default function Payroll() {
                                       <span className="font-mono">+{employee.diasDomingo}</span>
                                     </div>
                                   )}
+                                  {employee.diasFestivos > 0 && (
+                                    <div className="flex justify-between text-purple-600 dark:text-purple-400">
+                                      <span>Días festivos trabajados</span>
+                                      <span className="font-mono">+{employee.diasFestivos}</span>
+                                    </div>
+                                  )}
                                   <div className="h-px bg-border my-2" />
                                   <div className="flex justify-between">
                                     <span className="text-muted-foreground">Salario diario</span>
@@ -1678,6 +1695,12 @@ export default function Payroll() {
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Prima Dominical (25%)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
+                                    </div>
+                                  )}
+                                  {employee.pagoFestivos > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Días Festivos ({employee.diasFestivos}d × 200%)</span>
+                                      <span className="font-mono text-purple-600 dark:text-purple-400">{formatCurrency(employee.pagoFestivos)}</span>
                                     </div>
                                   )}
                                   {(employee.horasDoblesPago > 0 || employee.horasTriplesPago > 0) && (
@@ -1730,7 +1753,7 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
                                     </div>
                                   ))}
-                                  {employee.primaDominical === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
+                                  {employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
                                     <div className="text-muted-foreground text-center py-4">
                                       Sin percepciones adicionales
                                     </div>

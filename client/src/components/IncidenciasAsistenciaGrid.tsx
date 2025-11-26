@@ -20,7 +20,8 @@ import type {
   IncidenciaAsistencia,
   InsertIncidenciaAsistencia,
 } from "@shared/schema";
-import { format, eachDayOfInterval, parseISO } from "date-fns";
+import { obtenerDiasFestivosDelAnio } from "@shared/schema";
+import { format, eachDayOfInterval, parseISO, isSunday, getYear } from "date-fns";
 import { es } from "date-fns/locale";
 
 interface IncidenciasAsistenciaGridProps {
@@ -34,7 +35,7 @@ interface IncidenciasAsistenciaGridProps {
   isLoading: boolean;
 }
 
-type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos" | "vacaciones" | "diasDomingo";
+type IncidenciaTipo = "faltas" | "retardos" | "horasExtra" | "horasDescontadas" | "incapacidades" | "permisos" | "vacaciones" | "diasDomingo" | "diasFestivos";
 
 interface DailyIncidencia {
   fecha: string;
@@ -47,6 +48,7 @@ interface DailyIncidencia {
   permisos: number;
   vacaciones: number;
   diasDomingo: number;
+  diasFestivos: number;
   notas: string;
   existingId?: string;
   hasChanges: boolean;
@@ -67,6 +69,7 @@ const INCIDENCIA_LABELS: Record<IncidenciaTipo, string> = {
   permisos: "Permisos",
   vacaciones: "Vacaciones",
   diasDomingo: "Prima Dom.",
+  diasFestivos: "Días Festivos",
 };
 
 export function IncidenciasAsistenciaGrid({
@@ -120,6 +123,7 @@ export function IncidenciasAsistenciaGrid({
           permisos: existing?.permisos || 0,
           vacaciones: existing?.vacaciones || 0,
           diasDomingo: existing?.diasDomingo || 0,
+          diasFestivos: (existing as any)?.diasFestivos || 0,
           notas: existing?.notas || "",
           existingId: existing?.id,
           hasChanges: false,
@@ -228,8 +232,9 @@ export function IncidenciasAsistenciaGrid({
             permisos: dayData.permisos || 0,
             vacaciones: dayData.vacaciones || 0,
             diasDomingo: dayData.diasDomingo || 0,
+            diasFestivos: dayData.diasFestivos || 0,
             notas: dayData.notas || null,
-          });
+          } as any);
         }
       });
     });
@@ -332,6 +337,7 @@ export function IncidenciasAsistenciaGrid({
                 permisos: original.permisos || 0,
                 vacaciones: original.vacaciones || 0,
                 diasDomingo: original.diasDomingo || 0,
+                diasFestivos: (original as any).diasFestivos || 0,
                 notas: original.notas || "",
                 existingId: original.id,
                 hasChanges: false,
@@ -348,6 +354,7 @@ export function IncidenciasAsistenciaGrid({
                 permisos: 0,
                 vacaciones: 0,
                 diasDomingo: 0,
+                diasFestivos: 0,
                 notas: "",
                 hasChanges: false,
               });
@@ -401,7 +408,44 @@ export function IncidenciasAsistenciaGrid({
     "incapacidades",
     "permisos",
     "vacaciones",
+    "diasDomingo",
+    "diasFestivos",
   ];
+
+  // Calcular domingos del periodo
+  const domingosPeriodo = useMemo(() => {
+    return dateRange.filter(date => isSunday(date));
+  }, [dateRange]);
+
+  // Calcular días festivos del periodo
+  const diasFestivosPeriodo = useMemo(() => {
+    if (dateRange.length === 0) return [];
+    const years = new Set(dateRange.map(d => getYear(d)));
+    const todosFestivos: string[] = [];
+    years.forEach(year => {
+      const festivosAnio = obtenerDiasFestivosDelAnio(year);
+      festivosAnio.forEach(f => todosFestivos.push(f.fecha));
+    });
+    return dateRange.filter(date => {
+      const dateStr = format(date, "yyyy-MM-dd");
+      return todosFestivos.includes(dateStr);
+    });
+  }, [dateRange]);
+
+  // Obtener fechas filtradas según tipo de incidencia
+  const getFilteredDates = (tipo: IncidenciaTipo): Date[] => {
+    if (tipo === "diasDomingo") return domingosPeriodo;
+    if (tipo === "diasFestivos") return diasFestivosPeriodo;
+    return dateRange;
+  };
+
+  // Obtener nombre del día festivo
+  const getNombreFestivo = (dateStr: string): string => {
+    const year = parseInt(dateStr.substring(0, 4));
+    const festivos = obtenerDiasFestivosDelAnio(year);
+    const festivo = festivos.find(f => f.fecha === dateStr);
+    return festivo?.nombre || "";
+  };
 
   return (
     <Card className={isFullscreen ? "fixed inset-0 z-50 flex flex-col" : ""}>
@@ -469,11 +513,29 @@ export function IncidenciasAsistenciaGrid({
                 </TableHead>
                 {incidenciaTipos.map((tipo) => {
                   const isExpanded = expandedColumns.has(tipo);
+                  const filteredDates = getFilteredDates(tipo);
+                  const hasDates = filteredDates.length > 0;
+                  
+                  // Si no hay fechas válidas para este tipo, mostrar indicador
+                  if (!hasDates && (tipo === "diasDomingo" || tipo === "diasFestivos")) {
+                    return (
+                      <TableHead
+                        key={tipo}
+                        className="text-center min-w-[120px] border-l border-border"
+                      >
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-xs font-normal">{INCIDENCIA_LABELS[tipo]}</span>
+                          <span className="text-xs text-muted-foreground">Sin días</span>
+                        </div>
+                      </TableHead>
+                    );
+                  }
+                  
                   if (isExpanded) {
                     return (
                       <TableHead
                         key={tipo}
-                        colSpan={dateRange.length}
+                        colSpan={filteredDates.length}
                         className="text-center border-l border-border"
                       >
                         <Button
@@ -485,6 +547,9 @@ export function IncidenciasAsistenciaGrid({
                         >
                           <ChevronDown className="h-4 w-4 mr-1" />
                           {INCIDENCIA_LABELS[tipo]}
+                          {(tipo === "diasDomingo" || tipo === "diasFestivos") && (
+                            <span className="ml-1 text-xs text-muted-foreground">({filteredDates.length})</span>
+                          )}
                         </Button>
                       </TableHead>
                     );
@@ -503,6 +568,9 @@ export function IncidenciasAsistenciaGrid({
                         >
                           <ChevronRight className="h-4 w-4 mr-1" />
                           {INCIDENCIA_LABELS[tipo]}
+                          {(tipo === "diasDomingo" || tipo === "diasFestivos") && hasDates && (
+                            <span className="ml-1 text-xs text-muted-foreground">({filteredDates.length})</span>
+                          )}
                         </Button>
                       </TableHead>
                     );
@@ -514,15 +582,35 @@ export function IncidenciasAsistenciaGrid({
                   <TableHead className="sticky left-0 bg-muted/50 z-20"></TableHead>
                   {incidenciaTipos.map((tipo) => {
                     const isExpanded = expandedColumns.has(tipo);
+                    const filteredDates = getFilteredDates(tipo);
+                    const hasDates = filteredDates.length > 0;
+                    
+                    // Si no hay fechas para diasDomingo o diasFestivos, mostrar celda vacía
+                    if (!hasDates && (tipo === "diasDomingo" || tipo === "diasFestivos")) {
+                      return <TableHead key={tipo} className="border-l border-border"></TableHead>;
+                    }
+                    
                     if (isExpanded) {
-                      return dateRange.map((date) => (
-                        <TableHead
-                          key={`${tipo}-${date.toISOString()}`}
-                          className="text-center text-xs min-w-[80px] border-l border-border"
-                        >
-                          {format(date, "dd MMM", { locale: es })}
-                        </TableHead>
-                      ));
+                      return filteredDates.map((date) => {
+                        const dateStr = format(date, "yyyy-MM-dd");
+                        const nombreFestivo = tipo === "diasFestivos" ? getNombreFestivo(dateStr) : "";
+                        return (
+                          <TableHead
+                            key={`${tipo}-${date.toISOString()}`}
+                            className="text-center text-xs min-w-[80px] border-l border-border"
+                            title={nombreFestivo}
+                          >
+                            <div className="flex flex-col items-center">
+                              <span>{format(date, "dd MMM", { locale: es })}</span>
+                              {tipo === "diasFestivos" && nombreFestivo && (
+                                <span className="text-[10px] text-muted-foreground truncate max-w-[70px]">
+                                  {nombreFestivo}
+                                </span>
+                              )}
+                            </div>
+                          </TableHead>
+                        );
+                      });
                     } else {
                       return <TableHead key={tipo} className="border-l border-border"></TableHead>;
                     }
@@ -541,8 +629,23 @@ export function IncidenciasAsistenciaGrid({
                   </TableCell>
                   {incidenciaTipos.map((tipo) => {
                     const isExpanded = expandedColumns.has(tipo);
+                    const filteredDates = getFilteredDates(tipo);
+                    const hasDates = filteredDates.length > 0;
+                    
+                    // Si no hay fechas para diasDomingo o diasFestivos, mostrar celda vacía
+                    if (!hasDates && (tipo === "diasDomingo" || tipo === "diasFestivos")) {
+                      return (
+                        <TableCell
+                          key={tipo}
+                          className="text-center text-muted-foreground border-l border-border"
+                        >
+                          -
+                        </TableCell>
+                      );
+                    }
+                    
                     if (isExpanded) {
-                      return dateRange.map((date) => {
+                      return filteredDates.map((date) => {
                         const dateStr = format(date, "yyyy-MM-dd");
                         const dayData = empData.dailyData.get(dateStr);
                         if (!dayData) return <TableCell key={dateStr}></TableCell>;
@@ -555,6 +658,7 @@ export function IncidenciasAsistenciaGrid({
                             <Input
                               type="number"
                               min="0"
+                              max={tipo === "diasDomingo" || tipo === "diasFestivos" ? "1" : undefined}
                               step={tipo === "horasExtra" || tipo === "horasDescontadas" ? "0.5" : "1"}
                               value={dayData[tipo]}
                               onChange={(e) =>
@@ -574,7 +678,14 @@ export function IncidenciasAsistenciaGrid({
                         );
                       });
                     } else {
-                      const total = calculateTotal(empData, tipo);
+                      // Calcular total solo sobre las fechas filtradas
+                      let total = 0;
+                      filteredDates.forEach((date) => {
+                        const dateStr = format(date, "yyyy-MM-dd");
+                        const dayData = empData.dailyData.get(dateStr);
+                        if (dayData) total += dayData[tipo];
+                      });
+                      
                       return (
                         <TableCell
                           key={tipo}
