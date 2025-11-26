@@ -361,7 +361,8 @@ export default function Payroll() {
       sbcDiario: 0,
       sdiDiario: 0,
       horasDescontadas: 0,
-      descuentoHoras: 0
+      descuentoHoras: 0,
+      isrTasa: 0
     };
 
     // Calcular días del periodo según frecuencia
@@ -669,6 +670,7 @@ export default function Payroll() {
       
       const excedente = Math.max(0, base - tramoAplicado.limiteInf);
       const isr = tramoAplicado.cuotaFija + (excedente * tramoAplicado.tasa);
+      const tasaMarginal = tramoAplicado.tasa * 100; // Porcentaje del tramo aplicado
       
       // Buscar subsidio al empleo en tabla
       const tablaSubsidio = tablasSubsidio[periodo] || tablasSubsidio['quincenal'];
@@ -681,11 +683,11 @@ export default function Payroll() {
         }
       }
       
-      return { isr: Math.max(0, isr), subsidio };
+      return { isr: Math.max(0, isr), subsidio, tasaMarginal };
     };
     
     const periodoISR = selectedFrequency === 'semanal' ? 'semanal' : selectedFrequency === 'mensual' ? 'mensual' : 'quincenal';
-    const { isr: isrCausado, subsidio: subsidioEmpleo } = calcularISRPeriodo(baseGravable, periodoISR);
+    const { isr: isrCausado, subsidio: subsidioEmpleo, tasaMarginal: isrTasa } = calcularISRPeriodo(baseGravable, periodoISR);
     const isrRetenido = Math.max(0, isrCausado - subsidioEmpleo);
     
     // ========== TOTALES ==========
@@ -729,7 +731,9 @@ export default function Payroll() {
       sdiDiario,
       // Horas descontadas
       horasDescontadas: totalHorasDescontadas,
-      descuentoHoras
+      descuentoHoras,
+      // Tasa ISR
+      isrTasa
     };
   };
 
@@ -1776,9 +1780,25 @@ export default function Payroll() {
                                     </div>
                                   </div>
                                   
+                                  {/* Descuento por horas (retardos/ausencias parciales) - antes de ISR porque afecta la base gravable */}
+                                  {employee.descuentoHoras > 0 && (
+                                    <div className="space-y-1 pt-2">
+                                      <div className="font-medium text-foreground">Descuentos por Tiempo:</div>
+                                      <div className="flex justify-between pl-3">
+                                        <span className="text-muted-foreground">
+                                          Horas descontadas ({employee.horasDescontadas} hrs × salario normal)
+                                        </span>
+                                        <span className="font-mono text-destructive">{formatCurrency(employee.descuentoHoras)}</span>
+                                      </div>
+                                      <div className="flex justify-between pl-3 text-xs text-muted-foreground italic">
+                                        <span>* Reduce la base gravable del ISR</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                  
                                   {/* ISR */}
                                   <div className="space-y-1 pt-2">
-                                    <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta):</div>
+                                    <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta) - Tasa {employee.isrTasa.toFixed(2)}%:</div>
                                     <div className="flex justify-between pl-3">
                                       <span className="text-muted-foreground">ISR Causado</span>
                                       <span className="font-mono text-destructive">{formatCurrency(employee.isrCausado)}</span>
@@ -1794,19 +1814,6 @@ export default function Payroll() {
                                       <span className="font-mono text-destructive font-medium">{formatCurrency(employee.isrRetenido)}</span>
                                     </div>
                                   </div>
-                                  
-                                  {/* Descuento por horas (retardos/ausencias parciales) */}
-                                  {employee.descuentoHoras > 0 && (
-                                    <div className="space-y-1 pt-2">
-                                      <div className="font-medium text-foreground">Descuentos por Tiempo:</div>
-                                      <div className="flex justify-between pl-3">
-                                        <span className="text-muted-foreground">
-                                          Horas descontadas ({employee.horasDescontadas} hrs × salario normal)
-                                        </span>
-                                        <span className="font-mono text-destructive">{formatCurrency(employee.descuentoHoras)}</span>
-                                      </div>
-                                    </div>
-                                  )}
                                   
                                   {/* Otras deducciones */}
                                   {breakdown.deducciones.length > 0 && (
