@@ -27,6 +27,8 @@ interface IncidenciasAsistenciaGridProps {
   fechaInicio: string;
   fechaFin: string;
   centroTrabajoId?: string;
+  clienteId: string;
+  empresaId: string;
   employees: Employee[];
   incidenciasAsistencia: IncidenciaAsistencia[];
   isLoading: boolean;
@@ -71,6 +73,8 @@ export function IncidenciasAsistenciaGrid({
   fechaInicio,
   fechaFin,
   centroTrabajoId,
+  clienteId,
+  empresaId,
   employees,
   incidenciasAsistencia,
   isLoading,
@@ -211,6 +215,8 @@ export function IncidenciasAsistenciaGrid({
         if (dayData.hasChanges) {
           changedRecords.push({
             id: dayData.existingId,
+            clienteId,
+            empresaId,
             employeeId: empData.employeeId,
             fecha: dayData.fecha,
             centroTrabajoId: dayData.centroTrabajoId,

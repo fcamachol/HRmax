@@ -478,6 +478,8 @@ export default function Attendance() {
             fechaInicio={fechaInicio}
             fechaFin={fechaFin}
             centroTrabajoId={selectedCentro !== "all" ? selectedCentro : undefined}
+            clienteId={filteredEmployees[0]?.clienteId || ""}
+            empresaId={filteredEmployees[0]?.empresaId || ""}
             employees={filteredEmployees}
             incidenciasAsistencia={incidenciasAsistencia}
             isLoading={isLoading}

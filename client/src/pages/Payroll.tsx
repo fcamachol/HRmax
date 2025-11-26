@@ -1138,11 +1138,16 @@ export default function Payroll() {
                 const selectedEmployeesArray = employees.filter(emp => 
                   selectedEmployees.has(emp.id!)
                 );
+                const firstEmployee = selectedEmployeesArray[0];
+                const clienteId = firstEmployee?.clienteId || "";
+                const empresaId = firstEmployee?.empresaId || "";
 
                 return (
                   <IncidenciasAsistenciaGrid
                     fechaInicio={queryPeriodRange.start}
                     fechaFin={queryPeriodRange.end}
+                    clienteId={clienteId}
+                    empresaId={empresaId}
                     employees={selectedEmployeesArray}
                     incidenciasAsistencia={incidenciasAsistencia}
                     isLoading={false}
