@@ -359,7 +359,9 @@ export default function Payroll() {
       subsidioEmpleo: 0,
       isrRetenido: 0,
       sbcDiario: 0,
-      sdiDiario: 0
+      sdiDiario: 0,
+      horasDescontadas: 0,
+      descuentoHoras: 0
     };
 
     // Calcular días del periodo según frecuencia
@@ -377,6 +379,7 @@ export default function Payroll() {
     const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
     const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
     const totalHorasExtra = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasExtra || "0"), 0);
+    const totalHorasDescontadas = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasDescontadas || "0"), 0);
     
     // Calcular días trabajados (descontar faltas, incapacidades y vacaciones del salario base)
     // Las vacaciones se pagan por separado como percepción adicional
@@ -503,6 +506,10 @@ export default function Payroll() {
     
     // Calcular prima vacacional (25% del pago de vacaciones según LFT Art. 80)
     const primaVacacional = vacacionesPago * 0.25;
+    
+    // Calcular descuento por horas no trabajadas (retardos, salidas tempranas, etc.)
+    // Se descuenta a salario normal (no doble ni triple)
+    const descuentoHoras = salarioPorHora * totalHorasDescontadas;
 
     const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
     
@@ -682,7 +689,7 @@ export default function Payroll() {
     
     // ========== TOTALES ==========
     const baseDeductions = totalIMSS + isrRetenido;
-    const deductions = baseDeductions + incidents;
+    const deductions = baseDeductions + descuentoHoras + incidents;
     const netPay = earnings - deductions;
 
     return { 
@@ -718,7 +725,10 @@ export default function Payroll() {
       subsidioEmpleo,
       isrRetenido,
       sbcDiario,
-      sdiDiario
+      sdiDiario,
+      // Horas descontadas
+      horasDescontadas: totalHorasDescontadas,
+      descuentoHoras
     };
   };
 
@@ -1783,6 +1793,19 @@ export default function Payroll() {
                                       <span className="font-mono text-destructive font-medium">{formatCurrency(employee.isrRetenido)}</span>
                                     </div>
                                   </div>
+                                  
+                                  {/* Descuento por horas (retardos/ausencias parciales) */}
+                                  {employee.descuentoHoras > 0 && (
+                                    <div className="space-y-1 pt-2">
+                                      <div className="font-medium text-foreground">Descuentos por Tiempo:</div>
+                                      <div className="flex justify-between pl-3">
+                                        <span className="text-muted-foreground">
+                                          Horas descontadas ({employee.horasDescontadas} hrs × salario normal)
+                                        </span>
+                                        <span className="font-mono text-destructive">{formatCurrency(employee.descuentoHoras)}</span>
+                                      </div>
+                                    </div>
+                                  )}
                                   
                                   {/* Otras deducciones */}
                                   {breakdown.deducciones.length > 0 && (
