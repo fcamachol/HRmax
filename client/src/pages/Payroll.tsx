@@ -329,6 +329,10 @@ export default function Payroll() {
     const employee = allEmployees.find(e => e.id === employeeId);
     if (!employee) return { 
       baseSalary: 0,
+      horasExtraPago: 0,
+      horasExtra: 0,
+      horasDobles: 0,
+      horasTriples: 0,
       primaDominical: 0,
       vacacionesPago: 0,
       primaVacacional: 0,
@@ -357,6 +361,7 @@ export default function Payroll() {
     const totalIncapacities = employeeIncidencias.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0);
     const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
     const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
+    const totalHorasExtra = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasExtra || "0"), 0);
     
     // Calcular días trabajados (descontar faltas, incapacidades y vacaciones del salario base)
     // Las vacaciones se pagan por separado como percepción adicional
@@ -365,6 +370,22 @@ export default function Payroll() {
     // Calcular salario proporcional
     const salarioDiario = employee.salary / 30;
     const baseSalary = salarioDiario * daysWorked;
+    
+    // Calcular salario por hora (jornada de 8 horas)
+    const salarioPorHora = salarioDiario / 8;
+    
+    // Calcular pago de horas extra según LFT Art. 67
+    // Las primeras 9 horas semanales se pagan al 200%, las siguientes al 300%
+    // Ajustar límite según frecuencia: semanal=9, quincenal=18, mensual=36
+    const limiteHorasDobles = selectedFrequency === "semanal" ? 9 
+                            : selectedFrequency === "quincenal" ? 18 
+                            : 36;
+    
+    const horasDobles = Math.min(totalHorasExtra, limiteHorasDobles);
+    const horasTriples = Math.max(0, totalHorasExtra - limiteHorasDobles);
+    
+    // Horas dobles: salario por hora × 2, Horas triples: salario por hora × 3
+    const horasExtraPago = (salarioPorHora * 2 * horasDobles) + (salarioPorHora * 3 * horasTriples);
     
     // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
     const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
@@ -391,14 +412,18 @@ export default function Payroll() {
       })
       .reduce((sum, cv) => sum + cv.amount, 0);
 
-    // Total de percepciones: salario base + prima dominical + vacaciones + prima vacacional + bonos
-    const earnings = baseSalary + primaDominical + vacacionesPago + primaVacacional + bonuses;
+    // Total de percepciones: salario base + horas extra + prima dominical + vacaciones + prima vacacional + bonos
+    const earnings = baseSalary + horasExtraPago + primaDominical + vacacionesPago + primaVacacional + bonuses;
     const baseDeductions = baseSalary * 0.1888; // Aplicar deducciones sobre salario proporcional
     const deductions = baseDeductions + incidents;
     const netPay = earnings - deductions;
 
     return { 
       baseSalary,
+      horasExtraPago,
+      horasExtra: totalHorasExtra,
+      horasDobles,
+      horasTriples,
       primaDominical,
       vacacionesPago,
       primaVacacional,
@@ -1357,6 +1382,16 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
+                                  {employee.horasExtraPago > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">
+                                        Horas Extra ({employee.horasDobles > 0 && `${employee.horasDobles} dobles`}
+                                        {employee.horasDobles > 0 && employee.horasTriples > 0 && ", "}
+                                        {employee.horasTriples > 0 && `${employee.horasTriples} triples`})
+                                      </span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.horasExtraPago)}</span>
+                                    </div>
+                                  )}
                                   {employee.vacacionesPago > 0 && (
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Vacaciones ({employee.diasVacaciones} días)</span>
@@ -1375,7 +1410,7 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
                                     </div>
                                   ))}
-                                  {employee.primaDominical === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
+                                  {employee.primaDominical === 0 && employee.horasExtraPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
                                     <div className="text-muted-foreground text-center py-4">
                                       Sin percepciones adicionales
                                     </div>
