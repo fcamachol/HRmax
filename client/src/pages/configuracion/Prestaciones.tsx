@@ -1,4 +1,5 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LFTMinimosView } from "@/components/configuracion/LFTMinimosView";
 import { EsquemasManager } from "@/components/configuracion/EsquemasManager";
 import { PrestacionesPorPuestoManager } from "@/components/configuracion/PrestacionesPorPuestoManager";
 import { EmpleadosOverridesManager } from "@/components/configuracion/EmpleadosOverridesManager";
@@ -13,8 +14,11 @@ export default function Prestaciones() {
         </p>
       </div>
 
-      <Tabs defaultValue="esquemas" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+      <Tabs defaultValue="ley" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="ley" data-testid="tab-ley">
+            Ley
+          </TabsTrigger>
           <TabsTrigger value="esquemas" data-testid="tab-esquemas">
             Catálogo de Esquemas
           </TabsTrigger>
@@ -25,6 +29,10 @@ export default function Prestaciones() {
             Por Empleado
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="ley" className="space-y-6">
+          <LFTMinimosView />
+        </TabsContent>
 
         <TabsContent value="esquemas" className="space-y-6">
           <EsquemasManager />
