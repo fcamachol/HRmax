@@ -358,8 +358,9 @@ export default function Payroll() {
     const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
     const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
     
-    // Calcular días trabajados (vacaciones no descuentan - son días pagados)
-    const daysWorked = Math.max(0, periodDays - totalAbsences - totalIncapacities);
+    // Calcular días trabajados (descontar faltas, incapacidades y vacaciones del salario base)
+    // Las vacaciones se pagan por separado como percepción adicional
+    const daysWorked = Math.max(0, periodDays - totalAbsences - totalIncapacities - totalVacaciones);
     
     // Calcular salario proporcional
     const salarioDiario = employee.salary / 30;
