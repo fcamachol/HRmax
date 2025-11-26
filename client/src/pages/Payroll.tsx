@@ -330,6 +330,8 @@ export default function Payroll() {
     if (!employee) return { 
       baseSalary: 0,
       horasExtraPago: 0,
+      horasDoblesPago: 0,
+      horasTriplesPago: 0,
       horasExtra: 0,
       horasDobles: 0,
       horasTriples: 0,
@@ -384,8 +386,12 @@ export default function Payroll() {
     const horasDobles = Math.min(totalHorasExtra, limiteHorasDobles);
     const horasTriples = Math.max(0, totalHorasExtra - limiteHorasDobles);
     
-    // Horas dobles: salario por hora × 2, Horas triples: salario por hora × 3
-    const horasExtraPago = (salarioPorHora * 2 * horasDobles) + (salarioPorHora * 3 * horasTriples);
+    // Horas dobles: salario por hora × 2 (Art. 67 LFT)
+    const horasDoblesPago = salarioPorHora * 2 * horasDobles;
+    // Horas triples: salario por hora × 3 (Art. 68 LFT)
+    const horasTriplesPago = salarioPorHora * 3 * horasTriples;
+    // Total horas extra
+    const horasExtraPago = horasDoblesPago + horasTriplesPago;
     
     // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
     const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
@@ -421,6 +427,8 @@ export default function Payroll() {
     return { 
       baseSalary,
       horasExtraPago,
+      horasDoblesPago,
+      horasTriplesPago,
       horasExtra: totalHorasExtra,
       horasDobles,
       horasTriples,
@@ -1382,14 +1390,20 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
-                                  {employee.horasExtraPago > 0 && (
+                                  {employee.horasDoblesPago > 0 && (
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">
-                                        Horas Extra ({employee.horasDobles > 0 && `${employee.horasDobles} dobles`}
-                                        {employee.horasDobles > 0 && employee.horasTriples > 0 && ", "}
-                                        {employee.horasTriples > 0 && `${employee.horasTriples} triples`})
+                                        Horas Extra Dobles ({employee.horasDobles} hrs × 200%)
                                       </span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.horasExtraPago)}</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
+                                    </div>
+                                  )}
+                                  {employee.horasTriplesPago > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">
+                                        Horas Extra Triples ({employee.horasTriples} hrs × 300%)
+                                      </span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
                                     </div>
                                   )}
                                   {employee.vacacionesPago > 0 && (
@@ -1410,7 +1424,7 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
                                     </div>
                                   ))}
-                                  {employee.primaDominical === 0 && employee.horasExtraPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
+                                  {employee.primaDominical === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
                                     <div className="text-muted-foreground text-center py-4">
                                       Sin percepciones adicionales
                                     </div>
