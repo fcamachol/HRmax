@@ -2850,6 +2850,63 @@ export const insertCatSatTipoPercepcionSchema = createInsertSchema(catSatTiposPe
 });
 export type InsertCatSatTipoPercepcion = z.infer<typeof insertCatSatTipoPercepcionSchema>;
 
+// Catálogo: Tipos de Horas Extra según LFT
+export const catTiposHorasExtra = pgTable("cat_tipos_horas_extra", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clave: varchar("clave", { length: 10 }).notNull().unique(), // 'dobles', 'triples'
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  descripcion: text("descripcion"),
+  tasaPorcentaje: integer("tasa_porcentaje").notNull(), // 200 para dobles, 300 para triples
+  tasaFactor: decimal("tasa_factor", { precision: 5, scale: 2 }).notNull(), // 2.00 o 3.00
+  limiteHorasSemanal: integer("limite_horas_semanal"), // 9 para dobles, NULL para triples
+  articuloLft: varchar("articulo_lft", { length: 20 }).notNull(), // Art. 67 o Art. 68
+  fundamentoLegal: text("fundamento_legal").notNull(), // Texto completo del artículo
+  satClave: varchar("sat_clave", { length: 10 }).default("019"), // Clave SAT para horas extra
+  exentoIsr: boolean("exento_isr").notNull().default(false), // Las dobles pueden ser exentas
+  observaciones: text("observaciones"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+});
+
+export type CatTipoHoraExtra = typeof catTiposHorasExtra.$inferSelect;
+export const insertCatTipoHoraExtraSchema = createInsertSchema(catTiposHorasExtra).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatTipoHoraExtra = z.infer<typeof insertCatTipoHoraExtraSchema>;
+
+// Datos predefinidos para tipos de horas extra (para seed)
+export const TIPOS_HORAS_EXTRA_LFT = [
+  {
+    clave: 'dobles',
+    nombre: 'Horas Extra Dobles',
+    descripcion: 'Primeras 9 horas semanales de tiempo extra',
+    tasaPorcentaje: 200,
+    tasaFactor: '2.00',
+    limiteHorasSemanal: 9,
+    articuloLft: 'Art. 67 LFT',
+    fundamentoLegal: 'Las horas de trabajo extraordinario se pagarán con un ciento por ciento más del salario que corresponda a las horas de la jornada.',
+    satClave: '019',
+    exentoIsr: true,
+    observaciones: 'Exentas de ISR si no exceden el 50% del salario mensual (LISR Art. 93 fracc. I)',
+  },
+  {
+    clave: 'triples',
+    nombre: 'Horas Extra Triples',
+    descripcion: 'Horas que exceden las primeras 9 horas semanales',
+    tasaPorcentaje: 300,
+    tasaFactor: '3.00',
+    limiteHorasSemanal: null,
+    articuloLft: 'Art. 68 LFT',
+    fundamentoLegal: 'La prolongación del tiempo extraordinario que exceda de nueve horas a la semana, obliga al patrón a pagar al trabajador el tiempo excedente con un doscientos por ciento más del salario que corresponda a las horas de la jornada.',
+    satClave: '019',
+    exentoIsr: false,
+    observaciones: 'Siempre gravadas para ISR. El patrón debe evitar que el tiempo extra exceda las 9 horas semanales.',
+  },
+] as const;
+
 // Catálogo SAT: Tipos de Deducción
 export const catSatTiposDeduccion = pgTable("cat_sat_tipos_deduccion", {
   clave: varchar("clave", { length: 10 }).primaryKey(),

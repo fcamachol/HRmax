@@ -72,6 +72,51 @@ export const CONFIG_FISCAL_2025: ConfiguracionFiscal2025 = {
   factorintegracionMinimo: 1.0452,
 };
 
+// ===================== TIPOS DE HORAS EXTRA LFT =====================
+
+export interface TipoHoraExtra {
+  clave: 'dobles' | 'triples';
+  nombre: string;
+  descripcion: string;
+  tasaPorcentaje: number;
+  tasaFactor: number;
+  limiteHorasSemanal: number | null;
+  articuloLft: string;
+  fundamentoLegal: string;
+  satClave: string;
+  exentoIsr: boolean;
+  observaciones: string;
+}
+
+export const TIPOS_HORAS_EXTRA: Record<string, TipoHoraExtra> = {
+  dobles: {
+    clave: 'dobles',
+    nombre: 'Horas Extra Dobles',
+    descripcion: 'Primeras 9 horas semanales de tiempo extra',
+    tasaPorcentaje: 200,
+    tasaFactor: 2.0,
+    limiteHorasSemanal: 9,
+    articuloLft: 'Art. 67 LFT',
+    fundamentoLegal: 'Las horas de trabajo extraordinario se pagarán con un ciento por ciento más del salario que corresponda a las horas de la jornada.',
+    satClave: '019',
+    exentoIsr: true,
+    observaciones: 'Exentas de ISR si no exceden el 50% del salario mensual (LISR Art. 93 fracc. I)',
+  },
+  triples: {
+    clave: 'triples',
+    nombre: 'Horas Extra Triples',
+    descripcion: 'Horas que exceden las primeras 9 horas semanales',
+    tasaPorcentaje: 300,
+    tasaFactor: 3.0,
+    limiteHorasSemanal: null,
+    articuloLft: 'Art. 68 LFT',
+    fundamentoLegal: 'La prolongación del tiempo extraordinario que exceda de nueve horas a la semana, obliga al patrón a pagar al trabajador el tiempo excedente con un doscientos por ciento más del salario que corresponda a las horas de la jornada.',
+    satClave: '019',
+    exentoIsr: false,
+    observaciones: 'Siempre gravadas para ISR. El patrón debe evitar que el tiempo extra exceda las 9 horas semanales.',
+  },
+};
+
 // ===================== TABLAS ISR 2025 =====================
 
 export interface TramoISR {

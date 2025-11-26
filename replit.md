@@ -19,6 +19,7 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 **Authentication & Authorization**: Features a multi-tenant permission system with hierarchical scope resolution (cliente → empresa → centro_trabajo → módulo), `requirePermission` middleware, and mock authentication for development. It supports internal (MaxTalent) and client user types with granular access control.
 **Super Admin System**: Includes an independent authentication portal, cross-tenant user management, audit trails, and bcrypt password hashing. Accessible at `/super-admin/login`.
 **Vacation & Benefits System**: Configurable benefits catalog (`cat_tablas_prestaciones`) and a ledger-based system (`kardex_vacaciones`) for tracking vacation accrual, usage, and expiration, compliant with LFT Art. 76.
+**Overtime Hours System**: Complete implementation of overtime pay per LFT Articles 67 and 68. Horas Dobles (first 9 weekly hours at 200%) and Horas Triples (exceeding 9 weekly hours at 300%). Includes ISR exento/gravado calculations per LISR Art. 93. Catalog table `cat_tipos_horas_extra` stores the legal foundation and rates.
 **Basis Points Helper Library**: A shared library (`shared/basisPoints.ts`) provides functions for converting pesos to basis points and performing safe arithmetic with 4-decimal precision using `Math.trunc()` to prevent rounding errors.
 
 ### Feature Specifications
