@@ -572,7 +572,7 @@ export default function Payroll() {
     const baseGravable = Math.max(0, percepcionesGravables - descuentoHoras - totalIMSS);
     
     // Tabla ISR 2025 según período (DOF Anexo 8 RMF 2025)
-    const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number } => {
+    const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number; tasaMarginal: number } => {
       // Tablas ISR 2025 por período
       const tablasISR: Record<string, { limiteInf: number; cuotaFija: number; tasa: number }[]> = {
         semanal: [
