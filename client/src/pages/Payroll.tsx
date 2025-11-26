@@ -376,15 +376,45 @@ export default function Payroll() {
     // Calcular salario por hora (jornada de 8 horas)
     const salarioPorHora = salarioDiario / 8;
     
-    // Calcular pago de horas extra según LFT Art. 67
-    // Las primeras 9 horas semanales se pagan al 200%, las siguientes al 300%
-    // Ajustar límite según frecuencia: semanal=9, quincenal=18, mensual=36
-    const limiteHorasDobles = selectedFrequency === "semanal" ? 9 
-                            : selectedFrequency === "quincenal" ? 18 
-                            : 36;
+    // Calcular horas extra por semana según LFT Art. 67 y 68
+    // El límite de 9 horas dobles es SEMANAL, no por período
+    // Agrupar incidencias por semana ISO (lunes a domingo) y aplicar el límite de 9 hrs por cada semana
+    const calcularHorasExtraPorSemana = () => {
+      // Agrupar horas extra por semana ISO usando date-fns
+      const horasPorSemana: Record<string, number> = {};
+      
+      employeeIncidencias.forEach(inc => {
+        const horasDelDia = parseFloat(inc.horasExtra || "0");
+        if (horasDelDia > 0 && inc.fecha) {
+          // Parsear fecha como local (evitar problemas de timezone)
+          const [year, month, day] = inc.fecha.split('-').map(Number);
+          const fecha = new Date(year, month - 1, day);
+          
+          // Obtener inicio de semana ISO (lunes) usando date-fns
+          const inicioSemana = startOfWeek(fecha, { weekStartsOn: 1 }); // 1 = lunes
+          const claveSemana = format(inicioSemana, 'yyyy-MM-dd');
+          
+          horasPorSemana[claveSemana] = (horasPorSemana[claveSemana] || 0) + horasDelDia;
+        }
+      });
+      
+      // Calcular dobles y triples por cada semana (límite 9 dobles por semana)
+      let totalDobles = 0;
+      let totalTriples = 0;
+      
+      Object.values(horasPorSemana).forEach(horasSemana => {
+        const doblesSemana = Math.min(horasSemana, 9);
+        const triplesSemana = Math.max(0, horasSemana - 9);
+        totalDobles += doblesSemana;
+        totalTriples += triplesSemana;
+      });
+      
+      return { totalDobles, totalTriples };
+    };
     
-    const horasDobles = Math.min(totalHorasExtra, limiteHorasDobles);
-    const horasTriples = Math.max(0, totalHorasExtra - limiteHorasDobles);
+    const { totalDobles, totalTriples } = calcularHorasExtraPorSemana();
+    const horasDobles = totalDobles;
+    const horasTriples = totalTriples;
     
     // Horas dobles: salario por hora × 2 (Art. 67 LFT)
     const horasDoblesPago = salarioPorHora * 2 * horasDobles;
