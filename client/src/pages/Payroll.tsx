@@ -28,7 +28,12 @@ import {
   AlertCircle,
   Eye,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  XCircle,
+  Calendar,
+  Star,
+  Sun,
+  MinusCircle
 } from "lucide-react";
 import {
   Table,
@@ -1346,6 +1351,137 @@ export default function Payroll() {
                       </CardContent>
                     </Card>
                   </div>
+
+                  {/* Total de Incidencias */}
+                  {selectedNominaToView.employeeDetails && selectedNominaToView.employeeDetails.length > 0 && (() => {
+                    const totales = selectedNominaToView.employeeDetails.reduce((acc, emp) => ({
+                      faltas: acc.faltas + (emp.absences || 0),
+                      incapacidades: acc.incapacidades + (emp.incapacities || 0),
+                      diasDomingo: acc.diasDomingo + (emp.diasDomingo || 0),
+                      diasFestivos: acc.diasFestivos + (emp.diasFestivos || 0),
+                      diasVacaciones: acc.diasVacaciones + (emp.diasVacaciones || 0),
+                      horasDobles: acc.horasDobles + (emp.horasDobles || 0),
+                      horasTriples: acc.horasTriples + (emp.horasTriples || 0),
+                      horasDescontadas: acc.horasDescontadas + (emp.horasDescontadas || 0),
+                    }), {
+                      faltas: 0,
+                      incapacidades: 0,
+                      diasDomingo: 0,
+                      diasFestivos: 0,
+                      diasVacaciones: 0,
+                      horasDobles: 0,
+                      horasTriples: 0,
+                      horasDescontadas: 0,
+                    });
+
+                    const hasIncidencias = totales.faltas > 0 || totales.incapacidades > 0 || 
+                      totales.diasDomingo > 0 || totales.diasFestivos > 0 || totales.diasVacaciones > 0 ||
+                      totales.horasDobles > 0 || totales.horasTriples > 0 || totales.horasDescontadas > 0;
+
+                    return (
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-base flex items-center gap-2">
+                            <AlertCircle className="h-4 w-4" />
+                            Total de Incidencias del Periodo
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {hasIncidencias ? (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              {totales.faltas > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                                  <div className="p-2 rounded-full bg-destructive/20">
+                                    <XCircle className="h-4 w-4 text-destructive" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Faltas</div>
+                                    <div className="text-lg font-bold text-destructive">{totales.faltas} días</div>
+                                  </div>
+                                </div>
+                              )}
+                              {totales.incapacidades > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                                  <div className="p-2 rounded-full bg-orange-500/20">
+                                    <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Incapacidades</div>
+                                    <div className="text-lg font-bold text-orange-600 dark:text-orange-400">{totales.incapacidades} días</div>
+                                  </div>
+                                </div>
+                              )}
+                              {totales.diasDomingo > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                                  <div className="p-2 rounded-full bg-primary/20">
+                                    <Calendar className="h-4 w-4 text-primary" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Domingos Trabajados</div>
+                                    <div className="text-lg font-bold text-primary">{totales.diasDomingo} días</div>
+                                  </div>
+                                </div>
+                              )}
+                              {totales.diasFestivos > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                  <div className="p-2 rounded-full bg-purple-500/20">
+                                    <Star className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Días Festivos</div>
+                                    <div className="text-lg font-bold text-purple-600 dark:text-purple-400">{totales.diasFestivos} días</div>
+                                  </div>
+                                </div>
+                              )}
+                              {totales.diasVacaciones > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                                  <div className="p-2 rounded-full bg-green-500/20">
+                                    <Sun className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Días de Vacaciones</div>
+                                    <div className="text-lg font-bold text-green-600 dark:text-green-400">{totales.diasVacaciones} días</div>
+                                  </div>
+                                </div>
+                              )}
+                              {(totales.horasDobles > 0 || totales.horasTriples > 0) && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                  <div className="p-2 rounded-full bg-blue-500/20">
+                                    <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Horas Extra</div>
+                                    <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                                      {totales.horasDobles + totales.horasTriples}h
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      ({totales.horasDobles}h dobles, {totales.horasTriples}h triples)
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                              {totales.horasDescontadas > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                                  <div className="p-2 rounded-full bg-red-500/20">
+                                    <MinusCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Horas Descontadas</div>
+                                    <div className="text-lg font-bold text-red-600 dark:text-red-400">{totales.horasDescontadas}h</div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 text-muted-foreground">
+                              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-600 dark:text-green-400" />
+                              Sin incidencias en este periodo
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
 
                   {/* Detalle por Empleado */}
                   {selectedNominaToView.employeeDetails && selectedNominaToView.employeeDetails.length > 0 && (
