@@ -330,6 +330,8 @@ export default function Payroll() {
     if (!employee) return { 
       baseSalary: 0,
       primaDominical: 0,
+      vacacionesPago: 0,
+      primaVacacional: 0,
       earnings: 0, 
       deductions: 0, 
       netPay: 0,
@@ -337,7 +339,8 @@ export default function Payroll() {
       periodDays: 0,
       absences: 0,
       incapacities: 0,
-      diasDomingo: 0
+      diasDomingo: 0,
+      diasVacaciones: 0
     };
 
     // Calcular días del periodo según frecuencia
@@ -353,16 +356,23 @@ export default function Payroll() {
     const totalAbsences = employeeIncidencias.reduce((sum, inc) => sum + (inc.faltas || 0), 0);
     const totalIncapacities = employeeIncidencias.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0);
     const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
+    const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
     
-    // Calcular días trabajados
+    // Calcular días trabajados (vacaciones no descuentan - son días pagados)
     const daysWorked = Math.max(0, periodDays - totalAbsences - totalIncapacities);
     
     // Calcular salario proporcional
-    const baseSalary = (employee.salary / 30) * daysWorked;
+    const salarioDiario = employee.salary / 30;
+    const baseSalary = salarioDiario * daysWorked;
     
     // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
-    const salarioDiario = employee.salary / 30;
     const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
+    
+    // Calcular pago de vacaciones (salario diario * días de vacaciones)
+    const vacacionesPago = salarioDiario * totalVacaciones;
+    
+    // Calcular prima vacacional (25% del pago de vacaciones según LFT Art. 80)
+    const primaVacacional = vacacionesPago * 0.25;
 
     const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
     
@@ -380,7 +390,8 @@ export default function Payroll() {
       })
       .reduce((sum, cv) => sum + cv.amount, 0);
 
-    const earnings = baseSalary + primaDominical + bonuses;
+    // Total de percepciones: salario base + prima dominical + vacaciones + prima vacacional + bonos
+    const earnings = baseSalary + primaDominical + vacacionesPago + primaVacacional + bonuses;
     const baseDeductions = baseSalary * 0.1888; // Aplicar deducciones sobre salario proporcional
     const deductions = baseDeductions + incidents;
     const netPay = earnings - deductions;
@@ -388,6 +399,8 @@ export default function Payroll() {
     return { 
       baseSalary,
       primaDominical,
+      vacacionesPago,
+      primaVacacional,
       earnings, 
       deductions, 
       netPay,
@@ -395,7 +408,8 @@ export default function Payroll() {
       periodDays,
       absences: totalAbsences,
       incapacities: totalIncapacities,
-      diasDomingo: totalDiasDomingo
+      diasDomingo: totalDiasDomingo,
+      diasVacaciones: totalVacaciones
     };
   };
 
@@ -1342,13 +1356,25 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
+                                  {employee.vacacionesPago > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Vacaciones ({employee.diasVacaciones} días)</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.vacacionesPago)}</span>
+                                    </div>
+                                  )}
+                                  {employee.primaVacacional > 0 && (
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Prima Vacacional (25%)</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
+                                    </div>
+                                  )}
                                   {breakdown.percepciones.map((concepto) => (
                                     <div key={concepto.id} className="flex justify-between">
                                       <span className="text-muted-foreground">{concepto.name}</span>
                                       <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
                                     </div>
                                   ))}
-                                  {employee.primaDominical === 0 && breakdown.percepciones.length === 0 && (
+                                  {employee.primaDominical === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
                                     <div className="text-muted-foreground text-center py-4">
                                       Sin percepciones adicionales
                                     </div>
