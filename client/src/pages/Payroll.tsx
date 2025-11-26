@@ -332,6 +332,8 @@ export default function Payroll() {
       horasExtraPago: 0,
       horasDoblesPago: 0,
       horasTriplesPago: 0,
+      horasExtraExento: 0,
+      horasExtraGravado: 0,
       horasExtra: 0,
       horasDobles: 0,
       horasTriples: 0,
@@ -423,6 +425,65 @@ export default function Payroll() {
     // Total horas extra
     const horasExtraPago = horasDoblesPago + horasTriplesPago;
     
+    // Cálculo ISR para horas extra según LISR Art. 93 fracción I
+    // Las horas dobles (primeras 9 semanales) están exentas de ISR
+    // El límite de exención es el MENOR de:
+    // - 50% del salario semanal
+    // - 5 UMAs semanales (UMA 2025 = $113.14 diario × 7 = $792.00 × 5 = $3,960)
+    const UMA_DIARIA_2025 = 113.14;
+    const limite5UmasSemanal = UMA_DIARIA_2025 * 7 * 5; // 5 UMAs semanales
+    const salarioSemanal = salarioDiario * 7;
+    const limite50PctSemanal = salarioSemanal * 0.5;
+    
+    // Calcular exento/gravado por semana
+    const calcularExentoGravadoPorSemana = () => {
+      const horasPorSemana: Record<string, { dobles: number; triples: number }> = {};
+      
+      employeeIncidencias.forEach(inc => {
+        const horasDelDia = parseFloat(inc.horasExtra || "0");
+        if (horasDelDia > 0 && inc.fecha) {
+          const [year, month, day] = inc.fecha.split('-').map(Number);
+          const fecha = new Date(year, month - 1, day);
+          const inicioSemana = startOfWeek(fecha, { weekStartsOn: 1 });
+          const claveSemana = format(inicioSemana, 'yyyy-MM-dd');
+          
+          if (!horasPorSemana[claveSemana]) {
+            horasPorSemana[claveSemana] = { dobles: 0, triples: 0 };
+          }
+          
+          const totalSemana = horasPorSemana[claveSemana].dobles + horasPorSemana[claveSemana].triples + horasDelDia;
+          const doblesSemana = Math.min(totalSemana, 9);
+          const triplesSemana = Math.max(0, totalSemana - 9);
+          
+          horasPorSemana[claveSemana] = { dobles: doblesSemana, triples: triplesSemana };
+        }
+      });
+      
+      let totalExento = 0;
+      let totalGravado = 0;
+      
+      Object.values(horasPorSemana).forEach(({ dobles, triples }) => {
+        const pagoDoblesSemana = salarioPorHora * 2 * dobles;
+        const pagoTriplesSemana = salarioPorHora * 3 * triples;
+        
+        // Límite exento: el menor entre 50% salario semanal y 5 UMAs
+        const limiteExentoSemana = Math.min(limite50PctSemanal, limite5UmasSemanal);
+        
+        // Solo las dobles pueden ser exentas
+        const exentoSemana = Math.min(pagoDoblesSemana, limiteExentoSemana);
+        const gravadoDoblesSemana = Math.max(0, pagoDoblesSemana - limiteExentoSemana);
+        
+        totalExento += exentoSemana;
+        totalGravado += gravadoDoblesSemana + pagoTriplesSemana;
+      });
+      
+      return { totalExento, totalGravado };
+    };
+    
+    const { totalExento, totalGravado } = calcularExentoGravadoPorSemana();
+    const horasExtraExento = totalExento;
+    const horasExtraGravado = totalGravado;
+    
     // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
     const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
     
@@ -459,6 +520,8 @@ export default function Payroll() {
       horasExtraPago,
       horasDoblesPago,
       horasTriplesPago,
+      horasExtraExento,
+      horasExtraGravado,
       horasExtra: totalHorasExtra,
       horasDobles,
       horasTriples,
@@ -1439,6 +1502,17 @@ export default function Payroll() {
                                           <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
                                         </div>
                                       )}
+                                      {/* Desglose ISR: Exento / Gravado */}
+                                      <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-green-600 dark:text-green-400">Exento ISR</span>
+                                          <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.horasExtraExento)}</span>
+                                        </div>
+                                        <div className="flex justify-between text-xs">
+                                          <span className="text-orange-600 dark:text-orange-400">Gravado ISR</span>
+                                          <span className="font-mono text-orange-600 dark:text-orange-400">{formatCurrency(employee.horasExtraGravado)}</span>
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                   {employee.vacacionesPago > 0 && (
