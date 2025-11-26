@@ -1390,20 +1390,25 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
-                                  {employee.horasDoblesPago > 0 && (
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">
-                                        Horas Extra Dobles ({employee.horasDobles} hrs × 200%)
-                                      </span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
-                                    </div>
-                                  )}
-                                  {employee.horasTriplesPago > 0 && (
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">
-                                        Horas Extra Triples ({employee.horasTriples} hrs × 300%)
-                                      </span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
+                                  {(employee.horasDoblesPago > 0 || employee.horasTriplesPago > 0) && (
+                                    <div className="space-y-1">
+                                      <div className="font-medium text-foreground">Horas Extra:</div>
+                                      {employee.horasDoblesPago > 0 && (
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">
+                                            Dobles {employee.horasDobles} (200%)
+                                          </span>
+                                          <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
+                                        </div>
+                                      )}
+                                      {employee.horasTriplesPago > 0 && (
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">
+                                            Triples {employee.horasTriples} (300%)
+                                          </span>
+                                          <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   {employee.vacacionesPago > 0 && (
