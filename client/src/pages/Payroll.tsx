@@ -348,7 +348,18 @@ export default function Payroll() {
       absences: 0,
       incapacities: 0,
       diasDomingo: 0,
-      diasVacaciones: 0
+      diasVacaciones: 0,
+      imssTotal: 0,
+      imssExcedente3Umas: 0,
+      imssPrestacionesDinero: 0,
+      imssGastosMedicos: 0,
+      imssInvalidezVida: 0,
+      imssCesantiaVejez: 0,
+      isrCausado: 0,
+      subsidioEmpleo: 0,
+      isrRetenido: 0,
+      sbcDiario: 0,
+      sdiDiario: 0
     };
 
     // Calcular días del periodo según frecuencia
@@ -511,7 +522,116 @@ export default function Payroll() {
 
     // Total de percepciones: salario base + horas extra + prima dominical + vacaciones + prima vacacional + bonos
     const earnings = baseSalary + horasExtraPago + primaDominical + vacacionesPago + primaVacacional + bonuses;
-    const baseDeductions = baseSalary * 0.1888; // Aplicar deducciones sobre salario proporcional
+    
+    // ========== CÁLCULO DE DEDUCCIONES POR CONCEPTO ==========
+    // Factor de integración para SBC (Salario Base de Cotización)
+    const FACTOR_INTEGRACION = 1.0452; // Mínimo legal para SDI
+    // UMA_DIARIA_2025 ya definida arriba (113.14)
+    const LIMITE_25_UMAS = UMA_DIARIA_2025 * 25; // Tope de cotización diario
+    
+    // Calcular SDI y SBC
+    const sdiDiario = salarioDiario * FACTOR_INTEGRACION;
+    const sbcDiario = Math.min(sdiDiario, LIMITE_25_UMAS); // Aplicar tope
+    const sbcPeriodo = sbcDiario * periodDays;
+    
+    // ========== IMSS TRABAJADOR (Cuotas Obreras 2025) ==========
+    // Calculamos sobre el SBC del período
+    const limite3UmasDiario = UMA_DIARIA_2025 * 3;
+    const excedente3Umas = Math.max(0, sbcDiario - limite3UmasDiario);
+    const excedente3UmasPeriodo = excedente3Umas * periodDays;
+    
+    // Desglose IMSS Trabajador:
+    // 1. Enf. y Mat. - Excedente 3 UMAs Prestaciones en Especie: 0.40%
+    const imssExcedente3Umas = excedente3UmasPeriodo * 0.0040;
+    // 2. Enf. y Mat. - Prestaciones en Dinero: 0.25%
+    const imssPrestacionesDinero = sbcPeriodo * 0.0025;
+    // 3. Enf. y Mat. - Gastos Médicos Pensionados: 0.375%
+    const imssGastosMedicos = sbcPeriodo * 0.00375;
+    // 4. Invalidez y Vida: 0.625%
+    const imssInvalidezVida = sbcPeriodo * 0.00625;
+    // 5. Cesantía en Edad Avanzada y Vejez (CEAV): 1.125%
+    const imssCesantiaVejez = sbcPeriodo * 0.01125;
+    
+    // Total IMSS Trabajador
+    const totalIMSS = imssExcedente3Umas + imssPrestacionesDinero + imssGastosMedicos + imssInvalidezVida + imssCesantiaVejez;
+    
+    // ========== ISR (Impuesto Sobre la Renta) ==========
+    // Base gravable = Percepciones gravables - IMSS - otras exenciones
+    const baseGravable = baseSalary + horasExtraGravado + primaDominical - totalIMSS;
+    
+    // Tabla ISR 2025 según período
+    const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number } => {
+      // Tablas ISR 2025 simplificadas por período
+      const tablasISR: Record<string, { limiteInf: number; cuotaFija: number; tasa: number }[]> = {
+        semanal: [
+          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
+          { limiteInf: 186.51, cuotaFija: 3.58, tasa: 0.0640 },
+          { limiteInf: 1583.01, cuotaFija: 92.96, tasa: 0.1088 },
+          { limiteInf: 2782.00, cuotaFija: 223.41, tasa: 0.1600 },
+          { limiteInf: 3233.95, cuotaFija: 295.72, tasa: 0.1792 },
+          { limiteInf: 3871.93, cuotaFija: 410.04, tasa: 0.2136 },
+          { limiteInf: 7809.12, cuotaFija: 1251.03, tasa: 0.2352 },
+          { limiteInf: 12308.25, cuotaFija: 2309.22, tasa: 0.3000 },
+          { limiteInf: 23498.47, cuotaFija: 5666.29, tasa: 0.3200 },
+          { limiteInf: 31331.30, cuotaFija: 8172.79, tasa: 0.3400 },
+          { limiteInf: 93993.90, cuotaFija: 29478.08, tasa: 0.3500 },
+        ],
+        quincenal: [
+          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
+          { limiteInf: 373.02, cuotaFija: 7.16, tasa: 0.0640 },
+          { limiteInf: 3166.03, cuotaFija: 185.92, tasa: 0.1088 },
+          { limiteInf: 5564.01, cuotaFija: 446.82, tasa: 0.1600 },
+          { limiteInf: 6467.91, cuotaFija: 591.44, tasa: 0.1792 },
+          { limiteInf: 7743.86, cuotaFija: 820.09, tasa: 0.2136 },
+          { limiteInf: 15618.25, cuotaFija: 2502.06, tasa: 0.2352 },
+          { limiteInf: 24616.50, cuotaFija: 4618.45, tasa: 0.3000 },
+          { limiteInf: 46996.95, cuotaFija: 11332.59, tasa: 0.3200 },
+          { limiteInf: 62662.60, cuotaFija: 16345.59, tasa: 0.3400 },
+          { limiteInf: 187987.81, cuotaFija: 58956.16, tasa: 0.3500 },
+        ],
+        mensual: [
+          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
+          { limiteInf: 746.05, cuotaFija: 14.32, tasa: 0.0640 },
+          { limiteInf: 6332.06, cuotaFija: 371.83, tasa: 0.1088 },
+          { limiteInf: 11128.02, cuotaFija: 893.63, tasa: 0.1600 },
+          { limiteInf: 12935.83, cuotaFija: 1182.88, tasa: 0.1792 },
+          { limiteInf: 15487.72, cuotaFija: 1640.18, tasa: 0.2136 },
+          { limiteInf: 31236.50, cuotaFija: 5004.12, tasa: 0.2352 },
+          { limiteInf: 49233.01, cuotaFija: 9236.89, tasa: 0.3000 },
+          { limiteInf: 93993.91, cuotaFija: 22665.17, tasa: 0.3200 },
+          { limiteInf: 125325.21, cuotaFija: 32691.18, tasa: 0.3400 },
+          { limiteInf: 375975.62, cuotaFija: 117912.32, tasa: 0.3500 },
+        ],
+      };
+      
+      const tabla = tablasISR[periodo] || tablasISR['quincenal'];
+      let tramoAplicado = tabla[0];
+      
+      for (const tramo of tabla) {
+        if (base >= tramo.limiteInf) {
+          tramoAplicado = tramo;
+        }
+      }
+      
+      const excedente = Math.max(0, base - tramoAplicado.limiteInf);
+      const isr = tramoAplicado.cuotaFija + (excedente * tramoAplicado.tasa);
+      
+      // Subsidio al empleo 2025 (cuota fija si ingreso ≤ límite)
+      const limiteSubsidio = periodo === 'semanal' ? 2543.50 : periodo === 'quincenal' ? 5087.00 : 10171.00;
+      const subsidioMensual = 475.00;
+      const subsidio = base <= limiteSubsidio 
+        ? (periodo === 'semanal' ? subsidioMensual / 4 : periodo === 'quincenal' ? subsidioMensual / 2 : subsidioMensual)
+        : 0;
+      
+      return { isr: Math.max(0, isr), subsidio };
+    };
+    
+    const periodoISR = selectedFrequency === 'semanal' ? 'semanal' : selectedFrequency === 'mensual' ? 'mensual' : 'quincenal';
+    const { isr: isrCausado, subsidio: subsidioEmpleo } = calcularISRPeriodo(baseGravable, periodoISR);
+    const isrRetenido = Math.max(0, isrCausado - subsidioEmpleo);
+    
+    // ========== TOTALES ==========
+    const baseDeductions = totalIMSS + isrRetenido;
     const deductions = baseDeductions + incidents;
     const netPay = earnings - deductions;
 
@@ -536,7 +656,19 @@ export default function Payroll() {
       absences: totalAbsences,
       incapacities: totalIncapacities,
       diasDomingo: totalDiasDomingo,
-      diasVacaciones: totalVacaciones
+      diasVacaciones: totalVacaciones,
+      // Desglose deducciones
+      imssTotal: totalIMSS,
+      imssExcedente3Umas,
+      imssPrestacionesDinero,
+      imssGastosMedicos,
+      imssInvalidezVida,
+      imssCesantiaVejez,
+      isrCausado,
+      subsidioEmpleo,
+      isrRetenido,
+      sbcDiario,
+      sdiDiario
     };
   };
 
@@ -1552,21 +1684,69 @@ export default function Payroll() {
                                   <CardTitle className="text-sm font-medium">Deducciones</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Deducciones base (ISR/IMSS)</span>
-                                    <span className="font-mono text-destructive">{formatCurrency(employee.baseSalary * 0.1888)}</span>
-                                  </div>
-                                  {breakdown.deducciones.map((concepto) => (
-                                    <div key={concepto.id} className="flex justify-between">
-                                      <span className="text-muted-foreground">{concepto.name}</span>
-                                      <span className="font-mono text-destructive">{formatCurrency(concepto.amount)}</span>
+                                  {/* IMSS Trabajador */}
+                                  <div className="space-y-1">
+                                    <div className="font-medium text-foreground">IMSS Trabajador:</div>
+                                    <div className="flex justify-between pl-3">
+                                      <span className="text-muted-foreground">Enf. y Mat. - Prestaciones en Dinero (0.25%)</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(employee.imssPrestacionesDinero)}</span>
                                     </div>
-                                  ))}
-                                  {breakdown.deducciones.length === 0 && (
-                                    <div className="text-muted-foreground text-center py-4">
-                                      Sin deducciones adicionales
+                                    <div className="flex justify-between pl-3">
+                                      <span className="text-muted-foreground">Enf. y Mat. - Gastos Médicos (0.375%)</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(employee.imssGastosMedicos)}</span>
+                                    </div>
+                                    <div className="flex justify-between pl-3">
+                                      <span className="text-muted-foreground">Invalidez y Vida (0.625%)</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(employee.imssInvalidezVida)}</span>
+                                    </div>
+                                    <div className="flex justify-between pl-3">
+                                      <span className="text-muted-foreground">Cesantía y Vejez (1.125%)</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(employee.imssCesantiaVejez)}</span>
+                                    </div>
+                                    {employee.imssExcedente3Umas > 0 && (
+                                      <div className="flex justify-between pl-3">
+                                        <span className="text-muted-foreground">Excedente 3 UMAs (0.40%)</span>
+                                        <span className="font-mono text-destructive">{formatCurrency(employee.imssExcedente3Umas)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between pl-3 pt-1 border-t border-dashed border-muted">
+                                      <span className="text-muted-foreground font-medium">Subtotal IMSS</span>
+                                      <span className="font-mono text-destructive font-medium">{formatCurrency(employee.imssTotal)}</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* ISR */}
+                                  <div className="space-y-1 pt-2">
+                                    <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta):</div>
+                                    <div className="flex justify-between pl-3">
+                                      <span className="text-muted-foreground">ISR Causado</span>
+                                      <span className="font-mono text-destructive">{formatCurrency(employee.isrCausado)}</span>
+                                    </div>
+                                    {employee.subsidioEmpleo > 0 && (
+                                      <div className="flex justify-between pl-3">
+                                        <span className="text-green-600 dark:text-green-400">(-) Subsidio al Empleo</span>
+                                        <span className="font-mono text-green-600 dark:text-green-400">-{formatCurrency(employee.subsidioEmpleo)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between pl-3 pt-1 border-t border-dashed border-muted">
+                                      <span className="text-muted-foreground font-medium">ISR a Retener</span>
+                                      <span className="font-mono text-destructive font-medium">{formatCurrency(employee.isrRetenido)}</span>
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Otras deducciones */}
+                                  {breakdown.deducciones.length > 0 && (
+                                    <div className="space-y-1 pt-2">
+                                      <div className="font-medium text-foreground">Otras Deducciones:</div>
+                                      {breakdown.deducciones.map((concepto) => (
+                                        <div key={concepto.id} className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">{concepto.name}</span>
+                                          <span className="font-mono text-destructive">{formatCurrency(concepto.amount)}</span>
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
+                                  
                                   <div className="h-px bg-border my-2" />
                                   <div className="flex justify-between font-semibold">
                                     <span>Total Deducciones</span>
