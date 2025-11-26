@@ -556,12 +556,15 @@ export default function Payroll() {
     const totalIMSS = imssExcedente3Umas + imssPrestacionesDinero + imssGastosMedicos + imssInvalidezVida + imssCesantiaVejez;
     
     // ========== ISR (Impuesto Sobre la Renta) ==========
-    // Base gravable = Percepciones gravables - IMSS - otras exenciones
-    const baseGravable = baseSalary + horasExtraGravado + primaDominical - totalIMSS;
+    // Base gravable = Todas las percepciones gravables - IMSS
+    // Percepciones gravables: salario, horas extra gravado, prima dominical, vacaciones, prima vacacional, bonos
+    // Exenciones: horas extra exentas (ya consideradas)
+    const percepcionesGravables = baseSalary + horasExtraGravado + primaDominical + vacacionesPago + primaVacacional + bonuses;
+    const baseGravable = Math.max(0, percepcionesGravables - totalIMSS);
     
-    // Tabla ISR 2025 según período
+    // Tabla ISR 2025 según período (DOF Anexo 8 RMF 2025)
     const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number } => {
-      // Tablas ISR 2025 simplificadas por período
+      // Tablas ISR 2025 por período
       const tablasISR: Record<string, { limiteInf: number; cuotaFija: number; tasa: number }[]> = {
         semanal: [
           { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
@@ -604,10 +607,53 @@ export default function Payroll() {
         ],
       };
       
-      const tabla = tablasISR[periodo] || tablasISR['quincenal'];
-      let tramoAplicado = tabla[0];
+      // Tablas Subsidio al Empleo 2025 (DOF Anexo 8 RMF 2025)
+      const tablasSubsidio: Record<string, { limiteInf: number; limiteSup: number; subsidio: number }[]> = {
+        semanal: [
+          { limiteInf: 0.01, limiteSup: 407.33, subsidio: 93.73 },
+          { limiteInf: 407.34, limiteSup: 610.96, subsidio: 93.66 },
+          { limiteInf: 610.97, limiteSup: 799.68, subsidio: 93.66 },
+          { limiteInf: 799.69, limiteSup: 814.66, subsidio: 90.44 },
+          { limiteInf: 814.67, limiteSup: 1023.75, subsidio: 88.06 },
+          { limiteInf: 1023.76, limiteSup: 1086.19, subsidio: 81.55 },
+          { limiteInf: 1086.20, limiteSup: 1228.57, subsidio: 74.83 },
+          { limiteInf: 1228.58, limiteSup: 1433.32, subsidio: 67.83 },
+          { limiteInf: 1433.33, limiteSup: 1638.07, subsidio: 58.38 },
+          { limiteInf: 1638.08, limiteSup: 1699.09, subsidio: 50.12 },
+          { limiteInf: 1699.10, limiteSup: 2543.50, subsidio: 0 },
+        ],
+        quincenal: [
+          { limiteInf: 0.01, limiteSup: 814.66, subsidio: 187.47 },
+          { limiteInf: 814.67, limiteSup: 1221.93, subsidio: 187.32 },
+          { limiteInf: 1221.94, limiteSup: 1599.36, subsidio: 187.32 },
+          { limiteInf: 1599.37, limiteSup: 1629.32, subsidio: 180.88 },
+          { limiteInf: 1629.33, limiteSup: 2047.49, subsidio: 176.12 },
+          { limiteInf: 2047.50, limiteSup: 2172.37, subsidio: 163.09 },
+          { limiteInf: 2172.38, limiteSup: 2457.13, subsidio: 149.66 },
+          { limiteInf: 2457.14, limiteSup: 2866.63, subsidio: 135.65 },
+          { limiteInf: 2866.64, limiteSup: 3276.13, subsidio: 116.76 },
+          { limiteInf: 3276.14, limiteSup: 3398.17, subsidio: 100.24 },
+          { limiteInf: 3398.18, limiteSup: 5087.00, subsidio: 0 },
+        ],
+        mensual: [
+          { limiteInf: 0.01, limiteSup: 1768.96, subsidio: 407.02 },
+          { limiteInf: 1768.97, limiteSup: 2653.38, subsidio: 406.83 },
+          { limiteInf: 2653.39, limiteSup: 3472.84, subsidio: 406.62 },
+          { limiteInf: 3472.85, limiteSup: 3537.87, subsidio: 392.77 },
+          { limiteInf: 3537.88, limiteSup: 4446.15, subsidio: 382.46 },
+          { limiteInf: 4446.16, limiteSup: 4717.18, subsidio: 354.23 },
+          { limiteInf: 4717.19, limiteSup: 5335.42, subsidio: 324.87 },
+          { limiteInf: 5335.43, limiteSup: 6224.67, subsidio: 294.63 },
+          { limiteInf: 6224.68, limiteSup: 7113.90, subsidio: 253.54 },
+          { limiteInf: 7113.91, limiteSup: 7382.33, subsidio: 217.61 },
+          { limiteInf: 7382.34, limiteSup: 10171.00, subsidio: 0 },
+        ],
+      };
       
-      for (const tramo of tabla) {
+      const tablaISR = tablasISR[periodo] || tablasISR['quincenal'];
+      let tramoAplicado = tablaISR[0];
+      
+      for (const tramo of tablaISR) {
         if (base >= tramo.limiteInf) {
           tramoAplicado = tramo;
         }
@@ -616,12 +662,16 @@ export default function Payroll() {
       const excedente = Math.max(0, base - tramoAplicado.limiteInf);
       const isr = tramoAplicado.cuotaFija + (excedente * tramoAplicado.tasa);
       
-      // Subsidio al empleo 2025 (cuota fija si ingreso ≤ límite)
-      const limiteSubsidio = periodo === 'semanal' ? 2543.50 : periodo === 'quincenal' ? 5087.00 : 10171.00;
-      const subsidioMensual = 475.00;
-      const subsidio = base <= limiteSubsidio 
-        ? (periodo === 'semanal' ? subsidioMensual / 4 : periodo === 'quincenal' ? subsidioMensual / 2 : subsidioMensual)
-        : 0;
+      // Buscar subsidio al empleo en tabla
+      const tablaSubsidio = tablasSubsidio[periodo] || tablasSubsidio['quincenal'];
+      let subsidio = 0;
+      
+      for (const tramo of tablaSubsidio) {
+        if (base >= tramo.limiteInf && base <= tramo.limiteSup) {
+          subsidio = tramo.subsidio;
+          break;
+        }
+      }
       
       return { isr: Math.max(0, isr), subsidio };
     };
