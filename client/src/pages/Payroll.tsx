@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -111,16 +111,24 @@ export default function Payroll() {
     queryKey: ["/api/employees"],
   });
 
-  // Get period range for incidencias query
-  const getQueryPeriodRange = () => {
-    if (!selectedPeriod) {
-      const today = new Date();
-      if (selectedFrequency === "semanal") {
+  // Form state
+  const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
+  const [extraordinaryType, setExtraordinaryType] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("");
+  const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
+
+  // Calculate period range using useMemo
+  const queryPeriodRange = useMemo(() => {
+    const today = new Date();
+    
+    // Helper function
+    const getDefaultRange = (freq: string): { start: string; end: string } => {
+      if (freq === "semanal") {
         return {
           start: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
           end: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
         };
-      } else if (selectedFrequency === "quincenal") {
+      } else if (freq === "quincenal") {
         const day = today.getDate();
         if (day <= 15) {
           return {
@@ -139,11 +147,44 @@ export default function Payroll() {
           end: format(endOfMonth(today), "yyyy-MM-dd"),
         };
       }
-    }
-    return getPeriodDateRange();
-  };
+    };
 
-  const queryPeriodRange = getQueryPeriodRange();
+    if (!selectedPeriod) {
+      return getDefaultRange(selectedFrequency);
+    }
+    
+    // Parse period string like "1-15 Nov 2025" or "16-30 Nov 2025"
+    const periodMatch = selectedPeriod.match(/(\d+)-(\d+)\s+(\w+)\s+(\d+)/);
+    if (periodMatch) {
+      const [, startDayStr, endDayStr, monthStr, yearStr] = periodMatch;
+      const monthMap: Record<string, string> = {
+        'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04',
+        'May': '05', 'Jun': '06', 'Jul': '07', 'Ago': '08',
+        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
+      };
+      const startDay = parseInt(startDayStr);
+      const endDay = parseInt(endDayStr);
+      const month = monthMap[monthStr];
+      const year = parseInt(yearStr);
+      
+      if (startDay > endDay) {
+        const endDate = new Date(year, parseInt(month) - 1, endDay);
+        const startDate = new Date(endDate);
+        startDate.setDate(startDate.getDate() - 6);
+        return {
+          start: format(startDate, "yyyy-MM-dd"),
+          end: format(endDate, "yyyy-MM-dd"),
+        };
+      }
+      
+      return {
+        start: `${year}-${month}-${startDayStr.padStart(2, '0')}`,
+        end: `${year}-${month}-${endDayStr.padStart(2, '0')}`,
+      };
+    }
+    
+    return getDefaultRange(selectedFrequency);
+  }, [selectedPeriod, selectedFrequency]);
 
   // Fetch incidencias de asistencia from API filtered by period
   const { data: incidenciasAsistencia = [] } = useQuery<IncidenciaAsistencia[]>({
@@ -161,12 +202,6 @@ export default function Payroll() {
       return res.json();
     },
   });
-  
-  // Form state
-  const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
-  const [extraordinaryType, setExtraordinaryType] = useState("");
-  const [selectedPeriod, setSelectedPeriod] = useState("");
-  const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
   const [departmentFilter, setDepartmentFilter] = useState("all");
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCsvUploadOpen, setIsCsvUploadOpen] = useState(false);
@@ -180,78 +215,6 @@ export default function Payroll() {
   
   // Expandable incidencias columns
   const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
-  
-  // Date range for incidencias period
-  const getPeriodDateRange = (): { start: string; end: string } => {
-    if (!selectedPeriod) {
-      const today = new Date();
-      return {
-        start: format(today, "yyyy-MM-dd"),
-        end: format(today, "yyyy-MM-dd"),
-      };
-    }
-
-    // Parse period string like "1-15 Nov 2025" or "16-30 Nov 2025"
-    const periodMatch = selectedPeriod.match(/(\d+)-(\d+)\s+(\w+)\s+(\d+)/);
-    if (periodMatch) {
-      const [, startDayStr, endDayStr, monthStr, yearStr] = periodMatch;
-      const monthMap: Record<string, string> = {
-        'Ene': '01', 'Feb': '02', 'Mar': '03', 'Abr': '04',
-        'May': '05', 'Jun': '06', 'Jul': '07', 'Ago': '08',
-        'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dic': '12'
-      };
-      const startDay = parseInt(startDayStr);
-      const endDay = parseInt(endDayStr);
-      const month = monthMap[monthStr];
-      const year = parseInt(yearStr);
-      
-      // Handle weekly periods that cross month boundaries
-      // If start day > end day, the period crosses into the next month
-      if (startDay > endDay) {
-        // Start day is in previous month
-        const endDate = new Date(year, parseInt(month) - 1, endDay);
-        const startDate = new Date(endDate);
-        startDate.setDate(startDate.getDate() - 6); // Go back 6 days for a 7-day week
-        
-        return {
-          start: format(startDate, "yyyy-MM-dd"),
-          end: format(endDate, "yyyy-MM-dd"),
-        };
-      }
-      
-      return {
-        start: `${year}-${month}-${startDayStr.padStart(2, '0')}`,
-        end: `${year}-${month}-${endDayStr.padStart(2, '0')}`,
-      };
-    }
-
-    // Default fallback
-    const today = new Date();
-    if (selectedFrequency === "semanal") {
-      return {
-        start: format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
-        end: format(endOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd"),
-      };
-    } else if (selectedFrequency === "quincenal") {
-      const day = today.getDate();
-      if (day <= 15) {
-        return {
-          start: format(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-MM-dd"),
-          end: format(new Date(today.getFullYear(), today.getMonth(), 15), "yyyy-MM-dd"),
-        };
-      } else {
-        return {
-          start: format(new Date(today.getFullYear(), today.getMonth(), 16), "yyyy-MM-dd"),
-          end: format(endOfMonth(today), "yyyy-MM-dd"),
-        };
-      }
-    } else {
-      return {
-        start: format(startOfMonth(today), "yyyy-MM-dd"),
-        end: format(endOfMonth(today), "yyyy-MM-dd"),
-      };
-    }
-  };
   
   // Transform API employees to format needed by the component
   const allEmployees = employees.map(emp => ({
@@ -382,14 +345,9 @@ export default function Payroll() {
                      : selectedFrequency === "quincenal" ? 15 
                      : 30;
 
-    // Obtener rango de fechas del periodo seleccionado
-    const periodRange = getPeriodDateRange();
-    
-    // Contar incidencias del empleado en el periodo
+    // Contar incidencias del empleado en el periodo (ya filtradas por la query)
     const employeeIncidencias = incidenciasAsistencia.filter(inc => 
-      inc.employeeId === employeeId &&
-      inc.fecha >= periodRange.start &&
-      inc.fecha <= periodRange.end
+      inc.employeeId === employeeId
     );
 
     const totalAbsences = employeeIncidencias.reduce((sum, inc) => sum + (inc.faltas || 0), 0);
@@ -1177,22 +1135,16 @@ export default function Payroll() {
               </div>
 
               {(() => {
-                const dateRange = getPeriodDateRange();
                 const selectedEmployeesArray = employees.filter(emp => 
                   selectedEmployees.has(emp.id!)
-                );
-                
-                // Filter incidencias that match the period
-                const periodIncidencias = incidenciasAsistencia.filter(inc => 
-                  inc.fecha >= dateRange.start && inc.fecha <= dateRange.end
                 );
 
                 return (
                   <IncidenciasAsistenciaGrid
-                    fechaInicio={dateRange.start}
-                    fechaFin={dateRange.end}
+                    fechaInicio={queryPeriodRange.start}
+                    fechaFin={queryPeriodRange.end}
                     employees={selectedEmployeesArray}
-                    incidenciasAsistencia={periodIncidencias}
+                    incidenciasAsistencia={incidenciasAsistencia}
                     isLoading={false}
                   />
                 );
