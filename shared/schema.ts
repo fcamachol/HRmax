@@ -252,6 +252,45 @@ export const conceptosMediosPagoRel = pgTable("conceptos_medios_pago_rel", {
   clienteEmpresaIdx: index("conceptos_medios_pago_rel_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
 
+// ============================================================================
+// PLANTILLAS DE NÓMINA - Templates for payroll configurations
+// ============================================================================
+
+export const canalesConcepto = ["nomina", "exento"] as const;
+export type CanalConcepto = typeof canalesConcepto[number];
+
+export const plantillasNomina = pgTable("plantillas_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("plantillas_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  uniqueNombre: unique().on(table.clienteId, table.empresaId, table.nombre),
+}));
+
+export const plantillaConceptos = pgTable("plantilla_conceptos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  plantillaId: varchar("plantilla_id").notNull().references(() => plantillasNomina.id, { onDelete: "cascade" }),
+  conceptoId: varchar("concepto_id").notNull().references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
+  canal: varchar("canal", { length: 20 }).notNull().default("nomina"), // "nomina" (gravable, integra SBC) | "exento" (no integra SBC)
+  valorDefault: decimal("valor_default", { precision: 18, scale: 4 }), // Valor predeterminado opcional
+  esObligatorio: boolean("es_obligatorio").notNull().default(false), // Si el concepto es obligatorio en esta plantilla
+  orden: integer("orden").notNull().default(0), // Orden de aparición en la plantilla
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("plantilla_conceptos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  plantillaIdx: index("plantilla_conceptos_plantilla_idx").on(table.plantillaId),
+  uniqueConcepto: unique().on(table.plantillaId, table.conceptoId),
+}));
+
 export const attendance = pgTable("attendance", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
@@ -732,6 +771,25 @@ export const insertConceptoMedioPagoSchema = createInsertSchema(conceptosMedioPa
 
 export const updateConceptoMedioPagoSchema = insertConceptoMedioPagoSchema.partial();
 
+// Plantillas de Nómina schemas
+export const insertPlantillaNominaSchema = createInsertSchema(plantillasNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const updatePlantillaNominaSchema = insertPlantillaNominaSchema.partial();
+
+export const insertPlantillaConceptoSchema = createInsertSchema(plantillaConceptos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  canal: z.enum(canalesConcepto),
+});
+
+export const updatePlantillaConceptoSchema = insertPlantillaConceptoSchema.partial();
+
 export const insertAttendanceSchema = createInsertSchema(attendance).omit({
   id: true,
 });
@@ -900,6 +958,20 @@ export type ConceptoMedioPagoRel = typeof conceptosMediosPagoRel.$inferSelect;
 export type ConceptoMedioPagoWithRelations = ConceptoMedioPago & {
   mediosPagoIds: string[];
 };
+
+// Plantillas de Nómina types
+export type PlantillaNomina = typeof plantillasNomina.$inferSelect;
+export type InsertPlantillaNomina = z.infer<typeof insertPlantillaNominaSchema>;
+export type PlantillaConcepto = typeof plantillaConceptos.$inferSelect;
+export type InsertPlantillaConcepto = z.infer<typeof insertPlantillaConceptoSchema>;
+
+// Tipo extendido para plantilla con sus conceptos
+export type PlantillaNominaWithConceptos = PlantillaNomina & {
+  conceptos: (PlantillaConcepto & {
+    concepto: ConceptoMedioPago;
+  })[];
+};
+
 export type Attendance = typeof attendance.$inferSelect;
 export type InsertAttendance = z.infer<typeof insertAttendanceSchema>;
 export type IncidenciaAsistencia = typeof incidenciasAsistencia.$inferSelect;
