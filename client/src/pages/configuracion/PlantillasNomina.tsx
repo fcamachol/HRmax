@@ -507,6 +507,7 @@ export default function PlantillasNomina() {
                             <TableRow>
                               <TableHead>Concepto</TableHead>
                               <TableHead>Tipo</TableHead>
+                              <TableHead>Fórmula</TableHead>
                               <TableHead>Valor Default</TableHead>
                               <TableHead>Obligatorio</TableHead>
                               <TableHead className="w-[50px]"></TableHead>
@@ -520,6 +521,11 @@ export default function PlantillasNomina() {
                                   <Badge variant={pc.concepto.tipo === "percepcion" ? "default" : "destructive"}>
                                     {pc.concepto.tipo === "percepcion" ? "Percepción" : "Deducción"}
                                   </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <code className="text-xs bg-muted px-2 py-1 rounded">
+                                    {pc.concepto.formula || "-"}
+                                  </code>
                                 </TableCell>
                                 <TableCell className="font-mono">
                                   {pc.valorDefault ? formatCurrency(pc.valorDefault) : "-"}
@@ -568,6 +574,7 @@ export default function PlantillasNomina() {
                             <TableRow>
                               <TableHead>Concepto</TableHead>
                               <TableHead>Tipo</TableHead>
+                              <TableHead>Fórmula</TableHead>
                               <TableHead>Valor Default</TableHead>
                               <TableHead>Obligatorio</TableHead>
                               <TableHead className="w-[50px]"></TableHead>
@@ -581,6 +588,11 @@ export default function PlantillasNomina() {
                                   <Badge variant={pc.concepto.tipo === "percepcion" ? "default" : "destructive"}>
                                     {pc.concepto.tipo === "percepcion" ? "Percepción" : "Deducción"}
                                   </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <code className="text-xs bg-muted px-2 py-1 rounded">
+                                    {pc.concepto.formula || "-"}
+                                  </code>
                                 </TableCell>
                                 <TableCell className="font-mono">
                                   {pc.valorDefault ? formatCurrency(pc.valorDefault) : "-"}
