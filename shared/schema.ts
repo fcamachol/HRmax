@@ -221,12 +221,29 @@ export const mediosPago = pgTable("medios_pago", {
 export const tiposConcepto = ["percepcion", "deduccion"] as const;
 export type TipoConcepto = typeof tiposConcepto[number];
 
+// Categorías predefinidas para conceptos de nómina (percepciones/deducciones)
+export const categoriasConcepto = [
+  "salario",
+  "prevision_social",
+  "vales",
+  "plan_privado_pensiones",
+  "sindicato",
+  "horas_extra",
+  "prestaciones_ley",
+  "bonos_incentivos",
+  "descuentos",
+  "impuestos",
+  "otros"
+] as const;
+export type CategoriaConcepto = typeof categoriasConcepto[number];
+
 export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   nombre: varchar("nombre", { length: 200 }).notNull().unique(),
   tipo: varchar("tipo", { length: 20 }).notNull(), // percepcion, deduccion
+  categoria: varchar("categoria", { length: 50 }).default("otros"), // Categoría para clasificación
   formula: text("formula").notNull(),
   limiteExento: text("limite_exento"), // Puede ser fórmula (ej: "3*UMA") o cantidad
   gravableISR: boolean("gravable_isr").notNull().default(true),
@@ -237,6 +254,7 @@ export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   updatedAt: timestamp("updated_at").default(sql`now()`),
 }, (table) => ({
   clienteEmpresaIdx: index("conceptos_medio_pago_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  categoriaIdx: index("conceptos_medio_pago_categoria_idx").on(table.categoria),
 }));
 
 // Tabla de relación muchos a muchos entre conceptos y medios de pago
@@ -3188,6 +3206,22 @@ export type InsertCatImssCuota = z.infer<typeof insertCatImssCuotaSchema>;
 // ============================================================================
 
 // Conceptos de Nómina (Percepciones/Deducciones/Otros Pagos configurables)
+// Categorías predefinidas para conceptos de nómina
+export const categoriasConceptoNomina = [
+  "salario",
+  "prevision_social",
+  "vales",
+  "plan_privado_pensiones",
+  "sindicato",
+  "horas_extra",
+  "prestaciones_ley",
+  "bonos_incentivos",
+  "descuentos",
+  "impuestos",
+  "otros"
+] as const;
+export type CategoriaConceptoNomina = typeof categoriasConceptoNomina[number];
+
 export const conceptosNomina = pgTable("conceptos_nomina", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
@@ -3195,6 +3229,7 @@ export const conceptosNomina = pgTable("conceptos_nomina", {
   codigo: varchar("codigo", { length: 50 }).notNull(), // Código interno único por cliente
   nombre: varchar("nombre", { length: 255 }).notNull(),
   tipo: varchar("tipo", { length: 20 }).notNull(), // 'percepcion', 'deduccion', 'otro_pago'
+  categoria: varchar("categoria", { length: 50 }).default("otros"), // Categoría para clasificar conceptos
   satClave: varchar("sat_clave", { length: 10 }), // Referencia a catálogos SAT
   naturaleza: varchar("naturaleza", { length: 20 }).notNull(), // 'ordinaria', 'extraordinaria', 'mixta'
   
@@ -3227,6 +3262,7 @@ export const conceptosNomina = pgTable("conceptos_nomina", {
   uniqueCodigoClienteEmpresa: unique().on(table.clienteId, table.empresaId, table.codigo),
   clienteEmpresaIdx: index("conceptos_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
   tipoIdx: index("conceptos_nomina_tipo_idx").on(table.tipo),
+  categoriaIdx: index("conceptos_nomina_categoria_idx").on(table.categoria),
   ordenIdx: index("conceptos_nomina_orden_idx").on(table.ordenCalculo),
 }));
 

@@ -62,13 +62,28 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { ConceptoMedioPago, Cliente, Empresa } from "@shared/schema";
+import type { ConceptoMedioPago, Cliente, Empresa, CategoriaConcepto } from "@shared/schema";
+import { categoriasConcepto } from "@shared/schema";
 
 interface FormulaVariable {
   variable: string;
   descripcion: string;
   ejemplo: string;
 }
+
+const CATEGORIA_LABELS: Record<CategoriaConcepto, string> = {
+  salario: "Salario",
+  prevision_social: "Previsión Social",
+  vales: "Vales",
+  plan_privado_pensiones: "Plan Privado de Pensiones",
+  sindicato: "Sindicato",
+  horas_extra: "Horas Extra",
+  prestaciones_ley: "Prestaciones de Ley",
+  bonos_incentivos: "Bonos e Incentivos",
+  descuentos: "Descuentos",
+  impuestos: "Impuestos",
+  otros: "Otros",
+};
 
 export default function ConceptosNomina() {
   const { toast } = useToast();
@@ -77,10 +92,14 @@ export default function ConceptosNomina() {
   const [editingConcepto, setEditingConcepto] = useState<ConceptoMedioPago | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<"todos" | "percepcion" | "deduccion">("todos");
+  const [filterCategoria, setFilterCategoria] = useState<CategoriaConcepto | "todos">("todos");
+  const [customCategoria, setCustomCategoria] = useState("");
+  const [showCustomCategoria, setShowCustomCategoria] = useState(false);
   
   const [formData, setFormData] = useState({
     nombre: "",
     tipo: "percepcion" as "percepcion" | "deduccion",
+    categoria: "otros" as CategoriaConcepto | string,
     formula: "",
     limiteExento: "",
     gravableISR: true,
@@ -168,6 +187,7 @@ export default function ConceptosNomina() {
     setFormData({
       nombre: "",
       tipo: "percepcion",
+      categoria: "otros",
       formula: "",
       limiteExento: "",
       gravableISR: true,
@@ -178,13 +198,19 @@ export default function ConceptosNomina() {
       activo: true,
     });
     setEditingConcepto(null);
+    setShowCustomCategoria(false);
+    setCustomCategoria("");
   };
 
   const handleEdit = (concepto: ConceptoMedioPago) => {
     setEditingConcepto(concepto);
+    const categoria = concepto.categoria || "otros";
+    const isCustomCategoria = !categoriasConcepto.includes(categoria as CategoriaConcepto);
+    
     setFormData({
       nombre: concepto.nombre,
       tipo: concepto.tipo as "percepcion" | "deduccion",
+      categoria: isCustomCategoria ? "otros" : categoria,
       formula: concepto.formula || "",
       limiteExento: concepto.limiteExento || "",
       gravableISR: concepto.gravableISR ?? true,
@@ -194,6 +220,15 @@ export default function ConceptosNomina() {
       empresaId: concepto.empresaId,
       activo: concepto.activo ?? true,
     });
+    
+    if (isCustomCategoria) {
+      setShowCustomCategoria(true);
+      setCustomCategoria(categoria);
+    } else {
+      setShowCustomCategoria(false);
+      setCustomCategoria("");
+    }
+    
     setIsDialogOpen(true);
   };
 
@@ -203,10 +238,17 @@ export default function ConceptosNomina() {
       return;
     }
 
+    const dataToSubmit = {
+      ...formData,
+      categoria: showCustomCategoria && customCategoria.trim() 
+        ? customCategoria.trim() 
+        : formData.categoria,
+    };
+
     if (editingConcepto) {
-      updateMutation.mutate({ id: editingConcepto.id, data: formData });
+      updateMutation.mutate({ id: editingConcepto.id, data: dataToSubmit });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(dataToSubmit);
     }
   };
 
@@ -220,11 +262,17 @@ export default function ConceptosNomina() {
   const filteredConceptos = conceptos.filter(c => {
     const matchesSearch = c.nombre.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = filterType === "todos" || c.tipo === filterType;
-    return matchesSearch && matchesType;
+    const matchesCategoria = filterCategoria === "todos" || (c.categoria || "otros") === filterCategoria;
+    return matchesSearch && matchesType && matchesCategoria;
   });
 
   const percepciones = filteredConceptos.filter(c => c.tipo === "percepcion");
   const deducciones = filteredConceptos.filter(c => c.tipo === "deduccion");
+
+  const getCategoriaLabel = (categoria: string | null | undefined): string => {
+    if (!categoria) return CATEGORIA_LABELS.otros;
+    return CATEGORIA_LABELS[categoria as CategoriaConcepto] || categoria;
+  };
 
   const ConceptoRow = ({ concepto }: { concepto: ConceptoMedioPago }) => (
     <TableRow key={concepto.id} data-testid={`row-concepto-${concepto.id}`}>
@@ -236,7 +284,12 @@ export default function ConceptosNomina() {
           )}
         </div>
       </TableCell>
-      <TableCell className="font-mono text-xs max-w-[300px]">
+      <TableCell>
+        <Badge variant="outline" className="text-xs font-normal">
+          {getCategoriaLabel(concepto.categoria)}
+        </Badge>
+      </TableCell>
+      <TableCell className="font-mono text-xs max-w-[250px]">
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="truncate cursor-help">
@@ -340,7 +393,7 @@ export default function ConceptosNomina() {
               />
             </div>
             <Select value={filterType} onValueChange={(v) => setFilterType(v as typeof filterType)}>
-              <SelectTrigger className="w-[180px]" data-testid="select-filter-type">
+              <SelectTrigger className="w-[160px]" data-testid="select-filter-type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -357,6 +410,19 @@ export default function ConceptosNomina() {
                     Deducciones
                   </div>
                 </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterCategoria} onValueChange={(v) => setFilterCategoria(v as typeof filterCategoria)}>
+              <SelectTrigger className="w-[200px]" data-testid="select-filter-categoria">
+                <SelectValue placeholder="Categoría" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas las categorías</SelectItem>
+                {categoriasConcepto.map((cat) => (
+                  <SelectItem key={cat} value={cat}>
+                    {CATEGORIA_LABELS[cat]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -387,6 +453,7 @@ export default function ConceptosNomina() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
+                        <TableHead>Categoría</TableHead>
                         <TableHead>Fórmula</TableHead>
                         <TableHead>Límite Exento</TableHead>
                         <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
@@ -397,7 +464,7 @@ export default function ConceptosNomina() {
                     <TableBody>
                       {percepciones.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                             No hay percepciones registradas
                           </TableCell>
                         </TableRow>
@@ -415,6 +482,7 @@ export default function ConceptosNomina() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Nombre</TableHead>
+                        <TableHead>Categoría</TableHead>
                         <TableHead>Fórmula</TableHead>
                         <TableHead>Límite Exento</TableHead>
                         <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
@@ -425,7 +493,7 @@ export default function ConceptosNomina() {
                     <TableBody>
                       {deducciones.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                             No hay deducciones registradas
                           </TableCell>
                         </TableRow>
@@ -489,6 +557,54 @@ export default function ConceptosNomina() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="categoria">Categoría</Label>
+                <Select
+                  value={formData.categoria}
+                  onValueChange={(v) => {
+                    if (v === "__custom__") {
+                      setShowCustomCategoria(true);
+                      setFormData({ ...formData, categoria: "otros" });
+                    } else {
+                      setShowCustomCategoria(false);
+                      setCustomCategoria("");
+                      setFormData({ ...formData, categoria: v });
+                    }
+                  }}
+                >
+                  <SelectTrigger data-testid="select-concepto-categoria">
+                    <SelectValue placeholder="Selecciona categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categoriasConcepto.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {CATEGORIA_LABELS[cat]}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="__custom__">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Plus className="h-3 w-3" />
+                        Categoría personalizada...
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {showCustomCategoria && (
+                <div className="space-y-2">
+                  <Label htmlFor="customCategoria">Nombre de Categoría</Label>
+                  <Input
+                    id="customCategoria"
+                    value={customCategoria}
+                    onChange={(e) => setCustomCategoria(e.target.value)}
+                    placeholder="Ej: Compensaciones especiales"
+                    data-testid="input-concepto-custom-categoria"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

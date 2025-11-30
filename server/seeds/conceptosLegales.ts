@@ -1,10 +1,11 @@
 import { db } from "../db";
-import { conceptosMedioPago, clientes, empresas } from "@shared/schema";
+import { conceptosMedioPago, clientes, empresas, categoriasConcepto, type CategoriaConcepto } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
 interface ConceptoLegal {
   nombre: string;
   tipo: "percepcion" | "deduccion";
+  categoria: CategoriaConcepto;
   formula: string;
   limiteExento: string | null;
   gravableISR: boolean;
@@ -15,11 +16,12 @@ interface ConceptoLegal {
 
 const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   // ============================================================================
-  // PERCEPCIONES
+  // PERCEPCIONES - SALARIO
   // ============================================================================
   {
     nombre: "Sueldo Base",
     tipo: "percepcion",
+    categoria: "salario",
     formula: "SALARIO_DIARIO * DIAS_TRABAJADOS",
     limiteExento: null,
     gravableISR: true,
@@ -27,9 +29,13 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     limiteAnual: null,
     fundamentoLegal: "LFT Art. 82-89",
   },
+  // ============================================================================
+  // PERCEPCIONES - PRESTACIONES DE LEY
+  // ============================================================================
   {
     nombre: "Prima Vacacional",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * DIAS_VACACIONES * 0.25",
     limiteExento: "15 * UMA_DIARIA",
     gravableISR: true,
@@ -40,6 +46,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Aguinaldo",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * DIAS_AGUINALDO",
     limiteExento: "30 * UMA_DIARIA",
     gravableISR: true,
@@ -50,6 +57,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Prima Dominical",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * DOMINGOS_TRABAJADOS * 0.25",
     limiteExento: "1 * UMA_SEMANAL",
     gravableISR: true,
@@ -57,9 +65,13 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     limiteAnual: null,
     fundamentoLegal: "LFT Art. 71, LISR Art. 93 Fracc. I",
   },
+  // ============================================================================
+  // PERCEPCIONES - HORAS EXTRA
+  // ============================================================================
   {
     nombre: "Horas Extra Dobles",
     tipo: "percepcion",
+    categoria: "horas_extra",
     formula: "SALARIO_HORA * HORAS_EXTRA_DOBLES * 2",
     limiteExento: "MIN(SALARIO_HORA * MIN(HORAS_EXTRA_DOBLES, 9) * 2, SALARIO_PERIODO * 0.5)",
     gravableISR: true,
@@ -70,6 +82,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Horas Extra Triples",
     tipo: "percepcion",
+    categoria: "horas_extra",
     formula: "SALARIO_HORA * HORAS_EXTRA_TRIPLES * 3",
     limiteExento: null,
     gravableISR: true,
@@ -77,9 +90,13 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     limiteAnual: null,
     fundamentoLegal: "LFT Art. 68",
   },
+  // ============================================================================
+  // PERCEPCIONES - PRESTACIONES DE LEY (continuación)
+  // ============================================================================
   {
     nombre: "PTU (Reparto de Utilidades)",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "PTU_CALCULADO",
     limiteExento: "15 * UMA_DIARIA",
     gravableISR: true,
@@ -88,28 +105,9 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 117-131, LISR Art. 93 Fracc. XIV",
   },
   {
-    nombre: "Vales de Despensa",
-    tipo: "percepcion",
-    formula: "MONTO_VALES",
-    limiteExento: "0.40 * UMA_MENSUAL",
-    gravableISR: false,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LISR Art. 93 Fracc. VIII",
-  },
-  {
-    nombre: "Fondo de Ahorro Empresa",
-    tipo: "percepcion",
-    formula: "APORTACION_EMPRESA",
-    limiteExento: "13% SALARIO si aportación igual patrón/trabajador",
-    gravableISR: false,
-    integraSBC: false,
-    limiteAnual: "1.3 * UMA_ANUAL",
-    fundamentoLegal: "LISR Art. 93 Fracc. XI",
-  },
-  {
     nombre: "Días Festivos Laborados",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * DIAS_FESTIVOS_TRABAJADOS * 2",
     limiteExento: null,
     gravableISR: true,
@@ -118,58 +116,9 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 74-75",
   },
   {
-    nombre: "Bono de Puntualidad",
-    tipo: "percepcion",
-    formula: "MONTO_BONO",
-    limiteExento: "10% SALARIO_PERIODO",
-    gravableISR: true,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LISR Art. 93 Fracc. I",
-  },
-  {
-    nombre: "Bono de Asistencia",
-    tipo: "percepcion",
-    formula: "MONTO_BONO",
-    limiteExento: "10% SALARIO_PERIODO",
-    gravableISR: true,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LISR Art. 93 Fracc. I",
-  },
-  {
-    nombre: "Comisiones",
-    tipo: "percepcion",
-    formula: "MONTO_COMISION",
-    limiteExento: null,
-    gravableISR: true,
-    integraSBC: true,
-    limiteAnual: null,
-    fundamentoLegal: "LFT Art. 285-291",
-  },
-  {
-    nombre: "Gratificación Especial",
-    tipo: "percepcion",
-    formula: "MONTO_GRATIFICACION",
-    limiteExento: null,
-    gravableISR: true,
-    integraSBC: true,
-    limiteAnual: null,
-    fundamentoLegal: "LFT Art. 84",
-  },
-  {
-    nombre: "Subsidio al Empleo",
-    tipo: "percepcion",
-    formula: "SUBSIDIO_TABLA_2025(BASE_GRAVABLE)",
-    limiteExento: "MONTO_TOTAL",
-    gravableISR: false,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LISR Art. 98",
-  },
-  {
     nombre: "Vacaciones Pagadas",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * DIAS_VACACIONES",
     limiteExento: null,
     gravableISR: true,
@@ -180,6 +129,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Prima de Antigüedad",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "12 * SALARIO_DIARIO * AÑOS_SERVICIO",
     limiteExento: "90 * UMA_DIARIA * AÑOS_SERVICIO",
     gravableISR: true,
@@ -190,6 +140,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Indemnización 3 Meses",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * 90",
     limiteExento: "90 * UMA_DIARIA por cada año",
     gravableISR: true,
@@ -200,6 +151,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "20 Días por Año",
     tipo: "percepcion",
+    categoria: "prestaciones_ley",
     formula: "SALARIO_DIARIO * 20 * AÑOS_SERVICIO",
     limiteExento: "90 * UMA_DIARIA * AÑOS_SERVICIO",
     gravableISR: true,
@@ -208,11 +160,98 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 50, LISR Art. 93 Fracc. XIII",
   },
   // ============================================================================
-  // DEDUCCIONES
+  // PERCEPCIONES - VALES
+  // ============================================================================
+  {
+    nombre: "Vales de Despensa",
+    tipo: "percepcion",
+    categoria: "vales",
+    formula: "MONTO_VALES",
+    limiteExento: "0.40 * UMA_MENSUAL",
+    gravableISR: false,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LISR Art. 93 Fracc. VIII",
+  },
+  // ============================================================================
+  // PERCEPCIONES - PREVISIÓN SOCIAL
+  // ============================================================================
+  {
+    nombre: "Fondo de Ahorro Empresa",
+    tipo: "percepcion",
+    categoria: "prevision_social",
+    formula: "APORTACION_EMPRESA",
+    limiteExento: "13% SALARIO si aportación igual patrón/trabajador",
+    gravableISR: false,
+    integraSBC: false,
+    limiteAnual: "1.3 * UMA_ANUAL",
+    fundamentoLegal: "LISR Art. 93 Fracc. XI",
+  },
+  {
+    nombre: "Subsidio al Empleo",
+    tipo: "percepcion",
+    categoria: "prevision_social",
+    formula: "SUBSIDIO_TABLA_2025(BASE_GRAVABLE)",
+    limiteExento: "MONTO_TOTAL",
+    gravableISR: false,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LISR Art. 98",
+  },
+  // ============================================================================
+  // PERCEPCIONES - BONOS E INCENTIVOS
+  // ============================================================================
+  {
+    nombre: "Bono de Puntualidad",
+    tipo: "percepcion",
+    categoria: "bonos_incentivos",
+    formula: "MONTO_BONO",
+    limiteExento: "10% SALARIO_PERIODO",
+    gravableISR: true,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LISR Art. 93 Fracc. I",
+  },
+  {
+    nombre: "Bono de Asistencia",
+    tipo: "percepcion",
+    categoria: "bonos_incentivos",
+    formula: "MONTO_BONO",
+    limiteExento: "10% SALARIO_PERIODO",
+    gravableISR: true,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LISR Art. 93 Fracc. I",
+  },
+  {
+    nombre: "Comisiones",
+    tipo: "percepcion",
+    categoria: "bonos_incentivos",
+    formula: "MONTO_COMISION",
+    limiteExento: null,
+    gravableISR: true,
+    integraSBC: true,
+    limiteAnual: null,
+    fundamentoLegal: "LFT Art. 285-291",
+  },
+  {
+    nombre: "Gratificación Especial",
+    tipo: "percepcion",
+    categoria: "bonos_incentivos",
+    formula: "MONTO_GRATIFICACION",
+    limiteExento: null,
+    gravableISR: true,
+    integraSBC: true,
+    limiteAnual: null,
+    fundamentoLegal: "LFT Art. 84",
+  },
+  // ============================================================================
+  // DEDUCCIONES - IMPUESTOS
   // ============================================================================
   {
     nombre: "ISR (Impuesto Sobre la Renta)",
     tipo: "deduccion",
+    categoria: "impuestos",
     formula: "TABLA_ISR_2025(BASE_GRAVABLE) - SUBSIDIO_EMPLEO",
     limiteExento: null,
     gravableISR: false,
@@ -223,6 +262,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "IMSS Trabajador - Enfermedad y Maternidad",
     tipo: "deduccion",
+    categoria: "impuestos",
     formula: "MAX(0, SBC_DIARIO - 3*UMA_DIARIA) * DIAS_PERIODO * 0.004",
     limiteExento: null,
     gravableISR: false,
@@ -233,6 +273,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "IMSS Trabajador - Invalidez y Vida",
     tipo: "deduccion",
+    categoria: "impuestos",
     formula: "SBC_PERIODO * 0.00625",
     limiteExento: null,
     gravableISR: false,
@@ -243,6 +284,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "IMSS Trabajador - Cesantía y Vejez",
     tipo: "deduccion",
+    categoria: "impuestos",
     formula: "SBC_PERIODO * 0.01125",
     limiteExento: null,
     gravableISR: false,
@@ -253,6 +295,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "IMSS Trabajador Total",
     tipo: "deduccion",
+    categoria: "impuestos",
     formula: "IMSS_ENF_MAT + IMSS_INV_VIDA + IMSS_CES_VEJEZ",
     limiteExento: null,
     gravableISR: false,
@@ -260,9 +303,13 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     limiteAnual: null,
     fundamentoLegal: "LSS Art. 25",
   },
+  // ============================================================================
+  // DEDUCCIONES - DESCUENTOS
+  // ============================================================================
   {
     nombre: "Infonavit (Crédito Vivienda)",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "DESCUENTO_INFONAVIT",
     limiteExento: null,
     gravableISR: false,
@@ -273,6 +320,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Fonacot (Crédito)",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "DESCUENTO_FONACOT",
     limiteExento: null,
     gravableISR: false,
@@ -281,18 +329,9 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "Ley Fonacot Art. 97 Fracc. IV",
   },
   {
-    nombre: "Cuota Sindical",
-    tipo: "deduccion",
-    formula: "SALARIO_PERIODO * PORCENTAJE_SINDICAL",
-    limiteExento: null,
-    gravableISR: false,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LFT Art. 110 Fracc. VI",
-  },
-  {
     nombre: "Pensión Alimenticia",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "MONTO_PENSION o SALARIO_NETO * PORCENTAJE",
     limiteExento: null,
     gravableISR: false,
@@ -301,18 +340,9 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 110 Fracc. V",
   },
   {
-    nombre: "Fondo de Ahorro Trabajador",
-    tipo: "deduccion",
-    formula: "APORTACION_TRABAJADOR",
-    limiteExento: null,
-    gravableISR: false,
-    integraSBC: false,
-    limiteAnual: null,
-    fundamentoLegal: "LFT Art. 110 Fracc. IV",
-  },
-  {
     nombre: "Préstamo Empresa",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "ABONO_PRESTAMO",
     limiteExento: null,
     gravableISR: false,
@@ -323,6 +353,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Horas no Laboradas",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "SALARIO_HORA * HORAS_AUSENTES",
     limiteExento: null,
     gravableISR: false,
@@ -333,6 +364,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Días no Laborados",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "SALARIO_DIARIO * DIAS_AUSENTES",
     limiteExento: null,
     gravableISR: false,
@@ -343,6 +375,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   {
     nombre: "Anticipo de Sueldo",
     tipo: "deduccion",
+    categoria: "descuentos",
     formula: "MONTO_ANTICIPO",
     limiteExento: null,
     gravableISR: false,
@@ -350,9 +383,38 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     limiteAnual: null,
     fundamentoLegal: "LFT Art. 110 Fracc. I",
   },
+  // ============================================================================
+  // DEDUCCIONES - SINDICATO
+  // ============================================================================
+  {
+    nombre: "Cuota Sindical",
+    tipo: "deduccion",
+    categoria: "sindicato",
+    formula: "SALARIO_PERIODO * PORCENTAJE_SINDICAL",
+    limiteExento: null,
+    gravableISR: false,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LFT Art. 110 Fracc. VI",
+  },
+  // ============================================================================
+  // DEDUCCIONES - PREVISIÓN SOCIAL
+  // ============================================================================
+  {
+    nombre: "Fondo de Ahorro Trabajador",
+    tipo: "deduccion",
+    categoria: "prevision_social",
+    formula: "APORTACION_TRABAJADOR",
+    limiteExento: null,
+    gravableISR: false,
+    integraSBC: false,
+    limiteAnual: null,
+    fundamentoLegal: "LFT Art. 110 Fracc. IV",
+  },
   {
     nombre: "Caja de Ahorro",
     tipo: "deduccion",
+    categoria: "prevision_social",
     formula: "APORTACION_CAJA",
     limiteExento: null,
     gravableISR: false,
@@ -374,6 +436,7 @@ export async function seedConceptosLegales(): Promise<void> {
   }
 
   let insertados = 0;
+  let actualizados = 0;
   let omitidos = 0;
   let errores = 0;
 
@@ -386,13 +449,23 @@ export async function seedConceptosLegales(): Promise<void> {
         .limit(1);
 
       if (existing.length > 0) {
-        omitidos++;
+        const existingConcepto = existing[0];
+        if (existingConcepto.categoria !== concepto.categoria) {
+          await db
+            .update(conceptosMedioPago)
+            .set({ categoria: concepto.categoria })
+            .where(eq(conceptosMedioPago.id, existingConcepto.id));
+          actualizados++;
+        } else {
+          omitidos++;
+        }
       } else {
         await db.insert(conceptosMedioPago).values({
           clienteId: cliente.id,
           empresaId: empresa.id,
           nombre: concepto.nombre,
           tipo: concepto.tipo,
+          categoria: concepto.categoria,
           formula: concepto.formula,
           limiteExento: concepto.limiteExento,
           gravableISR: concepto.gravableISR,
@@ -410,7 +483,7 @@ export async function seedConceptosLegales(): Promise<void> {
     }
   }
 
-  console.log(`✅ Conceptos legales: ${insertados} insertados, ${omitidos} ya existían, ${errores} errores`);
+  console.log(`✅ Conceptos legales: ${insertados} insertados, ${actualizados} actualizados, ${omitidos} sin cambios, ${errores} errores`);
 }
 
 export const VARIABLES_FORMULA = [
