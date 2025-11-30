@@ -2922,6 +2922,79 @@ export const updateNominaSchema = insertNominaSchema.partial();
 export type UpdateNomina = z.infer<typeof updateNominaSchema>;
 
 // ============================================================================
+// LAYOUTS BANCARIOS GENERADOS - Archivos generados por nómina aprobada
+// ============================================================================
+
+export const layoutsGenerados = pgTable("layouts_generados", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  nominaId: varchar("nomina_id").notNull().references(() => nominas.id, { onDelete: "cascade" }),
+  medioPagoId: varchar("medio_pago_id").notNull().references(() => mediosPago.id, { onDelete: "cascade" }),
+  bancoLayoutId: varchar("banco_layout_id").references(() => bancosLayouts.id),
+  
+  // Información del archivo
+  nombreArchivo: varchar("nombre_archivo").notNull(),
+  contenido: text("contenido").notNull(), // Contenido del archivo CSV/TXT
+  formato: varchar("formato").notNull().default("csv"), // csv, txt, xlsx
+  
+  // Totales del layout
+  totalRegistros: integer("total_registros").notNull(),
+  totalMonto: numeric("total_monto", { precision: 14, scale: 2 }).notNull(),
+  
+  // Datos detallados de empleados en este layout
+  empleadosLayout: jsonb("empleados_layout").notNull(),
+  // Estructura:
+  // [
+  //   {
+  //     empleadoId: "uuid",
+  //     numeroEmpleado: "123",
+  //     nombreCompleto: "...",
+  //     cuentaBancaria: "...",
+  //     monto: 4500.00,
+  //     conceptos: [{ concepto: "...", monto: 100 }]
+  //   }
+  // ]
+  
+  // Metadatos
+  generadoPor: varchar("generado_por"),
+  fechaGeneracion: timestamp("fecha_generacion").notNull().default(sql`now()`),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  nominaIdx: index("layouts_generados_nomina_idx").on(table.nominaId),
+  medioPagoIdx: index("layouts_generados_medio_pago_idx").on(table.medioPagoId),
+  clienteEmpresaIdx: index("layouts_generados_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type LayoutGenerado = typeof layoutsGenerados.$inferSelect;
+
+export const empleadoLayoutSchema = z.object({
+  empleadoId: z.string(),
+  numeroEmpleado: z.string(),
+  nombreCompleto: z.string(),
+  cuentaBancaria: z.string().optional(),
+  monto: z.number(),
+  conceptos: z.array(z.object({
+    conceptoId: z.string().optional(),
+    concepto: z.string(),
+    monto: z.number(),
+  })),
+});
+
+export const insertLayoutGeneradoSchema = createInsertSchema(layoutsGenerados).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  empleadosLayout: z.array(empleadoLayoutSchema),
+  totalMonto: z.union([z.string(), z.number()]),
+});
+
+export type InsertLayoutGenerado = z.infer<typeof insertLayoutGeneradoSchema>;
+
+// ============================================================================
 // EXPORT TYPES
 // ============================================================================
 

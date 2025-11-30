@@ -124,6 +124,8 @@ import {
   type InsertNominaMovimiento,
   type NominaResumen,
   type InsertNominaResumen,
+  type LayoutGenerado,
+  type InsertLayoutGenerado,
   type Cliente,
   type InsertCliente,
   type Modulo,
@@ -197,7 +199,8 @@ import {
   esquemaVacaciones,
   esquemaBeneficios,
   puestoBeneficiosExtra,
-  empleadoBeneficiosExtra
+  empleadoBeneficiosExtra,
+  layoutsGenerados
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -750,6 +753,15 @@ export interface IStorage {
   deleteUser(id: string, actingUserId: string): Promise<void>;
   createAdminAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
   getAdminAuditLogs(limit?: number): Promise<AdminAuditLog[]>;
+  
+  // Layouts Generados (Bank layouts generated from approved payroll)
+  createLayoutGenerado(layout: InsertLayoutGenerado): Promise<LayoutGenerado>;
+  getLayoutGenerado(id: string): Promise<LayoutGenerado | undefined>;
+  getLayoutsGenerados(): Promise<LayoutGenerado[]>;
+  getLayoutsGeneradosByNomina(nominaId: string): Promise<LayoutGenerado[]>;
+  getLayoutsGeneradosByMedioPago(medioPagoId: string): Promise<LayoutGenerado[]>;
+  deleteLayoutGenerado(id: string): Promise<void>;
+  deleteLayoutsGeneradosByNomina(nominaId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4672,6 +4684,47 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { diasVacaciones, esquema, fuente };
+  }
+
+  // ============================================================================
+  // LAYOUTS GENERADOS - Bank layouts generated from approved payroll
+  // ============================================================================
+
+  async createLayoutGenerado(layout: InsertLayoutGenerado): Promise<LayoutGenerado> {
+    const [created] = await db
+      .insert(layoutsGenerados)
+      .values(layout)
+      .returning();
+    return created;
+  }
+
+  async getLayoutGenerado(id: string): Promise<LayoutGenerado | undefined> {
+    const [layout] = await db.select().from(layoutsGenerados).where(eq(layoutsGenerados.id, id));
+    return layout || undefined;
+  }
+
+  async getLayoutsGenerados(): Promise<LayoutGenerado[]> {
+    return db.select().from(layoutsGenerados).orderBy(desc(layoutsGenerados.fechaGeneracion));
+  }
+
+  async getLayoutsGeneradosByNomina(nominaId: string): Promise<LayoutGenerado[]> {
+    return db.select().from(layoutsGenerados)
+      .where(eq(layoutsGenerados.nominaId, nominaId))
+      .orderBy(desc(layoutsGenerados.fechaGeneracion));
+  }
+
+  async getLayoutsGeneradosByMedioPago(medioPagoId: string): Promise<LayoutGenerado[]> {
+    return db.select().from(layoutsGenerados)
+      .where(eq(layoutsGenerados.medioPagoId, medioPagoId))
+      .orderBy(desc(layoutsGenerados.fechaGeneracion));
+  }
+
+  async deleteLayoutGenerado(id: string): Promise<void> {
+    await db.delete(layoutsGenerados).where(eq(layoutsGenerados.id, id));
+  }
+
+  async deleteLayoutsGeneradosByNomina(nominaId: string): Promise<void> {
+    await db.delete(layoutsGenerados).where(eq(layoutsGenerados.nominaId, nominaId));
   }
 }
 
