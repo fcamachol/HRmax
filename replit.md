@@ -21,6 +21,8 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 **Vacation & Benefits System**: Configurable benefits catalog (`cat_tablas_prestaciones`) and a ledger-based system (`kardex_vacaciones`) for tracking vacation accrual, usage, and expiration, compliant with LFT Art. 76.
 **Overtime Hours System**: Complete implementation of overtime pay per LFT Articles 67 and 68. Horas Dobles (first 9 weekly hours at 200%) and Horas Triples (exceeding 9 weekly hours at 300%). Includes ISR exento/gravado calculations per LISR Art. 93. Catalog table `cat_tipos_horas_extra` stores the legal foundation and rates.
 **Basis Points Helper Library**: A shared library (`shared/basisPoints.ts`) provides functions for converting pesos to basis points and performing safe arithmetic with 4-decimal precision using `Math.trunc()` to prevent rounding errors.
+**Formula Evaluator (Secure)**: The payroll engine uses `expr-eval` library with strict whitelist validation for safe formula evaluation. Only allowed variables (SALARIO_DIARIO, UMA_DIARIA, etc.) and functions (min, max, abs, round, ceil, floor) are permitted. Formulas are validated against a whitelist before parsing to prevent code injection.
+**Legal Concepts Catalog**: Pre-seeded catalog (`cat_conceptos_nomina`) with 34 Mexican payroll concepts including formulas for ISR, IMSS, Prima Vacacional 25%, Aguinaldo 15 días, Horas Extra 2x/3x, etc. Includes `limiteExento` for tax-exempt calculations per LISR.
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow. Includes comprehensive finiquito/liquidación calculations with LISR exento/gravado splits.
