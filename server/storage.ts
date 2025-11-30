@@ -4693,7 +4693,10 @@ export class DatabaseStorage implements IStorage {
   async createLayoutGenerado(layout: InsertLayoutGenerado): Promise<LayoutGenerado> {
     const [created] = await db
       .insert(layoutsGenerados)
-      .values(layout)
+      .values({
+        ...layout,
+        empleadosLayout: layout.empleadosLayout as unknown as Record<string, unknown>,
+      })
       .returning();
     return created;
   }
