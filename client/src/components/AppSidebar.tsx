@@ -181,6 +181,11 @@ const configuracionSubItems = [
     url: "/configuration/plantillas-nomina",
     icon: FileText,
   },
+  {
+    title: "Catálogo de Conceptos",
+    url: "/configuration/conceptos",
+    icon: Calculator,
+  },
 ];
 
 const mainMenuItems = [

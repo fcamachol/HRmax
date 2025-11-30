@@ -36,6 +36,7 @@ import ActasAdministrativas from "@/pages/actas-administrativas/ActasAdministrat
 import MediosPago from "@/pages/configuracion/MediosPago";
 import Prestaciones from "@/pages/configuracion/Prestaciones";
 import PlantillasNomina from "@/pages/configuracion/PlantillasNomina";
+import ConceptosNomina from "@/pages/configuracion/ConceptosNomina";
 import RelojChecador from "@/components/RelojChecador";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import SuperAdminLayout from "@/pages/super-admin/Layout";
@@ -69,6 +70,7 @@ function Router() {
       <Route path="/configuration/medios-pago" component={MediosPago} />
       <Route path="/configuration/prestaciones" component={Prestaciones} />
       <Route path="/configuration/plantillas-nomina" component={PlantillasNomina} />
+      <Route path="/configuration/conceptos" component={ConceptosNomina} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/repse" component={REPSE} />

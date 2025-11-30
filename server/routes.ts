@@ -1410,6 +1410,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Variables disponibles para fórmulas
+  app.get("/api/formula-variables", (_req, res) => {
+    const { VARIABLES_FORMULA } = require("./seeds/conceptosLegales");
+    res.json(VARIABLES_FORMULA);
+  });
+
   // Plantillas de Nómina
   app.post("/api/plantillas-nomina", async (req, res) => {
     try {
