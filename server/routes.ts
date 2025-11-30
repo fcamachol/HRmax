@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
 import { VARIABLES_FORMULA } from "./seeds/conceptosLegales";
+import { generarLayoutsBancarios, getLayoutsGeneradosForNomina, getLayoutContent } from "./layoutGenerator";
 import { 
   insertConfigurationChangeLogSchema, 
   insertLegalCaseSchema,
@@ -1783,6 +1784,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Movimiento no encontrado" });
       }
       res.json(movimiento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // LAYOUTS BANCARIOS - Generación y descarga de layouts para dispersión
+  // ============================================================================
+
+  app.post("/api/nominas/:nominaId/generar-layouts", async (req, res) => {
+    try {
+      const { nominaId } = req.params;
+      const { generadoPor } = req.body;
+      
+      const layouts = await generarLayoutsBancarios(nominaId, generadoPor);
+      res.json({ 
+        success: true, 
+        message: `Se generaron ${layouts.length} layout(s)`,
+        layouts: layouts.map(l => ({
+          id: l.id,
+          nombreArchivo: l.nombreArchivo,
+          medioPagoId: l.medioPagoId,
+          totalRegistros: l.totalRegistros,
+          totalMonto: l.totalMonto,
+          formato: l.formato,
+        }))
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/nominas/:nominaId/layouts", async (req, res) => {
+    try {
+      const { nominaId } = req.params;
+      const layouts = await getLayoutsGeneradosForNomina(nominaId);
+      res.json(layouts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/layouts/:layoutId/download", async (req, res) => {
+    try {
+      const { layoutId } = req.params;
+      const layout = await getLayoutContent(layoutId);
+      
+      if (!layout) {
+        return res.status(404).json({ message: "Layout no encontrado" });
+      }
+      
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${layout.nombreArchivo}"`);
+      res.send(layout.contenido);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/layouts/:layoutId", async (req, res) => {
+    try {
+      const { layoutId } = req.params;
+      const layout = await storage.getLayoutGenerado(layoutId);
+      
+      if (!layout) {
+        return res.status(404).json({ message: "Layout no encontrado" });
+      }
+      
+      res.json(layout);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/layouts/:layoutId", async (req, res) => {
+    try {
+      const { layoutId } = req.params;
+      await storage.deleteLayoutGenerado(layoutId);
+      res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
