@@ -176,6 +176,11 @@ const configuracionSubItems = [
     url: "/configuration/medios-pago",
     icon: Wallet,
   },
+  {
+    title: "Plantillas de Nómina",
+    url: "/configuration/plantillas-nomina",
+    icon: FileText,
+  },
 ];
 
 const mainMenuItems = [

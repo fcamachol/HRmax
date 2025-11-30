@@ -47,6 +47,11 @@ import {
   type ConceptoMedioPago,
   type InsertConceptoMedioPago,
   type ConceptoMedioPagoWithRelations,
+  type PlantillaNomina,
+  type InsertPlantillaNomina,
+  type PlantillaConcepto,
+  type InsertPlantillaConcepto,
+  type PlantillaNominaWithConceptos,
   type PayrollPeriod,
   type InsertPayrollPeriod,
   type ClienteREPSE,
@@ -150,6 +155,8 @@ import {
   mediosPago,
   conceptosMedioPago,
   conceptosMediosPagoRel,
+  plantillasNomina,
+  plantillaConceptos,
   payrollPeriods,
   clientesREPSE,
   registrosREPSE,
@@ -359,6 +366,20 @@ export interface IStorage {
   getConceptosMedioPago(): Promise<ConceptoMedioPagoWithRelations[]>;
   updateConceptoMedioPago(id: string, updates: Partial<InsertConceptoMedioPago>): Promise<ConceptoMedioPagoWithRelations>;
   deleteConceptoMedioPago(id: string): Promise<void>;
+  
+  // Plantillas de Nómina
+  createPlantillaNomina(plantilla: InsertPlantillaNomina): Promise<PlantillaNomina>;
+  getPlantillaNomina(id: string): Promise<PlantillaNominaWithConceptos | undefined>;
+  getPlantillasNomina(): Promise<PlantillaNomina[]>;
+  getPlantillasNominaByEmpresa(clienteId: string, empresaId: string): Promise<PlantillaNomina[]>;
+  updatePlantillaNomina(id: string, updates: Partial<InsertPlantillaNomina>): Promise<PlantillaNomina>;
+  deletePlantillaNomina(id: string): Promise<void>;
+  
+  // Plantilla Conceptos
+  addConceptoToPlantilla(data: InsertPlantillaConcepto): Promise<PlantillaConcepto>;
+  updatePlantillaConcepto(id: string, updates: Partial<InsertPlantillaConcepto>): Promise<PlantillaConcepto>;
+  removeConceptoFromPlantilla(id: string): Promise<void>;
+  getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoMedioPago })[]>;
   
   // Payroll Periods
   createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
@@ -1988,6 +2009,108 @@ export class DatabaseStorage implements IStorage {
       .delete(conceptosMedioPago)
       .where(eq(conceptosMedioPago.id, id));
     // Las relaciones se eliminan en cascada
+  }
+
+  // Plantillas de Nómina
+  async createPlantillaNomina(plantilla: InsertPlantillaNomina): Promise<PlantillaNomina> {
+    const [newPlantilla] = await db
+      .insert(plantillasNomina)
+      .values(plantilla)
+      .returning();
+    return newPlantilla!;
+  }
+
+  async getPlantillaNomina(id: string): Promise<PlantillaNominaWithConceptos | undefined> {
+    const plantilla = await db
+      .select()
+      .from(plantillasNomina)
+      .where(eq(plantillasNomina.id, id))
+      .limit(1);
+    
+    if (!plantilla[0]) return undefined;
+    
+    const conceptos = await this.getConceptosByPlantilla(id);
+    
+    return {
+      ...plantilla[0],
+      conceptos,
+    };
+  }
+
+  async getPlantillasNomina(): Promise<PlantillaNomina[]> {
+    return await db
+      .select()
+      .from(plantillasNomina)
+      .orderBy(plantillasNomina.nombre);
+  }
+
+  async getPlantillasNominaByEmpresa(clienteId: string, empresaId: string): Promise<PlantillaNomina[]> {
+    return await db
+      .select()
+      .from(plantillasNomina)
+      .where(
+        and(
+          eq(plantillasNomina.clienteId, clienteId),
+          eq(plantillasNomina.empresaId, empresaId)
+        )
+      )
+      .orderBy(plantillasNomina.nombre);
+  }
+
+  async updatePlantillaNomina(id: string, updates: Partial<InsertPlantillaNomina>): Promise<PlantillaNomina> {
+    const [updated] = await db
+      .update(plantillasNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(plantillasNomina.id, id))
+      .returning();
+    return updated!;
+  }
+
+  async deletePlantillaNomina(id: string): Promise<void> {
+    await db
+      .delete(plantillasNomina)
+      .where(eq(plantillasNomina.id, id));
+  }
+
+  // Plantilla Conceptos
+  async addConceptoToPlantilla(data: InsertPlantillaConcepto): Promise<PlantillaConcepto> {
+    const [newConcepto] = await db
+      .insert(plantillaConceptos)
+      .values(data)
+      .returning();
+    return newConcepto!;
+  }
+
+  async updatePlantillaConcepto(id: string, updates: Partial<InsertPlantillaConcepto>): Promise<PlantillaConcepto> {
+    const [updated] = await db
+      .update(plantillaConceptos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(plantillaConceptos.id, id))
+      .returning();
+    return updated!;
+  }
+
+  async removeConceptoFromPlantilla(id: string): Promise<void> {
+    await db
+      .delete(plantillaConceptos)
+      .where(eq(plantillaConceptos.id, id));
+  }
+
+  async getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoMedioPago })[]> {
+    const results = await db
+      .select({
+        plantillaConcepto: plantillaConceptos,
+        concepto: conceptosMedioPago,
+      })
+      .from(plantillaConceptos)
+      .innerJoin(conceptosMedioPago, eq(plantillaConceptos.conceptoId, conceptosMedioPago.id))
+      .where(eq(plantillaConceptos.plantillaId, plantillaId))
+      .orderBy(plantillaConceptos.orden);
+    
+    return results.map((r) => ({
+      ...r.plantillaConcepto,
+      concepto: r.concepto,
+    }));
   }
 
   // Payroll Periods

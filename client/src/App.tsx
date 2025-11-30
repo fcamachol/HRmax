@@ -35,6 +35,7 @@ import Permisos from "@/pages/permisos/Permisos";
 import ActasAdministrativas from "@/pages/actas-administrativas/ActasAdministrativas";
 import MediosPago from "@/pages/configuracion/MediosPago";
 import Prestaciones from "@/pages/configuracion/Prestaciones";
+import PlantillasNomina from "@/pages/configuracion/PlantillasNomina";
 import RelojChecador from "@/components/RelojChecador";
 import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import SuperAdminLayout from "@/pages/super-admin/Layout";
@@ -67,6 +68,7 @@ function Router() {
       <Route path="/actas-administrativas" component={ActasAdministrativas} />
       <Route path="/configuration/medios-pago" component={MediosPago} />
       <Route path="/configuration/prestaciones" component={Prestaciones} />
+      <Route path="/configuration/plantillas-nomina" component={PlantillasNomina} />
       <Route path="/reports" component={Reports} />
       <Route path="/legal" component={Legal} />
       <Route path="/repse" component={REPSE} />

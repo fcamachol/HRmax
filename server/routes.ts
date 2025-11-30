@@ -67,6 +67,10 @@ import {
   updateMedioPagoSchema,
   insertConceptoMedioPagoSchema,
   updateConceptoMedioPagoSchema,
+  insertPlantillaNominaSchema,
+  updatePlantillaNominaSchema,
+  insertPlantillaConceptoSchema,
+  updatePlantillaConceptoSchema,
   insertClienteSchema,
   updateClienteSchema,
   insertModuloSchema,
@@ -1400,6 +1404,105 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/conceptos-medio-pago/:id", async (req, res) => {
     try {
       await storage.deleteConceptoMedioPago(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Plantillas de Nómina
+  app.post("/api/plantillas-nomina", async (req, res) => {
+    try {
+      const validatedData = insertPlantillaNominaSchema.parse(req.body);
+      const plantilla = await storage.createPlantillaNomina(validatedData);
+      res.json(plantilla);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/plantillas-nomina", async (req, res) => {
+    try {
+      const { clienteId, empresaId } = req.query;
+      if (clienteId && empresaId) {
+        const plantillas = await storage.getPlantillasNominaByEmpresa(
+          clienteId as string,
+          empresaId as string
+        );
+        res.json(plantillas);
+      } else {
+        const plantillas = await storage.getPlantillasNomina();
+        res.json(plantillas);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/plantillas-nomina/:id", async (req, res) => {
+    try {
+      const plantilla = await storage.getPlantillaNomina(req.params.id);
+      if (!plantilla) {
+        return res.status(404).json({ message: "Plantilla no encontrada" });
+      }
+      res.json(plantilla);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/plantillas-nomina/:id", async (req, res) => {
+    try {
+      const partialData = updatePlantillaNominaSchema.parse(req.body);
+      const plantilla = await storage.updatePlantillaNomina(req.params.id, partialData);
+      res.json(plantilla);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantillas-nomina/:id", async (req, res) => {
+    try {
+      await storage.deletePlantillaNomina(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Plantilla Conceptos
+  app.post("/api/plantilla-conceptos", async (req, res) => {
+    try {
+      const validatedData = insertPlantillaConceptoSchema.parse(req.body);
+      const concepto = await storage.addConceptoToPlantilla(validatedData);
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/plantilla-conceptos/:plantillaId", async (req, res) => {
+    try {
+      const conceptos = await storage.getConceptosByPlantilla(req.params.plantillaId);
+      res.json(conceptos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/plantilla-conceptos/:id", async (req, res) => {
+    try {
+      const partialData = updatePlantillaConceptoSchema.parse(req.body);
+      const concepto = await storage.updatePlantillaConcepto(req.params.id, partialData);
+      res.json(concepto);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantilla-conceptos/:id", async (req, res) => {
+    try {
+      await storage.removeConceptoFromPlantilla(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
