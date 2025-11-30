@@ -1790,6 +1790,136 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // NÓMINAS - CRUD Operations
+  // ============================================================================
+
+  app.get("/api/nominas", async (req, res) => {
+    try {
+      const { status, periodo, empresaId } = req.query;
+      
+      if (status) {
+        const nominas = await storage.getNominasByStatus(status as string);
+        return res.json(nominas);
+      }
+      if (periodo) {
+        const nominas = await storage.getNominasByPeriodo(periodo as string);
+        return res.json(nominas);
+      }
+      
+      const nominas = await storage.getNominas();
+      res.json(nominas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/nominas/:id", async (req, res) => {
+    try {
+      const nomina = await storage.getNomina(req.params.id);
+      if (!nomina) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      res.json(nomina);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/nominas", async (req, res) => {
+    try {
+      const nomina = await storage.createNomina(req.body);
+      res.json(nomina);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/nominas/:id", async (req, res) => {
+    try {
+      const nomina = await storage.updateNomina(req.params.id, req.body);
+      res.json(nomina);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/nominas/:id", async (req, res) => {
+    try {
+      await storage.deleteNomina(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/nominas/:id/aprobar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { aprobadoPor } = req.body;
+      
+      const nomina = await storage.updateNominaStatus(id, "approved", aprobadoPor);
+      
+      let layouts: any[] = [];
+      try {
+        layouts = await generarLayoutsBancarios(id, aprobadoPor);
+      } catch (layoutError: any) {
+        console.warn(`[NOMINA APROBADA] No se pudieron generar layouts: ${layoutError.message}`);
+      }
+      
+      res.json({
+        success: true,
+        message: "Nómina aprobada exitosamente",
+        nomina,
+        layouts: layouts.map(l => ({
+          id: l.id,
+          nombreArchivo: l.nombreArchivo,
+          medioPagoId: l.medioPagoId,
+          totalRegistros: l.totalRegistros,
+          totalMonto: l.totalMonto,
+        }))
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/nominas/:id/status", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, aprobadoPor } = req.body;
+      
+      if (!status) {
+        return res.status(400).json({ message: "El status es requerido" });
+      }
+      
+      const nomina = await storage.updateNominaStatus(id, status, aprobadoPor);
+      
+      if (status === "approved") {
+        try {
+          const layouts = await generarLayoutsBancarios(id, aprobadoPor);
+          return res.json({
+            success: true,
+            nomina,
+            layouts: layouts.map(l => ({
+              id: l.id,
+              nombreArchivo: l.nombreArchivo,
+              medioPagoId: l.medioPagoId,
+              totalRegistros: l.totalRegistros,
+              totalMonto: l.totalMonto,
+            }))
+          });
+        } catch (layoutError: any) {
+          console.warn(`[NOMINA STATUS] No se pudieron generar layouts: ${layoutError.message}`);
+        }
+      }
+      
+      res.json({ success: true, nomina });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
   // LAYOUTS BANCARIOS - Generación y descarga de layouts para dispersión
   // ============================================================================
 
