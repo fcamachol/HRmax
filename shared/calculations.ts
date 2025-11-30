@@ -1,6 +1,8 @@
 // Motor de cálculos de nómina para México
 // Usa las tablas de configuración para calcular ISR, IMSS, y conceptos de previsión social
 
+import { Parser } from 'expr-eval';
+
 export type Periodicidad = 'diaria' | 'semanal' | 'decenal' | 'quincenal' | 'mensual';
 
 export interface ISRTramo {
@@ -319,15 +321,83 @@ export function calcularIMSSTrabajador(
 }
 
 /**
- * Evalúa una fórmula dinámica para un concepto
+ * Lista de variables permitidas en las fórmulas de nómina
+ * Cualquier variable no listada aquí será rechazada
+ */
+const ALLOWED_FORMULA_VARIABLES = new Set([
+  'SALARIO_BASE', 'SALARIO_DIARIO', 'SALARIO_PERIODO', 'SALARIO_HORA',
+  'SBC', 'SDI', 'DIAS_TRABAJADOS', 'DIAS_PERIODO', 'DIAS_AGUINALDO',
+  'UMA_DIARIA', 'UMA_MENSUAL', 'UMA_ANUAL',
+  'SALARIO_MINIMO', 'SMG_DIARIO', 'SMG_MENSUAL',
+  'HORAS_EXTRA_DOBLES', 'HORAS_EXTRA_TRIPLES',
+  'DIAS_VACACIONES', 'ANTIGUEDAD_ANOS', 'DIAS_FESTIVOS_TRABAJADOS',
+  'MONTO_VALES', 'MONTO_FONDO_AHORRO', 'PORCENTAJE_PTU',
+  'CUOTA_IMSS', 'ISR_RETENIDO', 'SUBSIDIO_EMPLEO',
+  'DESCUENTO_INFONAVIT', 'DESCUENTO_FONACOT',
+  'salario_base', 'salario_diario', 'sbc', 'dias_trabajados',
+  'uma_diaria', 'uma_mensual', 'uma_anual', 'salario_minimo'
+]);
+
+/**
+ * Funciones matemáticas permitidas en fórmulas
+ */
+const ALLOWED_FUNCTIONS = ['min', 'max', 'abs', 'round', 'ceil', 'floor'];
+
+/**
+ * Valida que una fórmula solo contenga caracteres, funciones y variables permitidos
+ * @returns true si la fórmula es segura, false si contiene elementos no permitidos
+ */
+function validarFormula(formula: string, variables: Record<string, number>): { valid: boolean; error?: string } {
+  const normalizada = formula
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/\bMIN\b/gi, 'min')
+    .replace(/\bMAX\b/gi, 'max')
+    .replace(/\bABS\b/gi, 'abs')
+    .replace(/\bROUND\b/gi, 'round')
+    .replace(/\bCEIL\b/gi, 'ceil')
+    .replace(/\bFLOOR\b/gi, 'floor');
+  
+  const variablesEnFormula = normalizada.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
+  
+  for (const varName of variablesEnFormula) {
+    const isAllowedFunction = ALLOWED_FUNCTIONS.includes(varName.toLowerCase());
+    const isAllowedVariable = ALLOWED_FORMULA_VARIABLES.has(varName) || variables[varName] !== undefined;
+    
+    if (!isAllowedFunction && !isAllowedVariable) {
+      return { valid: false, error: `Variable o función no permitida: ${varName}` };
+    }
+  }
+  
+  const patronPermitido = /^[\d\s+\-*/().,%a-zA-Z_]+$/;
+  if (!patronPermitido.test(normalizada)) {
+    return { valid: false, error: 'Caracteres no permitidos en la fórmula' };
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Evalúa una fórmula dinámica para un concepto usando parser seguro
+ * Usa expr-eval para evitar vulnerabilidades de ejecución de código arbitrario
+ * Solo permite operaciones matemáticas básicas y variables de nómina definidas
  */
 export function evaluarFormula(
   formula: string,
   empleado: EmpleadoNomina,
   config: ConfiguracionNomina = configuracionDefault
 ): number {
-  // Variables disponibles
   const variables: Record<string, number> = {
+    SALARIO_BASE: empleado.salarioBase,
+    SALARIO_DIARIO: empleado.salarioDiario,
+    SBC: empleado.sbc,
+    DIAS_TRABAJADOS: empleado.diasTrabajados,
+    UMA_DIARIA: config.uma.diaria,
+    UMA_MENSUAL: config.uma.mensual,
+    UMA_ANUAL: config.uma.anual,
+    SALARIO_MINIMO: empleado.zona === 'frontera' 
+      ? config.salarioMinimo.zonaFrontera 
+      : config.salarioMinimo.zonaGeneral,
     salario_base: empleado.salarioBase,
     salario_diario: empleado.salarioDiario,
     sbc: empleado.sbc,
@@ -340,19 +410,33 @@ export function evaluarFormula(
       : config.salarioMinimo.zonaGeneral,
   };
 
-  // Reemplazar variables en la fórmula
-  let formulaEvaluable = formula;
-  Object.keys(variables).forEach((key) => {
-    const regex = new RegExp(key, 'g');
-    formulaEvaluable = formulaEvaluable.replace(regex, variables[key].toString());
-  });
+  const validacion = validarFormula(formula, variables);
+  if (!validacion.valid) {
+    console.error('Fórmula rechazada por seguridad:', formula, validacion.error);
+    return 0;
+  }
 
-  // Reemplazar operadores matemáticos con símbolos estándar
-  formulaEvaluable = formulaEvaluable.replace(/×/g, '*').replace(/÷/g, '/');
+  let formulaNormalizada = formula
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/\bMIN\b/gi, 'min')
+    .replace(/\bMAX\b/gi, 'max')
+    .replace(/\bABS\b/gi, 'abs')
+    .replace(/\bROUND\b/gi, 'round')
+    .replace(/\bCEIL\b/gi, 'ceil')
+    .replace(/\bFLOOR\b/gi, 'floor');
 
   try {
-    // Evaluar la fórmula de forma segura (solo operaciones matemáticas básicas)
-    const resultado = new Function(`return ${formulaEvaluable}`)();
+    const parser = new Parser();
+    
+    const expr = parser.parse(formulaNormalizada);
+    const resultado = expr.evaluate(variables);
+    
+    if (typeof resultado !== 'number' || isNaN(resultado) || !isFinite(resultado)) {
+      console.error('Resultado de fórmula inválido:', formula, resultado);
+      return 0;
+    }
+    
     return Math.round(resultado * 100) / 100;
   } catch (error) {
     console.error('Error evaluando fórmula:', formula, error);
