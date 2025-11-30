@@ -125,10 +125,7 @@ export default function PlantillasNomina() {
 
   const createPlantillaMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      return await apiRequest("/api/plantillas-nomina", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("POST", "/api/plantillas-nomina", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/plantillas-nomina"] });
@@ -150,10 +147,7 @@ export default function PlantillasNomina() {
 
   const updatePlantillaMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<typeof formData> }) => {
-      return await apiRequest(`/api/plantillas-nomina/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("PATCH", `/api/plantillas-nomina/${id}`, data);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/plantillas-nomina"] });
@@ -177,9 +171,7 @@ export default function PlantillasNomina() {
 
   const deletePlantillaMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest(`/api/plantillas-nomina/${id}`, {
-        method: "DELETE",
-      });
+      return await apiRequest("DELETE", `/api/plantillas-nomina/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/plantillas-nomina"] });
@@ -202,10 +194,7 @@ export default function PlantillasNomina() {
 
   const addConceptoMutation = useMutation({
     mutationFn: async (data: any) => {
-      return await apiRequest("/api/plantilla-conceptos", {
-        method: "POST",
-        body: JSON.stringify(data),
-      });
+      return await apiRequest("POST", "/api/plantilla-conceptos", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/plantillas-nomina", selectedPlantillaId] });
@@ -227,9 +216,7 @@ export default function PlantillasNomina() {
 
   const removeConceptoMutation = useMutation({
     mutationFn: async (id: string) => {
-      return await apiRequest(`/api/plantilla-conceptos/${id}`, {
-        method: "DELETE",
-      });
+      return await apiRequest("DELETE", `/api/plantilla-conceptos/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/plantillas-nomina", selectedPlantillaId] });
