@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
+import { VARIABLES_FORMULA } from "./seeds/conceptosLegales";
 import { 
   insertConfigurationChangeLogSchema, 
   insertLegalCaseSchema,
@@ -1412,7 +1413,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Variables disponibles para fórmulas
   app.get("/api/formula-variables", (_req, res) => {
-    const { VARIABLES_FORMULA } = require("./seeds/conceptosLegales");
     res.json(VARIABLES_FORMULA);
   });
 
