@@ -3,8 +3,7 @@ import type {
   NominaEmpleadoData,
   LayoutGenerado,
   InsertLayoutGenerado,
-  MedioPago,
-  ConceptoMedioPagoWithRelations
+  MedioPago
 } from "@shared/schema";
 import { format } from "date-fns";
 
@@ -19,32 +18,6 @@ interface EmpleadoLayoutData {
     concepto: string;
     monto: number;
   }>;
-}
-
-interface ConceptoMedioPagoLink {
-  conceptoId: string;
-  medioPagoId: string;
-}
-
-export async function getConceptosMedioPagoLinks(
-  empresaId: string
-): Promise<ConceptoMedioPagoLink[]> {
-  const allConceptos = await storage.getConceptosMedioPago();
-  const conceptos = allConceptos.filter((c: ConceptoMedioPagoWithRelations) => c.empresaId === empresaId);
-  const links: ConceptoMedioPagoLink[] = [];
-  
-  for (const concepto of conceptos) {
-    if (concepto.mediosPago && concepto.mediosPago.length > 0) {
-      for (const mp of concepto.mediosPago) {
-        links.push({
-          conceptoId: concepto.id,
-          medioPagoId: mp.id,
-        });
-      }
-    }
-  }
-  
-  return links;
 }
 
 export async function generarLayoutsBancarios(
@@ -67,13 +40,6 @@ export async function generarLayoutsBancarios(
 
   await storage.deleteLayoutsGeneradosByNomina(nominaId);
 
-  const conceptosLinks = await getConceptosMedioPagoLinks(nomina.empresaId);
-  
-  const conceptoToMedioPago = new Map<string, string>();
-  for (const link of conceptosLinks) {
-    conceptoToMedioPago.set(link.conceptoId, link.medioPagoId);
-  }
-
   const allMediosPago = await storage.getMediosPago();
   const mediosPago = allMediosPago.filter((mp: MedioPago) => mp.empresaId === nomina.empresaId);
   const mediosPagoMap = new Map<string, MedioPago>();
@@ -86,66 +52,49 @@ export async function generarLayoutsBancarios(
     defaultMedioPagoId = mediosPago[0].id;
   }
 
+  if (!defaultMedioPagoId) {
+    throw new Error("No hay medios de pago configurados para esta empresa");
+  }
+
   const layoutsByMedioPago = new Map<string, EmpleadoLayoutData[]>();
 
   for (const empleado of empleadosData) {
-    const conceptosPorMedioPago = new Map<string, Array<{ conceptoId?: string; concepto: string; monto: number }>>();
-
-    const todosConceptos = [
-      ...(empleado.percepciones || []),
-      ...(empleado.deducciones || []).map(d => ({ ...d, monto: -d.monto }))
-    ];
-
-    for (const concepto of todosConceptos) {
-      let medioPagoId = conceptoToMedioPago.get(concepto.conceptoId);
-      
-      if (!medioPagoId && defaultMedioPagoId) {
-        medioPagoId = defaultMedioPagoId;
-      }
-      
-      if (medioPagoId) {
-        if (!conceptosPorMedioPago.has(medioPagoId)) {
-          conceptosPorMedioPago.set(medioPagoId, []);
-        }
-        conceptosPorMedioPago.get(medioPagoId)!.push({
-          conceptoId: concepto.conceptoId,
-          concepto: concepto.concepto,
-          monto: concepto.monto,
-        });
-      }
-    }
-
-    if (conceptosPorMedioPago.size === 0 && defaultMedioPagoId) {
+    const medioPagoId = empleado.medioPagoId || defaultMedioPagoId;
+    
+    if (!mediosPagoMap.has(medioPagoId)) {
+      console.warn(`[LAYOUT] Medio de pago ${medioPagoId} no encontrado para empleado ${empleado.numeroEmpleado}, usando default`);
       if (!layoutsByMedioPago.has(defaultMedioPagoId)) {
         layoutsByMedioPago.set(defaultMedioPagoId, []);
       }
-      layoutsByMedioPago.get(defaultMedioPagoId)!.push({
-        empleadoId: empleado.empleadoId,
-        numeroEmpleado: empleado.numeroEmpleado,
-        nombreCompleto: `${empleado.apellidoPaterno} ${empleado.apellidoMaterno || ""} ${empleado.nombre}`.trim(),
-        cuentaBancaria: empleado.cuentaBancaria,
-        monto: empleado.netoAPagar,
-        conceptos: [],
-      });
     } else {
-      const entries = Array.from(conceptosPorMedioPago.entries());
-      for (const [medioPagoId, conceptos] of entries) {
-        if (!layoutsByMedioPago.has(medioPagoId)) {
-          layoutsByMedioPago.set(medioPagoId, []);
-        }
-        
-        const montoTotal = conceptos.reduce((sum: number, c: { monto: number }) => sum + c.monto, 0);
-        
-        layoutsByMedioPago.get(medioPagoId)!.push({
-          empleadoId: empleado.empleadoId,
-          numeroEmpleado: empleado.numeroEmpleado,
-          nombreCompleto: `${empleado.apellidoPaterno} ${empleado.apellidoMaterno || ""} ${empleado.nombre}`.trim(),
-          cuentaBancaria: empleado.cuentaBancaria,
-          monto: montoTotal,
-          conceptos,
-        });
+      if (!layoutsByMedioPago.has(medioPagoId)) {
+        layoutsByMedioPago.set(medioPagoId, []);
       }
     }
+
+    const targetMedioPagoId = mediosPagoMap.has(medioPagoId) ? medioPagoId : defaultMedioPagoId;
+    
+    const allConceptos = [
+      ...(empleado.percepciones || []).map(p => ({
+        conceptoId: p.conceptoId,
+        concepto: p.concepto,
+        monto: p.monto,
+      })),
+      ...(empleado.deducciones || []).map(d => ({
+        conceptoId: d.conceptoId,
+        concepto: d.concepto,
+        monto: -d.monto,
+      }))
+    ];
+
+    layoutsByMedioPago.get(targetMedioPagoId)!.push({
+      empleadoId: empleado.empleadoId,
+      numeroEmpleado: empleado.numeroEmpleado,
+      nombreCompleto: `${empleado.apellidoPaterno} ${empleado.apellidoMaterno || ""} ${empleado.nombre}`.trim(),
+      cuentaBancaria: empleado.cuentaBancaria,
+      monto: empleado.netoAPagar,
+      conceptos: allConceptos,
+    });
   }
 
   const layoutsGenerados: LayoutGenerado[] = [];

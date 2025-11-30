@@ -2836,6 +2836,7 @@ export const nominaEmpleadoDataSchema = z.object({
   apellidoPaterno: z.string().min(1),
   apellidoMaterno: z.string().nullable().optional(),
   cuentaBancaria: z.string().optional(), // Opcional: puede no tener cuenta bancaria configurada
+  medioPagoId: z.string().optional(), // ID del medio de pago asignado al empleado para dispersión
   diasTrabajados: z.number().int().nonnegative().optional(), // Opcional: aguinaldo/prima vacacional no dependen de días
   salarioBase: z.number().nonnegative().optional(), // Opcional: algunos conceptos son fijos
   percepciones: z.array(nominaConceptoSchema).default([]),
