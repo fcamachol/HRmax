@@ -46,6 +46,8 @@ import {
   AlertCircle,
   Check,
   X,
+  Star,
+  StarOff,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -121,6 +123,36 @@ export default function PlantillasNomina() {
   const { data: selectedPlantillaData } = useQuery<PlantillaNominaWithConceptos>({
     queryKey: ["/api/plantillas-nomina", selectedPlantillaId],
     enabled: !!selectedPlantillaId,
+  });
+
+  // Query to get the current empresa's default plantilla
+  const { data: empresaData } = useQuery<Empresa>({
+    queryKey: ["/api/empresas", formData.empresaId],
+    enabled: !!formData.empresaId,
+  });
+
+  const defaultPlantillaId = empresaData?.defaultPlantillaNominaId;
+
+  // Mutation to set default plantilla
+  const setDefaultPlantillaMutation = useMutation({
+    mutationFn: async ({ empresaId, plantillaId }: { empresaId: string; plantillaId: string | null }) => {
+      return await apiRequest("PUT", `/api/empresas/${empresaId}/plantilla-default`, { plantillaId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/empresas"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/empresas", formData.empresaId] });
+      toast({
+        title: "Plantilla predeterminada actualizada",
+        description: "La plantilla se ha establecido como predeterminada para esta empresa.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo establecer la plantilla predeterminada",
+        variant: "destructive",
+      });
+    },
   });
 
   const createPlantillaMutation = useMutation({
@@ -370,34 +402,62 @@ export default function PlantillasNomina() {
                 <p className="text-sm">Crea tu primera plantilla para comenzar</p>
               </div>
             ) : (
-              plantillas.map((plantilla) => (
-                <div
-                  key={plantilla.id}
-                  className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedPlantillaId === plantilla.id
-                      ? "border-primary bg-primary/5"
-                      : "hover:bg-muted/50"
-                  }`}
-                  onClick={() => setSelectedPlantillaId(plantilla.id)}
-                  data-testid={`card-plantilla-${plantilla.id}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium">{plantilla.nombre}</div>
-                      {plantilla.descripcion && (
-                        <div className="text-sm text-muted-foreground line-clamp-1">
-                          {plantilla.descripcion}
+              plantillas.map((plantilla) => {
+                const isDefault = defaultPlantillaId === plantilla.id;
+                return (
+                  <div
+                    key={plantilla.id}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedPlantillaId === plantilla.id
+                        ? "border-primary bg-primary/5"
+                        : "hover:bg-muted/50"
+                    } ${isDefault ? "ring-2 ring-yellow-500/50" : ""}`}
+                    onClick={() => setSelectedPlantillaId(plantilla.id)}
+                    data-testid={`card-plantilla-${plantilla.id}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{plantilla.nombre}</span>
+                          {isDefault && (
+                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+                          )}
                         </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={plantilla.activo ? "default" : "secondary"}>
-                        {plantilla.activo ? "Activa" : "Inactiva"}
-                      </Badge>
+                        {plantilla.descripcion && (
+                          <div className="text-sm text-muted-foreground line-clamp-1">
+                            {plantilla.descripcion}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDefaultPlantillaMutation.mutate({
+                              empresaId: plantilla.empresaId,
+                              plantillaId: isDefault ? null : plantilla.id,
+                            });
+                          }}
+                          title={isDefault ? "Quitar como predeterminada" : "Establecer como predeterminada"}
+                          data-testid={`button-set-default-${plantilla.id}`}
+                        >
+                          {isDefault ? (
+                            <StarOff className="h-4 w-4 text-yellow-500" />
+                          ) : (
+                            <Star className="h-4 w-4 text-muted-foreground hover:text-yellow-500" />
+                          )}
+                        </Button>
+                        <Badge variant={plantilla.activo ? "default" : "secondary"}>
+                          {plantilla.activo ? "Activa" : "Inactiva"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>

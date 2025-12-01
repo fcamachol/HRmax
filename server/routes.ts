@@ -737,6 +737,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Obtener plantilla default de una empresa con detalles
+  app.get("/api/empresas/:id/plantilla-default", async (req, res) => {
+    try {
+      const empresa = await storage.getEmpresa(req.params.id);
+      if (!empresa) {
+        return res.status(404).json({ message: "Empresa no encontrada" });
+      }
+      
+      if (!empresa.defaultPlantillaNominaId) {
+        return res.json({ plantilla: null, message: "No hay plantilla default configurada" });
+      }
+      
+      const plantilla = await storage.getPlantillaNomina(empresa.defaultPlantillaNominaId);
+      if (!plantilla) {
+        return res.json({ plantilla: null, message: "Plantilla default no encontrada" });
+      }
+      
+      res.json({ plantilla });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Establecer plantilla default de una empresa
+  app.put("/api/empresas/:id/plantilla-default", async (req, res) => {
+    try {
+      const { plantillaId } = req.body;
+      
+      const empresa = await storage.getEmpresa(req.params.id);
+      if (!empresa) {
+        return res.status(404).json({ message: "Empresa no encontrada" });
+      }
+      
+      // Validar que la plantilla existe y pertenece a la empresa
+      if (plantillaId) {
+        const plantilla = await storage.getPlantillaNomina(plantillaId);
+        if (!plantilla) {
+          return res.status(400).json({ message: "Plantilla no encontrada" });
+        }
+        if (plantilla.empresaId !== empresa.id) {
+          return res.status(400).json({ message: "La plantilla no pertenece a esta empresa" });
+        }
+      }
+      
+      const updated = await storage.updateEmpresa(req.params.id, {
+        defaultPlantillaNominaId: plantillaId || null
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   // Registros Patronales
   app.post("/api/registros-patronales", async (req, res) => {
     try {

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -63,7 +63,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { GrupoNomina, Employee, IncidenciaAsistencia } from "@shared/schema";
+import type { GrupoNomina, Employee, IncidenciaAsistencia, PlantillaNomina, Empresa } from "@shared/schema";
 import { CreateGrupoNominaDialog } from "@/components/CreateGrupoNominaDialog";
 import { IncidenciasAsistenciaGrid } from "@/components/IncidenciasAsistenciaGrid";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays } from "date-fns";
@@ -168,11 +168,48 @@ export default function Payroll() {
     queryKey: ["/api/employees"],
   });
 
+  // Fetch empresas for plantilla lookup
+  const { data: empresas = [], isLoading: isLoadingEmpresas } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas"],
+  });
+
+  // Get first empresa (for demo/single-tenant scenarios)
+  const currentEmpresaId = empresas.length > 0 ? empresas[0].id : null;
+  const currentEmpresa = empresas.find(e => e.id === currentEmpresaId);
+
+  // Fetch plantillas for the current empresa
+  const { data: plantillas = [], isLoading: isLoadingPlantillas } = useQuery<PlantillaNomina[]>({
+    queryKey: ["/api/plantillas-nomina", { clienteId: currentEmpresa?.clienteId, empresaId: currentEmpresaId }],
+    queryFn: async () => {
+      if (!currentEmpresa?.clienteId || !currentEmpresaId) return [];
+      const res = await fetch(`/api/plantillas-nomina?clienteId=${currentEmpresa.clienteId}&empresaId=${currentEmpresaId}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
+    enabled: !!currentEmpresaId && !!currentEmpresa?.clienteId,
+  });
+
+  // Determine if the plantilla selector should be shown (only when data is ready)
+  const showPlantillaSelector = !isLoadingEmpresas && !isLoadingPlantillas && plantillas.length > 0;
+
+  // Get the default plantilla ID from the empresa
+  const defaultPlantillaId = currentEmpresa?.defaultPlantillaNominaId || null;
+
   // Form state
   const [nominaType, setNominaType] = useState<"ordinaria" | "extraordinaria">("ordinaria");
   const [extraordinaryType, setExtraordinaryType] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("");
   const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
+  const [selectedPlantillaId, setSelectedPlantillaId] = useState<string | null>(null);
+
+  // Sync selectedPlantillaId with defaultPlantillaId when empresa changes or default updates
+  useEffect(() => {
+    // Only run when we have a valid empresa (query has resolved)
+    if (currentEmpresaId) {
+      // Set to the default (which may be null meaning "no template")
+      setSelectedPlantillaId(defaultPlantillaId);
+    }
+  }, [currentEmpresaId, defaultPlantillaId]);
 
   // Calculate period range using useMemo
   const queryPeriodRange = useMemo(() => {
@@ -1831,6 +1868,39 @@ export default function Payroll() {
         <CardContent className="min-h-96">
           {currentStep === 0 && (
             <div className="space-y-6">
+              {/* Plantilla Selector */}
+              {showPlantillaSelector && (
+                <div className="p-4 bg-muted/30 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="plantilla" className="text-sm font-medium">Plantilla de Nómina</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Usa una plantilla predefinida para cargar los conceptos automáticamente
+                      </p>
+                    </div>
+                    <Select 
+                      value={selectedPlantillaId || ""} 
+                      onValueChange={(v) => setSelectedPlantillaId(v || null)}
+                    >
+                      <SelectTrigger id="plantilla" className="w-64" data-testid="select-plantilla">
+                        <SelectValue placeholder="Selecciona plantilla" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Sin plantilla</SelectItem>
+                        {plantillas.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            <div className="flex items-center gap-2">
+                              {p.id === defaultPlantillaId && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                              {p.nombre}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-4 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="nomina-type">Tipo de Nómina</Label>
