@@ -1879,14 +1879,14 @@ export default function Payroll() {
                       </p>
                     </div>
                     <Select 
-                      value={selectedPlantillaId || ""} 
-                      onValueChange={(v) => setSelectedPlantillaId(v || null)}
+                      value={selectedPlantillaId || "none"} 
+                      onValueChange={(v) => setSelectedPlantillaId(v === "none" ? null : v)}
                     >
                       <SelectTrigger id="plantilla" className="w-64" data-testid="select-plantilla">
                         <SelectValue placeholder="Selecciona plantilla" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Sin plantilla</SelectItem>
+                        <SelectItem value="none">Sin plantilla</SelectItem>
                         {plantillas.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
                             <div className="flex items-center gap-2">
