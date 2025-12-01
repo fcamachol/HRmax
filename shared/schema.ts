@@ -1088,6 +1088,8 @@ export const empresas = pgTable("empresas", {
   fechaInicioOperaciones: date("fecha_inicio_operaciones"),
   logoUrl: text("logo_url"),
   notas: text("notas"),
+  // Plantilla de nómina favorita/default
+  defaultPlantillaNominaId: varchar("default_plantilla_nomina_id"), // FK a plantillas_nomina (validado en app layer por orden de declaración)
   estatus: varchar("estatus").default("activa"), // activa, suspendida, inactiva
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
