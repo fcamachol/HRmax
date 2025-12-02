@@ -1,0 +1,1084 @@
+-- ============================================================================
+-- SCHEMA ANALYSIS AND COMPLETION MIGRATION
+-- Current Schema: 75 tables (Drizzle)
+-- Version: 1.0
+-- ============================================================================
+
+-- ============================================================================
+-- PART 1: ANALYSIS - WHAT YOU ALREADY HAVE (EXCELLENT COVERAGE)
+-- ============================================================================
+
+/*
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         EXISTING SCHEMA ANALYSIS                            │
+│                              75 Tables Total                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+✅ COMPANY STRUCTURE (Complete)
+   - clientes           → Multi-tenant parent
+   - empresas           → Companies (29 cols)
+   - centros_trabajo    → Work centers
+   - registros_patronales → IMSS employer registrations (23 cols)
+   - departamentos      → Departments
+   - puestos            → Job positions
+
+✅ EMPLOYEES (Excellent - 90 columns!)
+   - employees          → Comprehensive employee data
+                          ✓ Identity (CURP, RFC, NSS)
+                          ✓ Address
+                          ✓ Compensation (salario, SBC, SDI)
+                          ✓ Bank accounts
+                          ✓ Benefits (dias_vacaciones, aguinaldo)
+                          ✓ Status tracking
+                          
+✅ PAYROLL CONCEPTS (Good)
+   - conceptos_nomina   → Concept catalog with SAT codes (24 cols)
+   - plantilla_conceptos → Template concepts
+   - plantillas_nomina  → Payroll templates
+
+✅ PAYROLL PROCESSING (Good)
+   - periodos_nomina    → Payroll periods (25 cols)
+   - payroll_periods    → Alternative periods table
+   - nomina_movimientos → Individual payroll lines per employee (20 cols)
+   - nomina_resumen     → Employee totals per period (22 cols)
+   - grupos_nomina      → Payroll groups
+
+✅ PAYMENT (Good)
+   - medios_pago        → Payment methods
+   - conceptos_medio_pago → Concept-payment method mapping
+   - bancos_layouts     → Bank layout configurations
+   - layouts_generados  → Generated layout files (16 cols)
+
+✅ CREDITS & DEDUCTIONS (Good)
+   - creditos_legales       → INFONAVIT, FONACOT, Pension Alimenticia (27 cols)
+   - prestamos_internos     → Company loans (20 cols)
+   - pagos_creditos_descuentos → Credit payments (14 cols) ⚠️ NEEDS ENHANCEMENT
+
+✅ ATTENDANCE & INCIDENCIAS (Good)
+   - attendance             → Daily attendance
+   - incidencias_asistencia → Attendance incidents
+   - incidencias_nomina     → Payroll incidents (21 cols)
+   - horas_extras           → Overtime tracking
+   - incapacidades          → Disabilities (21 cols)
+
+✅ VACATIONS (Good)
+   - esquema_vacaciones     → Vacation schemes
+   - solicitudes_vacaciones → Vacation requests
+   - kardex_vacaciones      → Vacation ledger (15 cols) ✓ ALREADY HAS LEDGER PATTERN
+
+✅ BENEFITS (Good)
+   - esquema_beneficios     → Benefit schemes
+   - esquemas_prestaciones  → Benefit packages
+   - empleado_beneficios_extra → Employee extra benefits
+   - tipos_beneficio        → Benefit types
+
+✅ TAX TABLES (Good)
+   - cat_isr_tarifas        → ISR tables
+   - cat_subsidio_empleo    → Employment subsidy tables
+   - cat_imss_cuotas        → IMSS rates by ramo (13 cols)
+   - cat_imss_config        → IMSS configuration
+   - cat_tablas_prestaciones → Benefits tables
+
+✅ INFONAVIT (Partial)
+   - avisos_infonavit       → INFONAVIT notices (EMA/EBA imports)
+
+✅ HR MANAGEMENT (Good)
+   - actas_administrativas  → Administrative records (35 cols)
+   - solicitudes_permisos   → Permission requests
+   - turnos_centro_trabajo  → Work shifts
+   - modificaciones_personal → Personnel changes
+
+✅ LEGAL (Good)
+   - lawsuits               → Labor lawsuits
+   - legal_cases            → Legal cases
+   - settlements            → Finiquitos (basic - 14 cols) ⚠️ NEEDS EXPANSION
+
+✅ RECRUITMENT (Complete)
+   - vacantes               → Job openings
+   - candidatos             → Candidates
+   - proceso_seleccion      → Selection processes
+   - etapas_seleccion       → Selection stages
+   - historial_proceso_seleccion
+   - entrevistas            → Interviews
+   - evaluaciones           → Evaluations
+   - ofertas                → Job offers
+   - hiring_process
+
+✅ REPSE (Complete)
+   - clientes_repse
+   - registros_repse
+   - contratos_repse
+   - asignaciones_personal_repse
+   - avisos_repse
+
+✅ SYSTEM (Good)
+   - users
+   - usuarios_permisos
+   - modulos
+   - admin_audit_logs
+   - configuration_change_logs
+   - credenciales_sistemas
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MISSING COMPONENTS                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+❌ LEDGER_OBLIGATIONS (Generic reconciliation ledger)
+   - For cargo/abono/ajuste pattern with reconciliation
+   - Links external files to payroll deductions to payments
+
+❌ KARDEX_COMPENSATION (Salary history)
+   - Track every salary/SBC/SDI change with dates
+
+❌ SUA_BIMESTRAL + SUA_BIMESTRAL_DETALLE
+   - Full IMSS breakdown per employee per bimester
+   - 14 ramos with patron/obrero breakdown
+
+❌ CFDI_NOMINA
+   - CFDI tracking with UUID, key fields, storage reference
+
+❌ PAYMENT_BATCHES + PAYMENT_LINES
+   - Each payment method as separate line per employee
+   - Track transferencia, vales, sindicato, pension separately
+
+❌ IMSS_MOVIMIENTOS
+   - IDSE movements log (altas, bajas, modificaciones, reingresos)
+
+❌ LEDGER_AGUINALDO + LEDGER_PTU + LEDGER_PRIMA_ANTIGUEDAD
+   - Annual accruals tracking
+
+❌ FILE_REGISTRY
+   - Import/export file tracking with hash verification
+
+❌ SINDICATO_MEMBERSHIP + CAJA_AHORRO_PARTICIPATION
+   - Union and savings fund tracking with ledger
+
+❌ CAT_BANCOS + CAT_VALORES_UMA_SMG
+   - Bank catalog with SAT codes
+   - UMA/SMG values by year
+*/
+
+-- ============================================================================
+-- PART 2: MIGRATION - ADD MISSING TABLES
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 2.1 CUSTOM TYPES (if not exist)
+-- -----------------------------------------------------------------------------
+
+DO $$ BEGIN
+    CREATE TYPE ledger_entry_type AS ENUM ('cargo', 'abono', 'ajuste');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE ledger_source_type AS ENUM (
+        'archivo_externo',      -- FONACOT file, EMA, EBA
+        'calculo_nomina',       -- Payroll calculation
+        'pago_banco',           -- Bank payment
+        'pago_tercero',         -- Payment to third party
+        'ajuste_manual',        -- Manual adjustment
+        'cancelacion',          -- Cancellation
+        'devolucion'            -- Refund
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE kardex_operation_type AS ENUM ('alta', 'modificacion', 'correccion', 'baja');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE imss_movimiento_type AS ENUM ('alta', 'baja', 'modificacion_salario', 'reingreso', 'ausentismo');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE imss_causa_baja_type AS ENUM (
+        'termino_contrato', 'separacion_voluntaria', 'abandono_empleo', 
+        'defuncion', 'clausura', 'ausentismo', 'pension', 'otro'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    CREATE TYPE file_direction_type AS ENUM ('import', 'export');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- -----------------------------------------------------------------------------
+-- 2.2 CATALOG: BANCOS (SAT codes)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS cat_bancos (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    codigo_sat VARCHAR(3) UNIQUE NOT NULL,
+    nombre_corto VARCHAR(50) NOT NULL,
+    nombre_completo VARCHAR(200),
+    longitud_cuenta INTEGER,
+    longitud_clabe INTEGER DEFAULT 18,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Seed banks
+INSERT INTO cat_bancos (codigo_sat, nombre_corto, nombre_completo, longitud_cuenta) VALUES
+('002', 'BANAMEX', 'Banco Nacional de México, S.A.', 10),
+('012', 'BBVA', 'BBVA México, S.A.', 10),
+('014', 'SANTANDER', 'Banco Santander México, S.A.', 11),
+('021', 'HSBC', 'HSBC México, S.A.', 10),
+('030', 'BAJIO', 'Banco del Bajío, S.A.', 10),
+('036', 'INBURSA', 'Banco Inbursa, S.A.', 11),
+('044', 'SCOTIABANK', 'Scotiabank Inverlat, S.A.', 11),
+('058', 'BANREGIO', 'Banco Regional de Monterrey, S.A.', 11),
+('072', 'BANORTE', 'Banco Mercantil del Norte, S.A.', 10),
+('127', 'AZTECA', 'Banco Azteca, S.A.', 10),
+('128', 'AUTOFIN', 'Banco Autofin México, S.A.', 10),
+('137', 'BANCOPPEL', 'BanCoppel, S.A.', 10)
+ON CONFLICT (codigo_sat) DO NOTHING;
+
+-- -----------------------------------------------------------------------------
+-- 2.3 CATALOG: UMA/SMG VALUES
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS cat_valores_uma_smg (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    tipo VARCHAR(20) NOT NULL,  -- 'UMA', 'SMG', 'SMG_FRONTERA'
+    valor_diario NUMERIC(10,2) NOT NULL,
+    valor_mensual NUMERIC(12,2) NOT NULL,
+    valor_anual NUMERIC(14,2) NOT NULL,
+    vigencia_desde DATE NOT NULL,
+    vigencia_hasta DATE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Seed UMA/SMG values
+INSERT INTO cat_valores_uma_smg (tipo, valor_diario, valor_mensual, valor_anual, vigencia_desde, vigencia_hasta) VALUES
+('UMA', 108.57, 3301.82, 39621.84, '2024-02-01', '2025-01-31'),
+('UMA', 113.14, 3441.02, 41292.24, '2025-02-01', NULL),
+('SMG', 248.93, 7571.88, 90862.56, '2024-01-01', '2024-12-31'),
+('SMG', 278.80, 8479.95, 101759.40, '2025-01-01', NULL),
+('SMG_FRONTERA', 374.89, 11405.90, 136870.85, '2024-01-01', '2024-12-31'),
+('SMG_FRONTERA', 419.88, 12770.17, 153242.04, '2025-01-01', NULL)
+ON CONFLICT DO NOTHING;
+
+-- -----------------------------------------------------------------------------
+-- 2.4 KARDEX_COMPENSATION (Salary history)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS kardex_compensation (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    operation VARCHAR(20) NOT NULL DEFAULT 'modificacion',  -- alta, modificacion, correccion, baja
+    fecha_movimiento TIMESTAMP NOT NULL DEFAULT NOW(),
+    fecha_efectiva DATE NOT NULL,
+    
+    -- Previous values
+    salario_diario_anterior NUMERIC(12,2),
+    salario_diario_nominal_anterior NUMERIC(12,2),
+    sbc_anterior NUMERIC(12,2),
+    sdi_anterior NUMERIC(12,2),
+    
+    -- New values
+    salario_diario_nuevo NUMERIC(12,2),
+    salario_diario_nominal_nuevo NUMERIC(12,2),
+    sbc_nuevo NUMERIC(12,2),
+    sdi_nuevo NUMERIC(12,2),
+    
+    -- Context
+    motivo VARCHAR(200),
+    tipo_incremento VARCHAR(50),  -- anual, promocion, ajuste_mercado, minimo, etc.
+    porcentaje_incremento NUMERIC(6,2),
+    documento_soporte VARCHAR(500),
+    
+    -- IMSS linkage
+    imss_movimiento_id VARCHAR(36),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    created_by VARCHAR(36)
+);
+
+CREATE INDEX IF NOT EXISTS idx_kardex_compensation_empleado ON kardex_compensation(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_kardex_compensation_fecha ON kardex_compensation(fecha_efectiva);
+CREATE INDEX IF NOT EXISTS idx_kardex_compensation_cliente ON kardex_compensation(cliente_id, empresa_id);
+
+-- Trigger to auto-create kardex on employee salary changes
+CREATE OR REPLACE FUNCTION trg_employee_salary_kardex()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.salario_diario_real IS DISTINCT FROM NEW.salario_diario_real 
+           OR OLD.sbc IS DISTINCT FROM NEW.sbc 
+           OR OLD.sdi IS DISTINCT FROM NEW.sdi THEN
+            INSERT INTO kardex_compensation (
+                cliente_id, empresa_id, empleado_id, operation,
+                fecha_movimiento, fecha_efectiva,
+                salario_diario_anterior, sbc_anterior, sdi_anterior,
+                salario_diario_nuevo, sbc_nuevo, sdi_nuevo
+            ) VALUES (
+                NEW.cliente_id, NEW.empresa_id, NEW.id, 'modificacion',
+                NOW(), CURRENT_DATE,
+                OLD.salario_diario_real, OLD.sbc, OLD.sdi,
+                NEW.salario_diario_real, NEW.sbc, NEW.sdi
+            );
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_employees_salary_kardex ON employees;
+CREATE TRIGGER trg_employees_salary_kardex
+AFTER UPDATE ON employees
+FOR EACH ROW EXECUTE FUNCTION trg_employee_salary_kardex();
+
+-- -----------------------------------------------------------------------------
+-- 2.5 LEDGER_OBLIGATIONS (Generic reconciliation ledger)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ledger_obligations (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    -- Obligation reference
+    tipo_obligacion VARCHAR(50) NOT NULL,  -- fonacot, infonavit, pension_alimenticia, prestamo_empresa, sindicato, caja_ahorro
+    obligacion_id VARCHAR(36) NOT NULL,     -- FK to creditos_legales or prestamos_internos
+    
+    -- Entry details
+    entry_type VARCHAR(20) NOT NULL,        -- cargo, abono, ajuste
+    source_type VARCHAR(50) NOT NULL,       -- archivo_externo, calculo_nomina, pago_banco, pago_tercero, ajuste_manual
+    fecha_movimiento DATE NOT NULL,
+    periodo_nomina VARCHAR(20),             -- e.g., "2024-Q01"
+    periodo_nomina_id VARCHAR(36),          -- FK to periodos_nomina
+    
+    -- Amount (always positive, sign from entry_type)
+    monto NUMERIC(12,2) NOT NULL,
+    
+    -- Source references
+    source_reference_type VARCHAR(50),      -- payroll_concept, file_import, payment_batch
+    source_reference_id VARCHAR(36),
+    
+    -- External references
+    external_reference VARCHAR(100),        -- FONACOT folio, INFONAVIT número, etc.
+    
+    -- Reconciliation
+    reconciled BOOLEAN DEFAULT false,
+    reconciled_at TIMESTAMP,
+    reconciled_by VARCHAR(36),
+    reconciliation_notes TEXT,
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    created_by VARCHAR(36)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_empleado ON ledger_obligations(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_tipo ON ledger_obligations(tipo_obligacion);
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_obligacion ON ledger_obligations(obligacion_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_periodo ON ledger_obligations(periodo_nomina_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_reconciled ON ledger_obligations(reconciled) WHERE reconciled = false;
+CREATE INDEX IF NOT EXISTS idx_ledger_obligations_cliente ON ledger_obligations(cliente_id, empresa_id);
+
+-- -----------------------------------------------------------------------------
+-- 2.6 IMSS_MOVIMIENTOS (IDSE movements log)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS imss_movimientos (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    registro_patronal_id VARCHAR(36) NOT NULL REFERENCES registros_patronales(id),
+    
+    tipo_movimiento VARCHAR(30) NOT NULL,   -- alta, baja, modificacion_salario, reingreso, ausentismo
+    fecha_movimiento DATE NOT NULL,
+    
+    -- Data sent to IDSE
+    nss VARCHAR(11) NOT NULL,
+    curp VARCHAR(18),
+    nombre_completo VARCHAR(200),
+    sbc NUMERIC(12,2) NOT NULL,
+    
+    -- For bajas
+    causa_baja VARCHAR(50),
+    
+    -- IDSE response
+    idse_enviado BOOLEAN DEFAULT false,
+    idse_fecha_envio TIMESTAMP,
+    idse_folio VARCHAR(50),
+    idse_confirmacion TEXT,
+    idse_error TEXT,
+    
+    -- Link to kardex
+    kardex_compensation_id VARCHAR(36) REFERENCES kardex_compensation(id),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    created_by VARCHAR(36)
+);
+
+CREATE INDEX IF NOT EXISTS idx_imss_movimientos_empleado ON imss_movimientos(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_imss_movimientos_fecha ON imss_movimientos(fecha_movimiento);
+CREATE INDEX IF NOT EXISTS idx_imss_movimientos_tipo ON imss_movimientos(tipo_movimiento);
+CREATE INDEX IF NOT EXISTS idx_imss_movimientos_registro ON imss_movimientos(registro_patronal_id);
+CREATE INDEX IF NOT EXISTS idx_imss_movimientos_cliente ON imss_movimientos(cliente_id, empresa_id);
+
+-- -----------------------------------------------------------------------------
+-- 2.7 SUA_BIMESTRAL (Bimester totals)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sua_bimestral (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    registro_patronal_id VARCHAR(36) NOT NULL REFERENCES registros_patronales(id),
+    
+    ejercicio INTEGER NOT NULL,
+    bimestre INTEGER NOT NULL CHECK (bimestre BETWEEN 1 AND 6),
+    
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    
+    -- Totals
+    total_trabajadores INTEGER,
+    total_cuotas_obrero NUMERIC(14,2),
+    total_cuotas_patron NUMERIC(14,2),
+    total_rcv_patron NUMERIC(14,2),
+    total_infonavit_patron NUMERIC(14,2),
+    total_general NUMERIC(16,2),
+    
+    -- File info
+    archivo_sua VARCHAR(500),
+    archivo_hash VARCHAR(64),
+    
+    -- Status
+    estatus VARCHAR(20) DEFAULT 'calculado',  -- calculado, validado, pagado
+    fecha_pago DATE,
+    linea_captura VARCHAR(50),
+    comprobante_pago VARCHAR(500),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(registro_patronal_id, ejercicio, bimestre)
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.8 SUA_BIMESTRAL_DETALLE (Full breakdown per employee)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sua_bimestral_detalle (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    sua_bimestral_id VARCHAR(36) NOT NULL REFERENCES sua_bimestral(id),
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    -- Employee data at calculation time
+    nss VARCHAR(11) NOT NULL,
+    sbc NUMERIC(12,2) NOT NULL,
+    dias_cotizados INTEGER NOT NULL,
+    
+    -- Enfermedades y Maternidad
+    enf_mat_especie_patron NUMERIC(10,2),
+    enf_mat_especie_obrero NUMERIC(10,2),
+    enf_mat_dinero_patron NUMERIC(10,2),
+    enf_mat_dinero_obrero NUMERIC(10,2),
+    enf_mat_gastos_med_pensionados_patron NUMERIC(10,2),
+    
+    -- Invalidez y Vida
+    invalidez_vida_patron NUMERIC(10,2),
+    invalidez_vida_obrero NUMERIC(10,2),
+    
+    -- Riesgo de Trabajo
+    riesgo_trabajo_patron NUMERIC(10,2),
+    
+    -- Guarderias y Prestaciones Sociales
+    guarderias_ps_patron NUMERIC(10,2),
+    
+    -- Retiro (2%)
+    retiro_patron NUMERIC(10,2),
+    
+    -- Cesantía y Vejez
+    cesantia_vejez_patron NUMERIC(10,2),
+    cesantia_vejez_obrero NUMERIC(10,2),
+    
+    -- INFONAVIT (5%)
+    infonavit_patron NUMERIC(10,2),
+    
+    -- Calculated totals
+    total_obrero NUMERIC(12,2) GENERATED ALWAYS AS (
+        COALESCE(enf_mat_especie_obrero, 0) +
+        COALESCE(enf_mat_dinero_obrero, 0) +
+        COALESCE(invalidez_vida_obrero, 0) +
+        COALESCE(cesantia_vejez_obrero, 0)
+    ) STORED,
+    
+    total_patron NUMERIC(12,2) GENERATED ALWAYS AS (
+        COALESCE(enf_mat_especie_patron, 0) +
+        COALESCE(enf_mat_dinero_patron, 0) +
+        COALESCE(enf_mat_gastos_med_pensionados_patron, 0) +
+        COALESCE(invalidez_vida_patron, 0) +
+        COALESCE(riesgo_trabajo_patron, 0) +
+        COALESCE(guarderias_ps_patron, 0) +
+        COALESCE(retiro_patron, 0) +
+        COALESCE(cesantia_vejez_patron, 0) +
+        COALESCE(infonavit_patron, 0)
+    ) STORED,
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_sua_detalle_empleado ON sua_bimestral_detalle(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_sua_detalle_bimestral ON sua_bimestral_detalle(sua_bimestral_id);
+
+-- -----------------------------------------------------------------------------
+-- 2.9 CFDI_NOMINA (CFDI tracking with storage reference)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS cfdi_nomina (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    periodo_nomina_id VARCHAR(36) NOT NULL REFERENCES periodos_nomina(id),
+    nomina_resumen_id VARCHAR(36) REFERENCES nomina_resumen(id),
+    
+    -- CFDI identification
+    uuid_fiscal UUID UNIQUE,
+    serie VARCHAR(10),
+    folio VARCHAR(30),
+    
+    -- Key fields (not full XML)
+    fecha_timbrado TIMESTAMP,
+    fecha_emision TIMESTAMP,
+    
+    -- Amounts
+    subtotal NUMERIC(14,2),
+    descuento NUMERIC(14,2),
+    total NUMERIC(14,2),
+    
+    -- Nomina complement key fields
+    tipo_nomina VARCHAR(1),           -- O=Ordinaria, E=Extraordinaria
+    fecha_pago DATE,
+    fecha_inicio_pago DATE,
+    fecha_fin_pago DATE,
+    num_dias_pagados NUMERIC(6,2),
+    total_percepciones NUMERIC(14,2),
+    total_deducciones NUMERIC(14,2),
+    total_otros_pagos NUMERIC(14,2),
+    
+    -- Status
+    estatus VARCHAR(20) DEFAULT 'pendiente',  -- pendiente, timbrado, cancelado
+    fecha_cancelacion TIMESTAMP,
+    motivo_cancelacion VARCHAR(200),
+    uuid_sustitucion UUID,
+    
+    -- Storage reference (KEY FEATURE)
+    storage_bucket VARCHAR(100),
+    storage_path VARCHAR(500),        -- e.g., "cfdi/2024/01/uuid.xml"
+    xml_hash VARCHAR(64),             -- SHA-256
+    
+    -- PAC info
+    pac_nombre VARCHAR(50),
+    pac_certificado VARCHAR(50),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cfdi_uuid ON cfdi_nomina(uuid_fiscal);
+CREATE INDEX IF NOT EXISTS idx_cfdi_empleado ON cfdi_nomina(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_cfdi_periodo ON cfdi_nomina(periodo_nomina_id);
+CREATE INDEX IF NOT EXISTS idx_cfdi_estatus ON cfdi_nomina(estatus);
+CREATE INDEX IF NOT EXISTS idx_cfdi_cliente ON cfdi_nomina(cliente_id, empresa_id);
+
+-- -----------------------------------------------------------------------------
+-- 2.10 PAYMENT_BATCHES (Payment batches by method)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS payment_batches (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    periodo_nomina_id VARCHAR(36) NOT NULL REFERENCES periodos_nomina(id),
+    
+    -- Batch identification
+    folio VARCHAR(30) UNIQUE NOT NULL,
+    tipo_pago VARCHAR(50) NOT NULL,       -- transferencia, vales, efectivo, cheque, sindicato
+    medio_pago_id VARCHAR(36) REFERENCES medios_pago(id),
+    
+    -- For bank transfers
+    banco_origen_id VARCHAR(36) REFERENCES cat_bancos(id),
+    cuenta_origen VARCHAR(20),
+    
+    -- File info
+    layout_generado_id VARCHAR(36) REFERENCES layouts_generados(id),
+    layout_path VARCHAR(500),
+    layout_hash VARCHAR(64),
+    
+    -- Totals
+    total_operaciones INTEGER DEFAULT 0,
+    monto_total NUMERIC(16,2) DEFAULT 0,
+    
+    -- Status
+    estatus VARCHAR(20) DEFAULT 'pendiente',  -- pendiente, generado, enviado, procesado, con_rechazos
+    fecha_envio TIMESTAMP,
+    fecha_aplicacion DATE,
+    
+    -- Bank response
+    referencia_banco VARCHAR(50),
+    operaciones_exitosas INTEGER,
+    operaciones_rechazadas INTEGER,
+    archivo_respuesta VARCHAR(500),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.11 PAYMENT_LINES (Each payment per employee per method)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS payment_lines (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    payment_batch_id VARCHAR(36) NOT NULL REFERENCES payment_batches(id),
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    nomina_resumen_id VARCHAR(36) REFERENCES nomina_resumen(id),
+    
+    -- Destination
+    banco_destino VARCHAR(100),
+    clabe_destino VARCHAR(18),
+    cuenta_destino VARCHAR(20),
+    beneficiario VARCHAR(200),
+    
+    -- Payment type (KEY FOR YOUR REQUIREMENT)
+    tipo_pago VARCHAR(50) NOT NULL,       -- nomina, vales, sindicato, pension, caja_ahorro
+    concepto_pago VARCHAR(200),
+    
+    -- Amount
+    monto NUMERIC(14,2) NOT NULL,
+    
+    -- Status
+    estatus VARCHAR(20) DEFAULT 'pendiente',  -- pendiente, enviado, aplicado, rechazado
+    fecha_aplicacion TIMESTAMP,
+    
+    -- Bank response
+    referencia VARCHAR(50),
+    motivo_rechazo VARCHAR(200),
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_lines_empleado ON payment_lines(empleado_id);
+CREATE INDEX IF NOT EXISTS idx_payment_lines_batch ON payment_lines(payment_batch_id);
+CREATE INDEX IF NOT EXISTS idx_payment_lines_tipo ON payment_lines(tipo_pago);
+CREATE INDEX IF NOT EXISTS idx_payment_lines_estatus ON payment_lines(estatus);
+
+-- -----------------------------------------------------------------------------
+-- 2.12 LEDGER_AGUINALDO (Annual aguinaldo tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ledger_aguinaldo (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    ejercicio INTEGER NOT NULL,
+    
+    -- Calculation base
+    dias_correspondientes INTEGER NOT NULL DEFAULT 15,
+    dias_adicionales INTEGER DEFAULT 0,
+    dias_trabajados INTEGER DEFAULT 0,
+    
+    -- Amounts
+    salario_base_calculo NUMERIC(12,2),
+    monto_calculado NUMERIC(14,2),
+    monto_gravado NUMERIC(14,2),
+    monto_exento NUMERIC(14,2),
+    
+    -- Payment
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    periodo_nomina_id VARCHAR(36) REFERENCES periodos_nomina(id),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(cliente_id, empresa_id, empleado_id, ejercicio)
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.13 LEDGER_PTU (Annual PTU tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ledger_ptu (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    ejercicio INTEGER NOT NULL,
+    
+    -- Employee factors
+    dias_trabajados INTEGER DEFAULT 0,
+    salarios_devengados NUMERIC(14,2),
+    
+    -- Company totals (for proportional calc)
+    empresa_dias_totales INTEGER,
+    empresa_salarios_totales NUMERIC(16,2),
+    empresa_ptu_repartir NUMERIC(16,2),
+    
+    -- Employee amounts
+    monto_por_dias NUMERIC(14,2),
+    monto_por_salarios NUMERIC(14,2),
+    monto_total NUMERIC(14,2),
+    monto_gravado NUMERIC(14,2),
+    monto_exento NUMERIC(14,2),
+    
+    -- Payment
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    periodo_nomina_id VARCHAR(36) REFERENCES periodos_nomina(id),
+    
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    
+    UNIQUE(cliente_id, empresa_id, empleado_id, ejercicio)
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.14 LEDGER_PRIMA_ANTIGUEDAD (Seniority premium tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ledger_prima_antiguedad (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    fecha_calculo DATE NOT NULL,
+    anos_servicio INTEGER NOT NULL,
+    
+    -- Calculation (capped at 2x SMG)
+    salario_base NUMERIC(12,2),
+    dias_por_ano NUMERIC(6,2) DEFAULT 12,
+    dias_acumulados NUMERIC(10,2),
+    monto_acumulado NUMERIC(14,2),
+    
+    -- Payment (on termination)
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    finiquito_id VARCHAR(36),
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.15 FILE_REGISTRY (Import/Export tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS file_registry (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    
+    -- File identification
+    direction VARCHAR(10) NOT NULL,         -- import, export
+    file_type VARCHAR(50) NOT NULL,         -- fonacot_descuentos, infonavit_ema, layout_bancario, cfdi, etc.
+    
+    -- File details
+    nombre_archivo VARCHAR(255) NOT NULL,
+    storage_bucket VARCHAR(100),
+    storage_path VARCHAR(500),
+    file_size_bytes BIGINT,
+    file_hash VARCHAR(64),                  -- SHA-256 for integrity
+    mime_type VARCHAR(100),
+    
+    -- Processing
+    fecha_archivo DATE,                     -- Date the file represents
+    periodo_referencia VARCHAR(20),
+    periodo_nomina_id VARCHAR(36) REFERENCES periodos_nomina(id),
+    
+    -- For imports
+    registros_totales INTEGER,
+    registros_procesados INTEGER,
+    registros_error INTEGER,
+    
+    -- Status
+    estatus VARCHAR(20) DEFAULT 'recibido', -- recibido, procesando, procesado, error
+    error_mensaje TEXT,
+    
+    -- Links
+    payment_batch_id VARCHAR(36) REFERENCES payment_batches(id),
+    sua_bimestral_id VARCHAR(36) REFERENCES sua_bimestral(id),
+    
+    procesado_por VARCHAR(36),
+    procesado_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_file_registry_tipo ON file_registry(file_type);
+CREATE INDEX IF NOT EXISTS idx_file_registry_fecha ON file_registry(fecha_archivo);
+CREATE INDEX IF NOT EXISTS idx_file_registry_cliente ON file_registry(cliente_id, empresa_id);
+
+-- -----------------------------------------------------------------------------
+-- 2.16 SINDICATO_MEMBERSHIP (Union tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS sindicato_membership (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    sindicato_nombre VARCHAR(200),
+    numero_afiliacion VARCHAR(50),
+    
+    -- Dues
+    tipo_cuota VARCHAR(20),                 -- porcentaje, monto_fijo
+    valor_cuota NUMERIC(12,4),
+    
+    fecha_afiliacion DATE,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 2.17 CAJA_AHORRO_PARTICIPATION (Savings fund tracking)
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS caja_ahorro_participation (
+    id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    cliente_id VARCHAR(36) NOT NULL,
+    empresa_id VARCHAR(36) NOT NULL,
+    empleado_id VARCHAR(36) NOT NULL REFERENCES employees(id),
+    
+    -- Contribution terms
+    porcentaje_empleado NUMERIC(5,2) NOT NULL,
+    porcentaje_empresa NUMERIC(5,2) NOT NULL,  -- Company match
+    tope_porcentaje_salario NUMERIC(5,2),      -- Max % of salary
+    
+    fecha_inicio DATE NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ============================================================================
+-- PART 3: VIEWS FOR COMMON QUERIES
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 3.1 Employee concept history (YOUR KEY QUERY)
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW vw_employee_concept_history AS
+SELECT 
+    nm.empleado_id,
+    e.numero_empleado,
+    e.nombre || ' ' || e.apellido_paterno AS nombre_empleado,
+    pn.fecha_pago,
+    pn.tipo_periodo || '-' || pn.numero_periodo AS codigo_periodo,
+    pn.tipo_periodo,
+    nm.concepto_nombre,
+    cn.codigo AS concepto_codigo,
+    cn.tipo,
+    cn.naturaleza,
+    cn.base_calculo AS categoria,           -- Using existing field as category
+    nm.cantidad,
+    nm.importe_total_bp::numeric / 100 AS monto_total,
+    nm.importe_gravado_bp::numeric / 100 AS monto_gravado,
+    nm.importe_exento_bp::numeric / 100 AS monto_exento,
+    nm.cliente_id,
+    nm.empresa_id
+FROM nomina_movimientos nm
+JOIN periodos_nomina pn ON nm.periodo_id = pn.id
+JOIN employees e ON nm.empleado_id = e.id
+LEFT JOIN conceptos_nomina cn ON nm.concepto_id = cn.id
+WHERE pn.estatus NOT IN ('cancelado', 'borrador');
+
+-- Example usage:
+-- SELECT SUM(monto_total) FROM vw_employee_concept_history 
+-- WHERE numero_empleado = 'EMP001' AND concepto_codigo LIKE '%PUNTUAL%' 
+-- AND fecha_pago >= CURRENT_DATE - INTERVAL '3 months';
+
+-- -----------------------------------------------------------------------------
+-- 3.2 Ledger balances view
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW vw_ledger_balances AS
+SELECT 
+    empleado_id,
+    tipo_obligacion,
+    obligacion_id,
+    SUM(CASE WHEN entry_type = 'cargo' THEN monto ELSE 0 END) AS total_cargos,
+    SUM(CASE WHEN entry_type = 'abono' THEN monto ELSE 0 END) AS total_abonos,
+    SUM(CASE WHEN entry_type = 'ajuste' THEN monto ELSE 0 END) AS total_ajustes,
+    SUM(CASE 
+        WHEN entry_type = 'cargo' THEN monto 
+        WHEN entry_type = 'abono' THEN -monto 
+        ELSE 0 
+    END) AS saldo,
+    cliente_id,
+    empresa_id
+FROM ledger_obligations
+GROUP BY empleado_id, tipo_obligacion, obligacion_id, cliente_id, empresa_id;
+
+-- -----------------------------------------------------------------------------
+-- 3.3 Salary history view
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW vw_salary_history AS
+SELECT 
+    kc.empleado_id,
+    e.numero_empleado,
+    e.nombre || ' ' || e.apellido_paterno AS nombre_empleado,
+    kc.fecha_efectiva,
+    kc.salario_diario_anterior,
+    kc.salario_diario_nuevo,
+    kc.sbc_anterior,
+    kc.sbc_nuevo,
+    kc.sdi_anterior,
+    kc.sdi_nuevo,
+    kc.tipo_incremento,
+    kc.porcentaje_incremento,
+    kc.motivo,
+    kc.cliente_id,
+    kc.empresa_id
+FROM kardex_compensation kc
+JOIN employees e ON kc.empleado_id = e.id
+ORDER BY kc.fecha_efectiva DESC;
+
+-- -----------------------------------------------------------------------------
+-- 3.4 FONACOT/INFONAVIT reconciliation view
+-- -----------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW vw_credits_reconciliation AS
+SELECT 
+    cl.id AS credit_id,
+    cl.empleado_id,
+    e.numero_empleado,
+    e.nombre || ' ' || e.apellido_paterno AS nombre_empleado,
+    cl.tipo_credito,
+    cl.numero_credito,
+    cl.monto_por_periodo AS monto_esperado,
+    cl.saldo_restante AS saldo_sistema,
+    lb.total_cargos AS total_externo_indica,
+    lb.total_abonos AS total_descontado,
+    lb.saldo AS saldo_ledger,
+    CASE 
+        WHEN lb.saldo IS NULL THEN 'SIN_MOVIMIENTOS'
+        WHEN lb.saldo = 0 THEN 'OK'
+        WHEN lb.saldo > 0 THEN 'PENDIENTE_DESCUENTO'
+        WHEN lb.saldo < 0 THEN 'EXCESO_DESCUENTO'
+    END AS estatus_reconciliacion,
+    cl.cliente_id,
+    cl.empresa_id
+FROM creditos_legales cl
+JOIN employees e ON cl.empleado_id = e.id
+LEFT JOIN vw_ledger_balances lb ON lb.obligacion_id = cl.id 
+    AND lb.tipo_obligacion = cl.tipo_credito
+WHERE cl.estado = 'activo';
+
+-- ============================================================================
+-- PART 4: ENHANCE EXISTING TABLES
+-- ============================================================================
+
+-- Add subcategoria to conceptos_nomina if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'conceptos_nomina' AND column_name = 'subcategoria') THEN
+        ALTER TABLE conceptos_nomina ADD COLUMN subcategoria VARCHAR(50);
+    END IF;
+END $$;
+
+-- Add categoria to conceptos_nomina if not exists (for grouping)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_name = 'conceptos_nomina' AND column_name = 'categoria') THEN
+        ALTER TABLE conceptos_nomina ADD COLUMN categoria VARCHAR(50);
+    END IF;
+END $$;
+
+-- Update existing concepts with categories
+UPDATE conceptos_nomina SET 
+    categoria = CASE 
+        WHEN nombre ILIKE '%sueldo%' THEN 'sueldo'
+        WHEN nombre ILIKE '%aguinaldo%' THEN 'aguinaldo'
+        WHEN nombre ILIKE '%ptu%' OR nombre ILIKE '%utilidades%' THEN 'ptu'
+        WHEN nombre ILIKE '%vacacion%' THEN 'vacaciones'
+        WHEN nombre ILIKE '%prima%' THEN 'prima'
+        WHEN nombre ILIKE '%hora%extra%' THEN 'horas_extra'
+        WHEN nombre ILIKE '%bono%' OR nombre ILIKE '%premio%' THEN 'bono'
+        WHEN nombre ILIKE '%comisi%' THEN 'comision'
+        WHEN nombre ILIKE '%despensa%' OR nombre ILIKE '%vale%' THEN 'prevision_social'
+        WHEN nombre ILIKE '%fondo%ahorro%' THEN 'prevision_social'
+        WHEN nombre ILIKE '%imss%' OR nombre ILIKE '%seguro%social%' THEN 'imss'
+        WHEN nombre ILIKE '%isr%' OR nombre ILIKE '%impuesto%' THEN 'impuesto'
+        WHEN nombre ILIKE '%infonavit%' THEN 'infonavit'
+        WHEN nombre ILIKE '%fonacot%' THEN 'fonacot'
+        WHEN nombre ILIKE '%pension%' THEN 'pension_alimenticia'
+        WHEN nombre ILIKE '%prestamo%' THEN 'prestamo'
+        WHEN nombre ILIKE '%sindicat%' THEN 'sindicato'
+        WHEN nombre ILIKE '%subsidio%' THEN 'subsidio'
+        ELSE 'otros'
+    END,
+    subcategoria = CASE 
+        WHEN nombre ILIKE '%puntualidad%' THEN 'puntualidad'
+        WHEN nombre ILIKE '%asistencia%' THEN 'asistencia'
+        WHEN nombre ILIKE '%productividad%' THEN 'productividad'
+        WHEN nombre ILIKE '%desempe%' THEN 'desempeno'
+        WHEN nombre ILIKE '%despensa%' THEN 'despensa'
+        WHEN nombre ILIKE '%doble%' THEN 'dobles'
+        WHEN nombre ILIKE '%triple%' THEN 'triples'
+        ELSE NULL
+    END
+WHERE categoria IS NULL;
+
+-- ============================================================================
+-- PART 5: SUMMARY
+-- ============================================================================
+
+/*
+TABLES ADDED (17 new tables):
+1.  cat_bancos                  - Bank catalog with SAT codes
+2.  cat_valores_uma_smg         - UMA/SMG values by year
+3.  kardex_compensation         - Salary history tracking
+4.  ledger_obligations          - Generic reconciliation ledger
+5.  imss_movimientos            - IDSE movements log
+6.  sua_bimestral               - Bimester IMSS totals
+7.  sua_bimestral_detalle       - Full IMSS breakdown per employee
+8.  cfdi_nomina                 - CFDI tracking with storage reference
+9.  payment_batches             - Payment batches by method
+10. payment_lines               - Individual payment lines
+11. ledger_aguinaldo            - Annual aguinaldo tracking
+12. ledger_ptu                  - Annual PTU tracking
+13. ledger_prima_antiguedad     - Seniority premium tracking
+14. file_registry               - Import/export file tracking
+15. sindicato_membership        - Union membership tracking
+16. caja_ahorro_participation   - Savings fund tracking
+
+VIEWS ADDED (4 views):
+1. vw_employee_concept_history  - Query: "cuánto ganó de bonos"
+2. vw_ledger_balances           - Obligation balances
+3. vw_salary_history            - Salary change history
+4. vw_credits_reconciliation    - FONACOT/INFONAVIT reconciliation
+
+TRIGGERS ADDED (1 trigger):
+1. trg_employees_salary_kardex  - Auto-create kardex on salary changes
+
+COLUMNS ADDED TO EXISTING:
+1. conceptos_nomina.categoria
+2. conceptos_nomina.subcategoria
+
+TOTAL TABLES AFTER MIGRATION: 75 + 17 = 92 tables
+*/
