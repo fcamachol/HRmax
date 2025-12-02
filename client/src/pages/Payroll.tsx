@@ -33,7 +33,8 @@ import {
   Calendar,
   Star,
   Sun,
-  MinusCircle
+  MinusCircle,
+  Loader2
 } from "lucide-react";
 import {
   Table,
@@ -63,7 +64,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { GrupoNomina, Employee, IncidenciaAsistencia, PlantillaNomina, Empresa } from "@shared/schema";
+import type { GrupoNomina, Employee, IncidenciaAsistencia, PlantillaNomina, PlantillaNominaWithConceptos, Empresa } from "@shared/schema";
 import { CreateGrupoNominaDialog } from "@/components/CreateGrupoNominaDialog";
 import { IncidenciasAsistenciaGrid } from "@/components/IncidenciasAsistenciaGrid";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, addDays } from "date-fns";
@@ -202,6 +203,20 @@ export default function Payroll() {
   const [selectedFrequency, setSelectedFrequency] = useState("quincenal");
   const [selectedPlantillaId, setSelectedPlantillaId] = useState<string | null>(null);
 
+  // Fetch the selected plantilla with its concepts (must be after selectedPlantillaId is declared)
+  // Include currentEmpresaId in queryKey to ensure refetch when empresa changes
+  const { data: selectedPlantillaData, isLoading: isLoadingPlantillaData } = useQuery<PlantillaNominaWithConceptos>({
+    queryKey: ["/api/plantillas-nomina", selectedPlantillaId, { empresaId: currentEmpresaId }],
+    queryFn: async () => {
+      if (!selectedPlantillaId || selectedPlantillaId === "none") return null;
+      const res = await fetch(`/api/plantillas-nomina/${selectedPlantillaId}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: ${res.statusText}`);
+      return res.json();
+    },
+    enabled: !!selectedPlantillaId && selectedPlantillaId !== "none",
+    staleTime: 0, // Always refetch to ensure fresh data
+  });
+
   // Sync selectedPlantillaId with defaultPlantillaId when empresa changes or default updates
   useEffect(() => {
     // Only run when we have a valid empresa (query has resolved)
@@ -326,8 +341,8 @@ export default function Payroll() {
   const [selectedNominaToView, setSelectedNominaToView] = useState<Nomina | null>(null);
   const [isNominaDetailOpen, setIsNominaDetailOpen] = useState(false);
 
-  // Predefined concepts (like columns in Excel)
-  const [concepts, setConcepts] = useState<Concept[]>([
+  // Default concepts (used when no plantilla is selected)
+  const defaultConcepts: Concept[] = [
     { id: "bono-productividad", name: "Bono Productividad", type: "percepcion" },
     { id: "comisiones", name: "Comisiones", type: "percepcion" },
     { id: "tiempo-extra", name: "Tiempo Extra", type: "percepcion" },
@@ -337,7 +352,51 @@ export default function Payroll() {
     { id: "faltas", name: "Faltas", type: "deduccion" },
     { id: "retardos", name: "Retardos", type: "deduccion" },
     { id: "prestamo", name: "Préstamo", type: "deduccion" },
-  ]);
+  ];
+
+  // Predefined concepts (like columns in Excel) - updated from plantilla or defaults
+  const [concepts, setConcepts] = useState<Concept[]>(defaultConcepts);
+
+  // Load concepts from selected plantilla when it changes
+  useEffect(() => {
+    // Case 1: No plantilla selected - use defaults
+    if (!selectedPlantillaId || selectedPlantillaId === "none") {
+      setConcepts(defaultConcepts);
+      setConceptValues([]);
+      return;
+    }
+    
+    // Case 2: Plantilla selected but still loading - wait for data
+    if (isLoadingPlantillaData) {
+      return;
+    }
+    
+    // Case 3: Plantilla selected and data loaded
+    if (selectedPlantillaData) {
+      if (selectedPlantillaData.conceptos && selectedPlantillaData.conceptos.length > 0) {
+        // Map plantilla concepts to the Concept format used by the grid
+        const plantillaConcepts: Concept[] = selectedPlantillaData.conceptos.map(pc => {
+          // Map tipo to percepcion/deduccion - handle various SAT types
+          let conceptType: "percepcion" | "deduccion" = "percepcion";
+          const tipo = pc.concepto.tipo?.toLowerCase() || "";
+          if (tipo.includes("deduccion") || tipo.includes("descuento")) {
+            conceptType = "deduccion";
+          }
+          return {
+            id: pc.concepto.id,
+            name: pc.concepto.nombre,
+            type: conceptType,
+          };
+        });
+        setConcepts(plantillaConcepts);
+      } else {
+        // Plantilla has no concepts - use empty array (not defaults)
+        setConcepts([]);
+      }
+      // Reset concept values when switching plantillas to avoid stale data
+      setConceptValues([]);
+    }
+  }, [selectedPlantillaData, selectedPlantillaId, isLoadingPlantillaData]);
 
   // Values for each employee-concept combination
   const [conceptValues, setConceptValues] = useState<ConceptValue[]>([]);
@@ -1875,28 +1934,37 @@ export default function Payroll() {
                     <div className="space-y-1">
                       <Label htmlFor="plantilla" className="text-sm font-medium">Plantilla de Nómina</Label>
                       <p className="text-xs text-muted-foreground">
-                        Usa una plantilla predefinida para cargar los conceptos automáticamente
+                        {isLoadingPlantillaData 
+                          ? "Cargando conceptos de la plantilla..." 
+                          : "Usa una plantilla predefinida para cargar los conceptos automáticamente"
+                        }
                       </p>
                     </div>
-                    <Select 
-                      value={selectedPlantillaId || "none"} 
-                      onValueChange={(v) => setSelectedPlantillaId(v === "none" ? null : v)}
-                    >
-                      <SelectTrigger id="plantilla" className="w-64" data-testid="select-plantilla">
-                        <SelectValue placeholder="Selecciona plantilla" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Sin plantilla</SelectItem>
-                        {plantillas.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            <div className="flex items-center gap-2">
-                              {p.id === defaultPlantillaId && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
-                              {p.nombre}
-                            </div>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex items-center gap-2">
+                      {isLoadingPlantillaData && (
+                        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                      )}
+                      <Select 
+                        value={selectedPlantillaId || "none"} 
+                        onValueChange={(v) => setSelectedPlantillaId(v === "none" ? null : v)}
+                        disabled={isLoadingPlantillaData}
+                      >
+                        <SelectTrigger id="plantilla" className="w-64" data-testid="select-plantilla">
+                          <SelectValue placeholder="Selecciona plantilla" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sin plantilla</SelectItem>
+                          {plantillas.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              <div className="flex items-center gap-2">
+                                {p.id === defaultPlantillaId && <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />}
+                                {p.nombre}
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 </div>
               )}
