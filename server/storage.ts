@@ -128,6 +128,10 @@ import {
   type InsertKardexCompensation,
   type CfdiNomina,
   type InsertCfdiNomina,
+  type ImssMovimiento,
+  type InsertImssMovimiento,
+  type SuaBimestre,
+  type InsertSuaBimestre,
   type NominaMovimiento,
   type InsertNominaMovimiento,
   type NominaResumen,
@@ -212,7 +216,9 @@ import {
   catBancos,
   catValoresUmaSmg,
   kardexCompensation,
-  cfdiNomina
+  cfdiNomina,
+  imssMovimientos,
+  suaBimestres
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -799,6 +805,26 @@ export interface IStorage {
   getCfdiNominasByEmpleado(empleadoId: string): Promise<CfdiNomina[]>;
   getCfdiNominasByPeriodo(periodoId: string): Promise<CfdiNomina[]>;
   updateCfdiNomina(id: string, updates: Partial<InsertCfdiNomina>): Promise<CfdiNomina>;
+  
+  // IMSS Movimientos Afiliatorios (Phase 2)
+  createImssMovimiento(movimiento: InsertImssMovimiento): Promise<ImssMovimiento>;
+  getImssMovimiento(id: string): Promise<ImssMovimiento | undefined>;
+  getImssMovimientosByEmpleado(empleadoId: string): Promise<ImssMovimiento[]>;
+  getImssMovimientosByEmpresa(empresaId: string, filters?: { estatus?: string; tipoMovimiento?: string; fechaDesde?: string; fechaHasta?: string }): Promise<ImssMovimiento[]>;
+  getImssMovimientosByRegistroPatronal(registroPatronalId: string): Promise<ImssMovimiento[]>;
+  getImssMovimientosPendientes(empresaId?: string): Promise<ImssMovimiento[]>;
+  updateImssMovimiento(id: string, updates: Partial<InsertImssMovimiento>): Promise<ImssMovimiento>;
+  deleteImssMovimiento(id: string): Promise<void>;
+  
+  // SUA Bimestres (Phase 2)
+  createSuaBimestre(bimestre: InsertSuaBimestre): Promise<SuaBimestre>;
+  getSuaBimestre(id: string): Promise<SuaBimestre | undefined>;
+  getSuaBimestreByPeriodo(registroPatronalId: string, ejercicio: number, bimestre: number): Promise<SuaBimestre | undefined>;
+  getSuaBimestresByEmpresa(empresaId: string, ejercicio?: number): Promise<SuaBimestre[]>;
+  getSuaBimestresByRegistroPatronal(registroPatronalId: string, ejercicio?: number): Promise<SuaBimestre[]>;
+  getSuaBimestresPendientes(empresaId?: string): Promise<SuaBimestre[]>;
+  updateSuaBimestre(id: string, updates: Partial<InsertSuaBimestre>): Promise<SuaBimestre>;
+  deleteSuaBimestre(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -980,11 +1006,13 @@ export class DatabaseStorage implements IStorage {
     const sdiBefore = sdiBpBefore ?? sdiDecimalBefore;
     const sdiAfter = sdiBpAfter ?? sdiDecimalAfter;
     
+    const fechaEfectiva = new Date().toISOString().split('T')[0];
+    
     const kardexEntry: InsertKardexCompensation = {
       empleadoId: after.id,
       empresaId: after.empresaId,
       tipoCambio,
-      fechaEfectiva: new Date().toISOString().split('T')[0],
+      fechaEfectiva,
       salarioDiarioAnterior: salarioBefore,
       salarioDiarioNuevo: salarioAfter,
       sbcAnterior: sbcBefore,
@@ -995,7 +1023,30 @@ export class DatabaseStorage implements IStorage {
       registradoPor: 'SISTEMA',
     };
     
-    await this.createKardexCompensation(kardexEntry);
+    const kardex = await this.createKardexCompensation(kardexEntry);
+    
+    if (sbcChanged && after.nss) {
+      const sbcBpValue = after.sbcBp ?? (sbcDecimalAfter !== undefined ? BigInt(Math.round(sbcDecimalAfter * 10000)) : null);
+      const sbcDecimalValue = sbcBpAfter ?? sbcDecimalAfter ?? sbcBefore ?? null;
+      
+      const imssMovimiento: InsertImssMovimiento = {
+        clienteId: after.clienteId,
+        empresaId: after.empresaId,
+        empleadoId: after.id,
+        registroPatronalId: after.registroPatronalId ?? null,
+        kardexCompensationId: kardex.id,
+        tipoMovimiento: 'modificacion_salario',
+        fechaMovimiento: fechaEfectiva,
+        estatus: 'pendiente',
+        nss: after.nss,
+        sbcDecimal: sbcDecimalValue,
+        sbcBp: sbcBpValue,
+        observaciones: `Cambio automático de SBC: ${sbcBefore?.toFixed(4) ?? 'N/A'} → ${sbcAfter?.toFixed(4) ?? 'N/A'}`,
+        registradoPor: 'SISTEMA',
+      };
+      
+      await this.createImssMovimiento(imssMovimiento);
+    }
   }
 
   async deleteEmployee(id: string): Promise<void> {
@@ -4965,6 +5016,148 @@ export class DatabaseStorage implements IStorage {
       .where(eq(cfdiNomina.id, id))
       .returning();
     return updated;
+  }
+
+  // ============================================================================
+  // IMSS MOVIMIENTOS AFILIATORIOS (Phase 2)
+  // ============================================================================
+
+  async createImssMovimiento(movimiento: InsertImssMovimiento): Promise<ImssMovimiento> {
+    const [created] = await db.insert(imssMovimientos).values(movimiento).returning();
+    return created;
+  }
+
+  async getImssMovimiento(id: string): Promise<ImssMovimiento | undefined> {
+    const [movimiento] = await db.select().from(imssMovimientos).where(eq(imssMovimientos.id, id));
+    return movimiento || undefined;
+  }
+
+  async getImssMovimientosByEmpleado(empleadoId: string): Promise<ImssMovimiento[]> {
+    return db.select().from(imssMovimientos)
+      .where(eq(imssMovimientos.empleadoId, empleadoId))
+      .orderBy(desc(imssMovimientos.fechaMovimiento));
+  }
+
+  async getImssMovimientosByEmpresa(
+    empresaId: string, 
+    filters?: { estatus?: string; tipoMovimiento?: string; fechaDesde?: string; fechaHasta?: string }
+  ): Promise<ImssMovimiento[]> {
+    const conditions = [eq(imssMovimientos.empresaId, empresaId)];
+    
+    if (filters?.estatus) {
+      conditions.push(eq(imssMovimientos.estatus, filters.estatus));
+    }
+    if (filters?.tipoMovimiento) {
+      conditions.push(eq(imssMovimientos.tipoMovimiento, filters.tipoMovimiento));
+    }
+    if (filters?.fechaDesde) {
+      conditions.push(gte(imssMovimientos.fechaMovimiento, filters.fechaDesde));
+    }
+    if (filters?.fechaHasta) {
+      conditions.push(lte(imssMovimientos.fechaMovimiento, filters.fechaHasta));
+    }
+    
+    return db.select().from(imssMovimientos)
+      .where(and(...conditions))
+      .orderBy(desc(imssMovimientos.fechaMovimiento));
+  }
+
+  async getImssMovimientosByRegistroPatronal(registroPatronalId: string): Promise<ImssMovimiento[]> {
+    return db.select().from(imssMovimientos)
+      .where(eq(imssMovimientos.registroPatronalId, registroPatronalId))
+      .orderBy(desc(imssMovimientos.fechaMovimiento));
+  }
+
+  async getImssMovimientosPendientes(empresaId?: string): Promise<ImssMovimiento[]> {
+    const conditions = [eq(imssMovimientos.estatus, "pendiente")];
+    if (empresaId) {
+      conditions.push(eq(imssMovimientos.empresaId, empresaId));
+    }
+    return db.select().from(imssMovimientos)
+      .where(and(...conditions))
+      .orderBy(desc(imssMovimientos.fechaMovimiento));
+  }
+
+  async updateImssMovimiento(id: string, updates: Partial<InsertImssMovimiento>): Promise<ImssMovimiento> {
+    const [updated] = await db.update(imssMovimientos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(imssMovimientos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteImssMovimiento(id: string): Promise<void> {
+    await db.delete(imssMovimientos).where(eq(imssMovimientos.id, id));
+  }
+
+  // ============================================================================
+  // SUA BIMESTRES (Phase 2)
+  // ============================================================================
+
+  async createSuaBimestre(bimestre: InsertSuaBimestre): Promise<SuaBimestre> {
+    const [created] = await db.insert(suaBimestres).values(bimestre).returning();
+    return created;
+  }
+
+  async getSuaBimestre(id: string): Promise<SuaBimestre | undefined> {
+    const [bimestre] = await db.select().from(suaBimestres).where(eq(suaBimestres.id, id));
+    return bimestre || undefined;
+  }
+
+  async getSuaBimestreByPeriodo(
+    registroPatronalId: string, 
+    ejercicio: number, 
+    bimestre: number
+  ): Promise<SuaBimestre | undefined> {
+    const [result] = await db.select().from(suaBimestres)
+      .where(and(
+        eq(suaBimestres.registroPatronalId, registroPatronalId),
+        eq(suaBimestres.ejercicio, ejercicio),
+        eq(suaBimestres.bimestre, bimestre)
+      ));
+    return result || undefined;
+  }
+
+  async getSuaBimestresByEmpresa(empresaId: string, ejercicio?: number): Promise<SuaBimestre[]> {
+    const conditions = [eq(suaBimestres.empresaId, empresaId)];
+    if (ejercicio) {
+      conditions.push(eq(suaBimestres.ejercicio, ejercicio));
+    }
+    return db.select().from(suaBimestres)
+      .where(and(...conditions))
+      .orderBy(desc(suaBimestres.ejercicio), desc(suaBimestres.bimestre));
+  }
+
+  async getSuaBimestresByRegistroPatronal(registroPatronalId: string, ejercicio?: number): Promise<SuaBimestre[]> {
+    const conditions = [eq(suaBimestres.registroPatronalId, registroPatronalId)];
+    if (ejercicio) {
+      conditions.push(eq(suaBimestres.ejercicio, ejercicio));
+    }
+    return db.select().from(suaBimestres)
+      .where(and(...conditions))
+      .orderBy(desc(suaBimestres.ejercicio), desc(suaBimestres.bimestre));
+  }
+
+  async getSuaBimestresPendientes(empresaId?: string): Promise<SuaBimestre[]> {
+    const conditions = [eq(suaBimestres.estatus, "pendiente")];
+    if (empresaId) {
+      conditions.push(eq(suaBimestres.empresaId, empresaId));
+    }
+    return db.select().from(suaBimestres)
+      .where(and(...conditions))
+      .orderBy(desc(suaBimestres.ejercicio), desc(suaBimestres.bimestre));
+  }
+
+  async updateSuaBimestre(id: string, updates: Partial<InsertSuaBimestre>): Promise<SuaBimestre> {
+    const [updated] = await db.update(suaBimestres)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(suaBimestres.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteSuaBimestre(id: string): Promise<void> {
+    await db.delete(suaBimestres).where(eq(suaBimestres.id, id));
   }
 }
 

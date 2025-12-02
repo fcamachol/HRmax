@@ -82,7 +82,9 @@ import {
   insertPeriodoNominaSchema,
   insertIncidenciaNominaSchema,
   insertConceptoNominaSchema,
-  insertNominaMovimientoSchema
+  insertNominaMovimientoSchema,
+  insertImssMovimientoSchema,
+  insertSuaBimestreSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -4936,6 +4938,264 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "CFDI no encontrado" });
       }
       res.json(cfdi);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== IMSS MOVIMIENTOS AFILIATORIOS (Phase 2) ====================
+  
+  app.get("/api/imss/movimientos", async (req, res) => {
+    try {
+      const { empresaId, empleadoId, registroPatronalId, estatus, tipoMovimiento, fechaDesde, fechaHasta, pendientes } = req.query;
+      let movimientos;
+      
+      if (pendientes === "true") {
+        movimientos = await storage.getImssMovimientosPendientes(empresaId as string | undefined);
+      } else if (empleadoId) {
+        movimientos = await storage.getImssMovimientosByEmpleado(empleadoId as string);
+      } else if (registroPatronalId) {
+        movimientos = await storage.getImssMovimientosByRegistroPatronal(registroPatronalId as string);
+      } else if (empresaId) {
+        movimientos = await storage.getImssMovimientosByEmpresa(empresaId as string, {
+          estatus: estatus as string | undefined,
+          tipoMovimiento: tipoMovimiento as string | undefined,
+          fechaDesde: fechaDesde as string | undefined,
+          fechaHasta: fechaHasta as string | undefined
+        });
+      } else {
+        return res.status(400).json({ message: "Se requiere empresaId, empleadoId o registroPatronalId" });
+      }
+      res.json(movimientos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/imss/movimientos/:id", async (req, res) => {
+    try {
+      const movimiento = await storage.getImssMovimiento(req.params.id);
+      if (!movimiento) {
+        return res.status(404).json({ message: "Movimiento no encontrado" });
+      }
+      res.json(movimiento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/movimientos", async (req, res) => {
+    try {
+      const validatedData = insertImssMovimientoSchema.parse(req.body);
+      const movimiento = await storage.createImssMovimiento(validatedData);
+      res.status(201).json(movimiento);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  const updateImssMovimientoSchema = insertImssMovimientoSchema.partial();
+  
+  app.patch("/api/imss/movimientos/:id", async (req, res) => {
+    try {
+      const validatedData = updateImssMovimientoSchema.parse(req.body);
+      const movimiento = await storage.updateImssMovimiento(req.params.id, validatedData);
+      res.json(movimiento);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/movimientos/:id/enviar", async (req, res) => {
+    try {
+      const movimiento = await storage.updateImssMovimiento(req.params.id, {
+        estatus: "enviado",
+        fechaPresentacionImss: new Date().toISOString().split("T")[0]
+      });
+      res.json(movimiento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/movimientos/:id/aceptar", async (req, res) => {
+    try {
+      const { numeroAcuse } = req.body;
+      const movimiento = await storage.updateImssMovimiento(req.params.id, {
+        estatus: "aceptado",
+        numeroAcuse
+      });
+      res.json(movimiento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/movimientos/:id/rechazar", async (req, res) => {
+    try {
+      const { motivoRechazo } = req.body;
+      const movimiento = await storage.updateImssMovimiento(req.params.id, {
+        estatus: "rechazado",
+        motivoRechazo
+      });
+      res.json(movimiento);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/imss/movimientos/:id", async (req, res) => {
+    try {
+      await storage.deleteImssMovimiento(req.params.id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SUA BIMESTRES (Phase 2) ====================
+  
+  app.get("/api/sua/bimestres", async (req, res) => {
+    try {
+      const { empresaId, registroPatronalId, ejercicio, pendientes } = req.query;
+      let bimestres;
+      
+      if (pendientes === "true") {
+        bimestres = await storage.getSuaBimestresPendientes(empresaId as string | undefined);
+      } else if (registroPatronalId) {
+        bimestres = await storage.getSuaBimestresByRegistroPatronal(
+          registroPatronalId as string, 
+          ejercicio ? parseInt(ejercicio as string) : undefined
+        );
+      } else if (empresaId) {
+        bimestres = await storage.getSuaBimestresByEmpresa(
+          empresaId as string,
+          ejercicio ? parseInt(ejercicio as string) : undefined
+        );
+      } else {
+        return res.status(400).json({ message: "Se requiere empresaId o registroPatronalId" });
+      }
+      res.json(bimestres);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/sua/bimestres/:id", async (req, res) => {
+    try {
+      const bimestre = await storage.getSuaBimestre(req.params.id);
+      if (!bimestre) {
+        return res.status(404).json({ message: "Bimestre no encontrado" });
+      }
+      res.json(bimestre);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/sua/bimestres/periodo/:registroPatronalId/:ejercicio/:bimestre", async (req, res) => {
+    try {
+      const { registroPatronalId, ejercicio, bimestre } = req.params;
+      const result = await storage.getSuaBimestreByPeriodo(
+        registroPatronalId,
+        parseInt(ejercicio),
+        parseInt(bimestre)
+      );
+      if (!result) {
+        return res.status(404).json({ message: "Bimestre no encontrado" });
+      }
+      res.json(result);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/sua/bimestres", async (req, res) => {
+    try {
+      const validatedData = insertSuaBimestreSchema.parse(req.body);
+      const bimestre = await storage.createSuaBimestre(validatedData);
+      res.status(201).json(bimestre);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  const updateSuaBimestreSchema = insertSuaBimestreSchema.partial();
+
+  app.patch("/api/sua/bimestres/:id", async (req, res) => {
+    try {
+      const validatedData = updateSuaBimestreSchema.parse(req.body);
+      const bimestre = await storage.updateSuaBimestre(req.params.id, validatedData);
+      res.json(bimestre);
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/sua/bimestres/:id/calcular", async (req, res) => {
+    try {
+      const bimestre = await storage.updateSuaBimestre(req.params.id, {
+        estatus: "calculado",
+        fechaCalculo: new Date()
+      });
+      res.json(bimestre);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/sua/bimestres/:id/generar-archivo", async (req, res) => {
+    try {
+      const { archivoNombre, archivoPath, archivoHash } = req.body;
+      const bimestre = await storage.updateSuaBimestre(req.params.id, {
+        estatus: "archivo_generado",
+        fechaGeneracionArchivo: new Date(),
+        archivoNombre,
+        archivoPath,
+        archivoHash
+      });
+      res.json(bimestre);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/sua/bimestres/:id/registrar-pago", async (req, res) => {
+    try {
+      const { fechaPago, lineaCaptura, bancoRecaudador, folioComprobante, importePagadoDecimal } = req.body;
+      const importePagadoBp = importePagadoDecimal ? BigInt(Math.round(importePagadoDecimal * 10000)) : undefined;
+      
+      const bimestre = await storage.updateSuaBimestre(req.params.id, {
+        estatus: "pagado",
+        fechaPago,
+        lineaCaptura,
+        bancoRecaudador,
+        folioComprobante,
+        importePagadoDecimal,
+        importePagadoBp
+      });
+      res.json(bimestre);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/sua/bimestres/:id", async (req, res) => {
+    try {
+      await storage.deleteSuaBimestre(req.params.id);
+      res.status(204).send();
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

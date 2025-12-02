@@ -29,6 +29,8 @@ import {
   Wallet,
   Gift,
   Database,
+  FileUp,
+  CalendarRange,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -161,6 +163,19 @@ const gestionPersonalSubItems = [
   },
 ];
 
+const imssSubItems = [
+  {
+    title: "Movimientos IMSS",
+    url: "/imss/movimientos",
+    icon: FileUp,
+  },
+  {
+    title: "SUA Bimestres",
+    url: "/imss/sua-bimestres",
+    icon: CalendarRange,
+  },
+];
+
 const configuracionSubItems = [
   {
     title: "General",
@@ -234,6 +249,7 @@ export function AppSidebar() {
   const isOrganizacionActive = location.startsWith("/organizacion");
   const isReclutamientoActive = location.startsWith("/reclutamiento");
   const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos") || location.startsWith("/creditos") || location.startsWith("/actas-administrativas");
+  const isImssActive = location.startsWith("/imss");
   const isConfiguracionActive = location.startsWith("/configuration");
 
   return (
@@ -417,6 +433,39 @@ export function AppSidebar() {
                             asChild
                             isActive={location === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
+                          >
+                            <Link href={subItem.url}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isImssActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isImssActive}
+                      data-testid="link-imss"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>IMSS / SUA</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {imssSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={location === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
                             <Link href={subItem.url}>
                               <subItem.icon className="h-4 w-4" />

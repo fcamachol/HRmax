@@ -3906,3 +3906,136 @@ export const insertCfdiNominaSchema = createInsertSchema(cfdiNomina).omit({
   totalOtrosPagos: z.coerce.number().optional().nullable(),
 });
 export type InsertCfdiNomina = z.infer<typeof insertCfdiNominaSchema>;
+
+// ============================================================================
+// PHASE 2: IMSS Movimientos Afiliatorios
+// ============================================================================
+
+export const tiposMovimientoImss = ["alta", "baja", "modificacion_salario", "reingreso"] as const;
+export type TipoMovimientoImss = typeof tiposMovimientoImss[number];
+
+export const estatusMovimientoImss = ["pendiente", "enviado", "aceptado", "rechazado"] as const;
+export type EstatusMovimientoImss = typeof estatusMovimientoImss[number];
+
+export const imssMovimientos = pgTable("imss_movimientos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "set null" }),
+  kardexCompensationId: varchar("kardex_compensation_id").references(() => kardexCompensation.id, { onDelete: "set null" }),
+  
+  tipoMovimiento: varchar("tipo_movimiento", { length: 30 }).notNull(), // alta, baja, modificacion_salario, reingreso
+  fechaMovimiento: date("fecha_movimiento").notNull(), // Fecha efectiva del movimiento
+  fechaPresentacionImss: date("fecha_presentacion_imss"), // Fecha en que se presentó ante IMSS
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"), // pendiente, enviado, aceptado, rechazado
+  
+  nss: varchar("nss", { length: 11 }), // Snapshot del NSS al momento del movimiento
+  sbcDecimal: numeric("sbc_decimal", { precision: 12, scale: 4 }), // SBC en decimal
+  sbcBp: bigint("sbc_bp", { mode: "bigint" }), // SBC en basis points (autoridad)
+  
+  numeroAcuse: varchar("numero_acuse", { length: 50 }), // Número de acuse de IMSS
+  folioMovimiento: varchar("folio_movimiento", { length: 50 }), // Folio interno
+  
+  motivoBaja: varchar("motivo_baja", { length: 10 }), // Código SAT catálogo motivo baja (1-7)
+  fechaBaja: date("fecha_baja"), // Para movimientos tipo baja
+  
+  observaciones: text("observaciones"),
+  motivoRechazo: text("motivo_rechazo"), // Si IMSS rechazó el movimiento
+  
+  registradoPor: varchar("registrado_por", { length: 100 }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("imss_movimientos_empleado_idx").on(table.empleadoId),
+  fechaIdx: index("imss_movimientos_fecha_idx").on(table.fechaMovimiento),
+  estatusIdx: index("imss_movimientos_estatus_idx").on(table.estatus),
+  tipoIdx: index("imss_movimientos_tipo_idx").on(table.tipoMovimiento),
+  registroPatronalIdx: index("imss_movimientos_reg_patronal_idx").on(table.registroPatronalId),
+  clienteEmpresaIdx: index("imss_movimientos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type ImssMovimiento = typeof imssMovimientos.$inferSelect;
+export const insertImssMovimientoSchema = createInsertSchema(imssMovimientos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  tipoMovimiento: z.enum(tiposMovimientoImss),
+  estatus: z.enum(estatusMovimientoImss).optional(),
+  sbcDecimal: z.coerce.number().optional().nullable(),
+});
+export type InsertImssMovimiento = z.infer<typeof insertImssMovimientoSchema>;
+
+// ============================================================================
+// PHASE 2: SUA Bimestres - Control de cuotas bimestrales IMSS
+// ============================================================================
+
+export const estatusSuaBimestre = ["pendiente", "calculado", "archivo_generado", "pagado", "vencido"] as const;
+export type EstatusSuaBimestre = typeof estatusSuaBimestre[number];
+
+export const suaBimestres = pgTable("sua_bimestres", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  registroPatronalId: varchar("registro_patronal_id").notNull().references(() => registrosPatronales.id, { onDelete: "cascade" }),
+  
+  ejercicio: integer("ejercicio").notNull(), // Año (2024, 2025, etc.)
+  bimestre: integer("bimestre").notNull(), // 1=Ene-Feb, 2=Mar-Abr, 3=May-Jun, 4=Jul-Ago, 5=Sep-Oct, 6=Nov-Dic
+  
+  fechaInicioPeriodo: date("fecha_inicio_periodo").notNull(),
+  fechaFinPeriodo: date("fecha_fin_periodo").notNull(),
+  fechaLimitePago: date("fecha_limite_pago"), // Día 17 del mes siguiente al bimestre
+  
+  // Importes calculados y pagados
+  importePatronBp: bigint("importe_patron_bp", { mode: "bigint" }), // Cuotas patrón en basis points
+  importeTrabajadorBp: bigint("importe_trabajador_bp", { mode: "bigint" }), // Cuotas trabajador en basis points
+  importeTotalBp: bigint("importe_total_bp", { mode: "bigint" }), // Total en basis points
+  importeTotalDecimal: numeric("importe_total_decimal", { precision: 14, scale: 2 }), // Total en decimal
+  
+  importePagadoBp: bigint("importe_pagado_bp", { mode: "bigint" }), // Monto efectivamente pagado
+  importePagadoDecimal: numeric("importe_pagado_decimal", { precision: 14, scale: 2 }),
+  
+  diferenciaBp: bigint("diferencia_bp", { mode: "bigint" }), // Diferencia (pagado - calculado)
+  
+  // Datos de generación de archivo
+  fechaCalculo: timestamp("fecha_calculo"), // Cuando se calcularon las cuotas
+  fechaGeneracionArchivo: timestamp("fecha_generacion_archivo"),
+  archivoNombre: varchar("archivo_nombre", { length: 200 }), // Nombre del archivo SUA
+  archivoPath: varchar("archivo_path", { length: 500 }), // Ruta en object storage
+  archivoHash: varchar("archivo_hash", { length: 64 }), // SHA-256 del archivo
+  
+  // Datos de pago
+  fechaPago: date("fecha_pago"),
+  lineaCaptura: varchar("linea_captura", { length: 100 }),
+  bancoRecaudador: varchar("banco_recaudador", { length: 100 }),
+  folioComprobante: varchar("folio_comprobante", { length: 100 }),
+  
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"),
+  
+  // Conteo de empleados
+  numEmpleados: integer("num_empleados"), // Empleados incluidos en el bimestre
+  
+  notas: text("notas"),
+  registradoPor: varchar("registrado_por", { length: 100 }),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  registroPatronalBimestreUnique: unique().on(table.registroPatronalId, table.ejercicio, table.bimestre),
+  ejercicioBimestreIdx: index("sua_bimestres_ejercicio_bimestre_idx").on(table.ejercicio, table.bimestre),
+  estatusIdx: index("sua_bimestres_estatus_idx").on(table.estatus),
+  clienteEmpresaIdx: index("sua_bimestres_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type SuaBimestre = typeof suaBimestres.$inferSelect;
+export const insertSuaBimestreSchema = createInsertSchema(suaBimestres).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  estatus: z.enum(estatusSuaBimestre).optional(),
+  importeTotalDecimal: z.coerce.number().optional().nullable(),
+  importePagadoDecimal: z.coerce.number().optional().nullable(),
+});
+export type InsertSuaBimestre = z.infer<typeof insertSuaBimestreSchema>;
