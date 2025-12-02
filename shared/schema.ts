@@ -156,6 +156,10 @@ export const insertModificacionPersonalSchema = createInsertSchema(modificacione
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  // Override JSONB fields to accept any JSON object structure
+  valoresAnteriores: z.record(z.string(), z.unknown()),
+  valoresNuevos: z.record(z.string(), z.unknown()),
 });
 export type InsertModificacionPersonal = z.infer<typeof insertModificacionPersonalSchema>;
 
