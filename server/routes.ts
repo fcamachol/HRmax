@@ -4798,6 +4798,149 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CATÁLOGO DE BANCOS ====================
+  
+  app.get("/api/catalogos/bancos", async (req, res) => {
+    try {
+      const bancos = await storage.getCatBancos();
+      res.json(bancos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogos/bancos/:id", async (req, res) => {
+    try {
+      const banco = await storage.getCatBanco(req.params.id);
+      if (!banco) {
+        return res.status(404).json({ message: "Banco no encontrado" });
+      }
+      res.json(banco);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogos/bancos/codigo-sat/:codigoSat", async (req, res) => {
+    try {
+      const banco = await storage.getCatBancoByCodigoSat(req.params.codigoSat);
+      if (!banco) {
+        return res.status(404).json({ message: "Banco no encontrado" });
+      }
+      res.json(banco);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== CATÁLOGO DE VALORES UMA/SMG ====================
+  
+  app.get("/api/catalogos/uma-smg", async (req, res) => {
+    try {
+      const valores = await storage.getCatValoresUmaSmg();
+      res.json(valores);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogos/uma-smg/vigente", async (req, res) => {
+    try {
+      const tipo = (req.query.tipo as string) || "UMA";
+      const fecha = req.query.fecha as string;
+      const valor = await storage.getCatValorUmaSmgVigente(tipo, fecha);
+      if (!valor) {
+        return res.status(404).json({ message: `No se encontró valor ${tipo} vigente` });
+      }
+      res.json(valor);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== KARDEX COMPENSATION (Historial salarial) ====================
+  
+  app.get("/api/kardex-compensation", async (req, res) => {
+    try {
+      const { empleadoId, empresaId } = req.query;
+      let kardex;
+      if (empleadoId) {
+        kardex = await storage.getKardexCompensationByEmpleado(empleadoId as string);
+      } else if (empresaId) {
+        kardex = await storage.getKardexCompensationByEmpresa(empresaId as string);
+      } else {
+        return res.status(400).json({ message: "Se requiere empleadoId o empresaId" });
+      }
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/kardex-compensation/:id", async (req, res) => {
+    try {
+      const kardex = await storage.getKardexCompensation(req.params.id);
+      if (!kardex) {
+        return res.status(404).json({ message: "Registro no encontrado" });
+      }
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/employees/:id/kardex-compensation", async (req, res) => {
+    try {
+      const kardex = await storage.getKardexCompensationByEmpleado(req.params.id);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== CFDI NÓMINA (Seguimiento de timbrado) ====================
+  
+  app.get("/api/cfdi-nomina", async (req, res) => {
+    try {
+      const { empleadoId, periodoId } = req.query;
+      let cfdis;
+      if (empleadoId) {
+        cfdis = await storage.getCfdiNominasByEmpleado(empleadoId as string);
+      } else if (periodoId) {
+        cfdis = await storage.getCfdiNominasByPeriodo(periodoId as string);
+      } else {
+        return res.status(400).json({ message: "Se requiere empleadoId o periodoId" });
+      }
+      res.json(cfdis);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/cfdi-nomina/:id", async (req, res) => {
+    try {
+      const cfdi = await storage.getCfdiNomina(req.params.id);
+      if (!cfdi) {
+        return res.status(404).json({ message: "CFDI no encontrado" });
+      }
+      res.json(cfdi);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/cfdi-nomina/uuid/:uuid", async (req, res) => {
+    try {
+      const cfdi = await storage.getCfdiNominaByUuid(req.params.uuid);
+      if (!cfdi) {
+        return res.status(404).json({ message: "CFDI no encontrado" });
+      }
+      res.json(cfdi);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

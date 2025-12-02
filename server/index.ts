@@ -5,6 +5,7 @@ import { migrateLegalCaseStatuses } from "./migrations/migrate-legal-case-status
 import { migrateBajaTypes } from "./migrations/migrate-baja-types";
 import { seedModulos } from "./seeds/modulos";
 import { seedConceptosLegales } from "./seeds/conceptosLegales";
+import { seedCatalogosBase } from "./seeds/catalogosBase";
 import { mockAuthMiddleware } from "./auth/middleware";
 
 const app = express();
@@ -63,6 +64,9 @@ app.use((req, res, next) => {
   
   // Seed conceptos legales con fórmulas
   await seedConceptosLegales();
+  
+  // Seed catálogos base (bancos, UMA/SMG)
+  await seedCatalogosBase();
   
   const server = await registerRoutes(app);
 

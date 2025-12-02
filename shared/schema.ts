@@ -3708,3 +3708,201 @@ export const insertEmpleadoBeneficioExtraSchema = createInsertSchema(empleadoBen
 
 export type EmpleadoBeneficioExtra = typeof empleadoBeneficiosExtra.$inferSelect;
 export type InsertEmpleadoBeneficioExtra = z.infer<typeof insertEmpleadoBeneficioExtraSchema>;
+
+// ============================================================================
+// CATÁLOGO DE BANCOS (Códigos SAT)
+// ============================================================================
+
+export const catBancos = pgTable("cat_bancos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codigoSat: varchar("codigo_sat", { length: 3 }).notNull().unique(),
+  nombreCorto: varchar("nombre_corto", { length: 50 }).notNull(),
+  nombreCompleto: varchar("nombre_completo", { length: 200 }),
+  longitudCuenta: integer("longitud_cuenta"),
+  longitudClabe: integer("longitud_clabe").default(18),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export type CatBanco = typeof catBancos.$inferSelect;
+export const insertCatBancoSchema = createInsertSchema(catBancos).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCatBanco = z.infer<typeof insertCatBancoSchema>;
+
+// ============================================================================
+// CATÁLOGO DE VALORES UMA/SMG (Por vigencia)
+// ============================================================================
+
+export const tiposUmaSmg = ["UMA", "SMG", "SMG_FRONTERA"] as const;
+export type TipoUmaSmg = typeof tiposUmaSmg[number];
+
+export const catValoresUmaSmg = pgTable("cat_valores_uma_smg", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tipo: varchar("tipo", { length: 20 }).notNull(), // 'UMA', 'SMG', 'SMG_FRONTERA'
+  valorDiario: numeric("valor_diario", { precision: 10, scale: 2 }).notNull(),
+  valorMensual: numeric("valor_mensual", { precision: 12, scale: 2 }).notNull(),
+  valorAnual: numeric("valor_anual", { precision: 14, scale: 2 }).notNull(),
+  vigenciaDesde: date("vigencia_desde").notNull(),
+  vigenciaHasta: date("vigencia_hasta"), // NULL = vigente
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  tipoVigenciaIdx: unique().on(table.tipo, table.vigenciaDesde),
+}));
+
+export type CatValorUmaSmg = typeof catValoresUmaSmg.$inferSelect;
+export const insertCatValorUmaSmgSchema = createInsertSchema(catValoresUmaSmg).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  valorDiario: z.coerce.number(),
+  valorMensual: z.coerce.number(),
+  valorAnual: z.coerce.number(),
+});
+export type InsertCatValorUmaSmg = z.infer<typeof insertCatValorUmaSmgSchema>;
+
+// ============================================================================
+// KARDEX DE COMPENSACIÓN (Historial de cambios salariales)
+// ============================================================================
+
+export const tiposOperacionKardex = ["alta", "modificacion", "correccion", "baja"] as const;
+export type TipoOperacionKardex = typeof tiposOperacionKardex[number];
+
+export const tiposIncrementoSalario = ["anual", "promocion", "ajuste_mercado", "minimo", "antiguedad", "evaluacion", "otro"] as const;
+export type TipoIncrementoSalario = typeof tiposIncrementoSalario[number];
+
+export const kardexCompensation = pgTable("kardex_compensation", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  operacion: varchar("operacion", { length: 20 }).notNull().default("modificacion"), // alta, modificacion, correccion, baja
+  fechaMovimiento: timestamp("fecha_movimiento").notNull().default(sql`now()`),
+  fechaEfectiva: date("fecha_efectiva").notNull(),
+  
+  // Valores anteriores
+  salarioDiarioAnterior: numeric("salario_diario_anterior", { precision: 12, scale: 2 }),
+  salarioDiarioNominalAnterior: numeric("salario_diario_nominal_anterior", { precision: 12, scale: 2 }),
+  sbcAnterior: numeric("sbc_anterior", { precision: 12, scale: 2 }),
+  sdiAnterior: numeric("sdi_anterior", { precision: 12, scale: 2 }),
+  
+  // Valores nuevos
+  salarioDiarioNuevo: numeric("salario_diario_nuevo", { precision: 12, scale: 2 }),
+  salarioDiarioNominalNuevo: numeric("salario_diario_nominal_nuevo", { precision: 12, scale: 2 }),
+  sbcNuevo: numeric("sbc_nuevo", { precision: 12, scale: 2 }),
+  sdiNuevo: numeric("sdi_nuevo", { precision: 12, scale: 2 }),
+  
+  // Contexto
+  motivo: varchar("motivo", { length: 200 }),
+  tipoIncremento: varchar("tipo_incremento", { length: 50 }), // anual, promocion, ajuste_mercado, minimo, etc.
+  porcentajeIncremento: numeric("porcentaje_incremento", { precision: 6, scale: 2 }),
+  documentoSoporte: varchar("documento_soporte", { length: 500 }),
+  
+  // Enlace IMSS (para movimientos que requieren aviso)
+  imssMovimientoId: varchar("imss_movimiento_id"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("kardex_compensation_empleado_idx").on(table.empleadoId),
+  fechaIdx: index("kardex_compensation_fecha_idx").on(table.fechaEfectiva),
+  clienteEmpresaIdx: index("kardex_compensation_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type KardexCompensation = typeof kardexCompensation.$inferSelect;
+export const insertKardexCompensationSchema = createInsertSchema(kardexCompensation).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  salarioDiarioAnterior: z.coerce.number().optional().nullable(),
+  salarioDiarioNominalAnterior: z.coerce.number().optional().nullable(),
+  sbcAnterior: z.coerce.number().optional().nullable(),
+  sdiAnterior: z.coerce.number().optional().nullable(),
+  salarioDiarioNuevo: z.coerce.number().optional().nullable(),
+  salarioDiarioNominalNuevo: z.coerce.number().optional().nullable(),
+  sbcNuevo: z.coerce.number().optional().nullable(),
+  sdiNuevo: z.coerce.number().optional().nullable(),
+  porcentajeIncremento: z.coerce.number().optional().nullable(),
+});
+export type InsertKardexCompensation = z.infer<typeof insertKardexCompensationSchema>;
+
+// ============================================================================
+// CFDI NÓMINA (Seguimiento de CFDIs timbrados)
+// ============================================================================
+
+export const estatusCfdi = ["pendiente", "timbrado", "cancelado"] as const;
+export type EstatusCfdi = typeof estatusCfdi[number];
+
+export const tiposNominaCfdi = ["O", "E"] as const; // O=Ordinaria, E=Extraordinaria
+export type TipoNominaCfdi = typeof tiposNominaCfdi[number];
+
+export const cfdiNomina = pgTable("cfdi_nomina", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  periodoNominaId: varchar("periodo_nomina_id").notNull().references(() => periodosNomina.id, { onDelete: "cascade" }),
+  nominaResumenId: varchar("nomina_resumen_id").references(() => nominaResumen.id),
+  
+  // Identificación CFDI
+  uuidFiscal: varchar("uuid_fiscal", { length: 36 }).unique(),
+  serie: varchar("serie", { length: 10 }),
+  folio: varchar("folio", { length: 30 }),
+  
+  // Fechas clave
+  fechaTimbrado: timestamp("fecha_timbrado"),
+  fechaEmision: timestamp("fecha_emision"),
+  
+  // Montos
+  subtotal: numeric("subtotal", { precision: 14, scale: 2 }),
+  descuento: numeric("descuento", { precision: 14, scale: 2 }),
+  total: numeric("total", { precision: 14, scale: 2 }),
+  
+  // Campos complemento nómina
+  tipoNomina: varchar("tipo_nomina", { length: 1 }), // O=Ordinaria, E=Extraordinaria
+  fechaPago: date("fecha_pago"),
+  fechaInicioPago: date("fecha_inicio_pago"),
+  fechaFinPago: date("fecha_fin_pago"),
+  numDiasPagados: numeric("num_dias_pagados", { precision: 6, scale: 2 }),
+  totalPercepciones: numeric("total_percepciones", { precision: 14, scale: 2 }),
+  totalDeducciones: numeric("total_deducciones", { precision: 14, scale: 2 }),
+  totalOtrosPagos: numeric("total_otros_pagos", { precision: 14, scale: 2 }),
+  
+  // Estatus
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"), // pendiente, timbrado, cancelado
+  fechaCancelacion: timestamp("fecha_cancelacion"),
+  motivoCancelacion: varchar("motivo_cancelacion", { length: 200 }),
+  uuidSustitucion: varchar("uuid_sustitucion", { length: 36 }),
+  
+  // Referencia a almacenamiento
+  storageBucket: varchar("storage_bucket", { length: 100 }),
+  storagePath: varchar("storage_path", { length: 500 }), // e.g., "cfdi/2024/01/uuid.xml"
+  xmlHash: varchar("xml_hash", { length: 64 }), // SHA-256
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("cfdi_nomina_empleado_idx").on(table.empleadoId),
+  periodoIdx: index("cfdi_nomina_periodo_idx").on(table.periodoNominaId),
+  uuidIdx: index("cfdi_nomina_uuid_idx").on(table.uuidFiscal),
+  estatusIdx: index("cfdi_nomina_estatus_idx").on(table.estatus),
+  clienteEmpresaIdx: index("cfdi_nomina_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type CfdiNomina = typeof cfdiNomina.$inferSelect;
+export const insertCfdiNominaSchema = createInsertSchema(cfdiNomina).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  subtotal: z.coerce.number().optional().nullable(),
+  descuento: z.coerce.number().optional().nullable(),
+  total: z.coerce.number().optional().nullable(),
+  numDiasPagados: z.coerce.number().optional().nullable(),
+  totalPercepciones: z.coerce.number().optional().nullable(),
+  totalDeducciones: z.coerce.number().optional().nullable(),
+  totalOtrosPagos: z.coerce.number().optional().nullable(),
+});
+export type InsertCfdiNomina = z.infer<typeof insertCfdiNominaSchema>;

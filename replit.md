@@ -23,6 +23,11 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 **Basis Points Helper Library**: A shared library (`shared/basisPoints.ts`) provides functions for converting pesos to basis points and performing safe arithmetic with 4-decimal precision using `Math.trunc()` to prevent rounding errors.
 **Formula Evaluator (Secure)**: The payroll engine uses `expr-eval` library with strict whitelist validation for safe formula evaluation. Only allowed variables (SALARIO_DIARIO, UMA_DIARIA, etc.) and functions (min, max, abs, round, ceil, floor) are permitted. Formulas are validated against a whitelist before parsing to prevent code injection.
 **Legal Concepts Catalog**: Pre-seeded catalog (`conceptos_medio_pago`) with 34 Mexican payroll concepts including formulas for ISR, IMSS, Prima Vacacional 25%, Aguinaldo 15 días, Horas Extra 2x/3x, etc. Includes `limiteExento` for tax-exempt calculations per LISR. Concepts are organized into 11 categories: salario, prevision_social, vales, plan_privado_pensiones, sindicato, horas_extra, prestaciones_ley, bonos_incentivos, descuentos, impuestos, and otros. The seed function (`server/seeds/conceptosLegales.ts`) auto-assigns categories to existing concepts.
+**SAT Catalogs Phase 1**: 
+  - `cat_bancos`: 15 Mexican banks with SAT codes (`codigo_sat`), account lengths (`longitud_cuenta`, `longitud_clabe`) for bank layout generation. Seeded at startup via `server/seeds/catalogosBase.ts`.
+  - `cat_valores_uma_smg`: UMA, SMG, SMG_FRONTERA values with `vigencia_desde`/`vigencia_hasta` dates for historical tax calculations. Includes 2024-2025 values.
+**Salary Change Tracking (Kardex Compensation)**: Table `kardex_compensation` automatically tracks salary changes (salarioDiario, SBC, SDI) via `storage.trackSalaryChanges()`. Records before/after values, effective date, and change type (CAMBIO_SALARIO, CAMBIO_SBC, CAMBIO_SDI, PROMOCION, AJUSTE_INFLACION).
+**CFDI Nómina Tracking**: Table `cfdi_nomina` stores CFDI 4.0 XML references with `uuid_fiscal`, timbrado dates, PAC info, and status tracking. Supports cancelación with motivo codes per SAT.
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow. Includes comprehensive finiquito/liquidación calculations with LISR exento/gravado splits.

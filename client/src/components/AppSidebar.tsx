@@ -28,6 +28,7 @@ import {
   FileWarning,
   Wallet,
   Gift,
+  Database,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -185,6 +186,11 @@ const configuracionSubItems = [
     title: "Catálogo de Conceptos",
     url: "/configuration/conceptos",
     icon: Calculator,
+  },
+  {
+    title: "Catálogos SAT",
+    url: "/configuration/catalogos",
+    icon: Database,
   },
 ];
 

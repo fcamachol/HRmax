@@ -120,6 +120,14 @@ import {
   type InsertPuestoBeneficioExtra,
   type EmpleadoBeneficioExtra,
   type InsertEmpleadoBeneficioExtra,
+  type CatBanco,
+  type InsertCatBanco,
+  type CatValorUmaSmg,
+  type InsertCatValorUmaSmg,
+  type KardexCompensation,
+  type InsertKardexCompensation,
+  type CfdiNomina,
+  type InsertCfdiNomina,
   type NominaMovimiento,
   type InsertNominaMovimiento,
   type NominaResumen,
@@ -200,7 +208,11 @@ import {
   esquemaBeneficios,
   puestoBeneficiosExtra,
   empleadoBeneficiosExtra,
-  layoutsGenerados
+  layoutsGenerados,
+  catBancos,
+  catValoresUmaSmg,
+  kardexCompensation,
+  cfdiNomina
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -762,6 +774,31 @@ export interface IStorage {
   getLayoutsGeneradosByMedioPago(medioPagoId: string): Promise<LayoutGenerado[]>;
   deleteLayoutGenerado(id: string): Promise<void>;
   deleteLayoutsGeneradosByNomina(nominaId: string): Promise<void>;
+  
+  // Catálogo de Bancos
+  getCatBancos(): Promise<CatBanco[]>;
+  getCatBanco(id: string): Promise<CatBanco | undefined>;
+  getCatBancoByCodigoSat(codigoSat: string): Promise<CatBanco | undefined>;
+  createCatBanco(banco: InsertCatBanco): Promise<CatBanco>;
+  
+  // Catálogo de Valores UMA/SMG
+  getCatValoresUmaSmg(): Promise<CatValorUmaSmg[]>;
+  getCatValorUmaSmgVigente(tipo: string, fecha?: string): Promise<CatValorUmaSmg | undefined>;
+  createCatValorUmaSmg(valor: InsertCatValorUmaSmg): Promise<CatValorUmaSmg>;
+  
+  // Kardex Compensation (Historial de cambios salariales)
+  createKardexCompensation(kardex: InsertKardexCompensation): Promise<KardexCompensation>;
+  getKardexCompensation(id: string): Promise<KardexCompensation | undefined>;
+  getKardexCompensationByEmpleado(empleadoId: string): Promise<KardexCompensation[]>;
+  getKardexCompensationByEmpresa(empresaId: string): Promise<KardexCompensation[]>;
+  
+  // CFDI Nómina (Seguimiento de timbrado)
+  createCfdiNomina(cfdi: InsertCfdiNomina): Promise<CfdiNomina>;
+  getCfdiNomina(id: string): Promise<CfdiNomina | undefined>;
+  getCfdiNominaByUuid(uuid: string): Promise<CfdiNomina | undefined>;
+  getCfdiNominasByEmpleado(empleadoId: string): Promise<CfdiNomina[]>;
+  getCfdiNominasByPeriodo(periodoId: string): Promise<CfdiNomina[]>;
+  updateCfdiNomina(id: string, updates: Partial<InsertCfdiNomina>): Promise<CfdiNomina>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -866,12 +903,99 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
+    const existingEmployee = await this.getEmployee(id);
+    
     const [updated] = await db
       .update(employees)
       .set(updates)
       .where(eq(employees.id, id))
       .returning();
+    
+    if (existingEmployee) {
+      await this.trackSalaryChanges(existingEmployee, updated, updates);
+    }
+    
     return updated;
+  }
+  
+  private async trackSalaryChanges(
+    before: Employee, 
+    after: Employee, 
+    _updates: Partial<InsertEmployee>
+  ): Promise<void> {
+    const parseNumeric = (val: string | number | bigint | null | undefined): number | undefined => {
+      if (val === null || val === undefined) return undefined;
+      if (typeof val === 'bigint') return Number(val);
+      if (typeof val === 'number') return val;
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? undefined : parsed;
+    };
+    
+    const bpToDecimal = (bp: bigint | null | undefined): number | undefined => {
+      if (bp === null || bp === undefined) return undefined;
+      return Number(bp) / 10000;
+    };
+    
+    const numericEquals = (a: number | undefined, b: number | undefined): boolean => {
+      if (a === undefined && b === undefined) return true;
+      if (a === undefined || b === undefined) return false;
+      return Math.abs(a - b) < 0.001;
+    };
+    
+    const salarioBefore = parseNumeric(before.salarioDiarioReal);
+    const salarioAfter = parseNumeric(after.salarioDiarioReal);
+    
+    const sbcDecimalBefore = parseNumeric(before.sbc);
+    const sbcDecimalAfter = parseNumeric(after.sbc);
+    const sbcBpBefore = bpToDecimal(before.sbcBp);
+    const sbcBpAfter = bpToDecimal(after.sbcBp);
+    
+    const sdiDecimalBefore = parseNumeric(before.sdi);
+    const sdiDecimalAfter = parseNumeric(after.sdi);
+    const sdiBpBefore = bpToDecimal(before.sdiBp);
+    const sdiBpAfter = bpToDecimal(after.sdiBp);
+    
+    const salarioChanged = !numericEquals(salarioBefore, salarioAfter);
+    const sbcDecimalChanged = !numericEquals(sbcDecimalBefore, sbcDecimalAfter);
+    const sbcBpChanged = !numericEquals(sbcBpBefore, sbcBpAfter);
+    const sdiDecimalChanged = !numericEquals(sdiDecimalBefore, sdiDecimalAfter);
+    const sdiBpChanged = !numericEquals(sdiBpBefore, sdiBpAfter);
+    
+    const sbcChanged = sbcDecimalChanged || sbcBpChanged;
+    const sdiChanged = sdiDecimalChanged || sdiBpChanged;
+    
+    if (!salarioChanged && !sbcChanged && !sdiChanged) return;
+    
+    const changedFields: string[] = [];
+    if (salarioChanged) changedFields.push('salarioDiarioReal');
+    if (sbcDecimalChanged) changedFields.push('sbc');
+    if (sbcBpChanged) changedFields.push('sbcBp');
+    if (sdiDecimalChanged) changedFields.push('sdi');
+    if (sdiBpChanged) changedFields.push('sdiBp');
+    
+    const tipoCambio = salarioChanged ? 'CAMBIO_SALARIO' : sbcChanged ? 'CAMBIO_SBC' : 'CAMBIO_SDI';
+    
+    const sbcBefore = sbcBpBefore ?? sbcDecimalBefore;
+    const sbcAfter = sbcBpAfter ?? sbcDecimalAfter;
+    const sdiBefore = sdiBpBefore ?? sdiDecimalBefore;
+    const sdiAfter = sdiBpAfter ?? sdiDecimalAfter;
+    
+    const kardexEntry: InsertKardexCompensation = {
+      empleadoId: after.id,
+      empresaId: after.empresaId,
+      tipoCambio,
+      fechaEfectiva: new Date().toISOString().split('T')[0],
+      salarioDiarioAnterior: salarioBefore,
+      salarioDiarioNuevo: salarioAfter,
+      sbcAnterior: sbcBefore,
+      sbcNuevo: sbcAfter,
+      sdiAnterior: sdiBefore,
+      sdiNuevo: sdiAfter,
+      motivo: `Actualización automática: ${changedFields.join(', ')}`,
+      registradoPor: 'SISTEMA',
+    };
+    
+    await this.createKardexCompensation(kardexEntry);
   }
 
   async deleteEmployee(id: string): Promise<void> {
@@ -4728,6 +4852,119 @@ export class DatabaseStorage implements IStorage {
 
   async deleteLayoutsGeneradosByNomina(nominaId: string): Promise<void> {
     await db.delete(layoutsGenerados).where(eq(layoutsGenerados.nominaId, nominaId));
+  }
+
+  // ============================================================================
+  // CATÁLOGO DE BANCOS
+  // ============================================================================
+
+  async getCatBancos(): Promise<CatBanco[]> {
+    return db.select().from(catBancos).where(eq(catBancos.activo, true)).orderBy(catBancos.nombreCorto);
+  }
+
+  async getCatBanco(id: string): Promise<CatBanco | undefined> {
+    const [banco] = await db.select().from(catBancos).where(eq(catBancos.id, id));
+    return banco || undefined;
+  }
+
+  async getCatBancoByCodigoSat(codigoSat: string): Promise<CatBanco | undefined> {
+    const [banco] = await db.select().from(catBancos).where(eq(catBancos.codigoSat, codigoSat));
+    return banco || undefined;
+  }
+
+  async createCatBanco(banco: InsertCatBanco): Promise<CatBanco> {
+    const [created] = await db.insert(catBancos).values(banco).returning();
+    return created;
+  }
+
+  // ============================================================================
+  // CATÁLOGO DE VALORES UMA/SMG
+  // ============================================================================
+
+  async getCatValoresUmaSmg(): Promise<CatValorUmaSmg[]> {
+    return db.select().from(catValoresUmaSmg).orderBy(desc(catValoresUmaSmg.vigenciaDesde));
+  }
+
+  async getCatValorUmaSmgVigente(tipo: string, fecha?: string): Promise<CatValorUmaSmg | undefined> {
+    const targetDate = fecha || new Date().toISOString().split('T')[0];
+    const [valor] = await db.select().from(catValoresUmaSmg)
+      .where(and(
+        eq(catValoresUmaSmg.tipo, tipo),
+        lte(catValoresUmaSmg.vigenciaDesde, targetDate)
+      ))
+      .orderBy(desc(catValoresUmaSmg.vigenciaDesde))
+      .limit(1);
+    return valor || undefined;
+  }
+
+  async createCatValorUmaSmg(valor: InsertCatValorUmaSmg): Promise<CatValorUmaSmg> {
+    const [created] = await db.insert(catValoresUmaSmg).values(valor).returning();
+    return created;
+  }
+
+  // ============================================================================
+  // KARDEX COMPENSATION (Historial de cambios salariales)
+  // ============================================================================
+
+  async createKardexCompensation(kardex: InsertKardexCompensation): Promise<KardexCompensation> {
+    const [created] = await db.insert(kardexCompensation).values(kardex).returning();
+    return created;
+  }
+
+  async getKardexCompensation(id: string): Promise<KardexCompensation | undefined> {
+    const [kardex] = await db.select().from(kardexCompensation).where(eq(kardexCompensation.id, id));
+    return kardex || undefined;
+  }
+
+  async getKardexCompensationByEmpleado(empleadoId: string): Promise<KardexCompensation[]> {
+    return db.select().from(kardexCompensation)
+      .where(eq(kardexCompensation.empleadoId, empleadoId))
+      .orderBy(desc(kardexCompensation.fechaEfectiva));
+  }
+
+  async getKardexCompensationByEmpresa(empresaId: string): Promise<KardexCompensation[]> {
+    return db.select().from(kardexCompensation)
+      .where(eq(kardexCompensation.empresaId, empresaId))
+      .orderBy(desc(kardexCompensation.fechaEfectiva));
+  }
+
+  // ============================================================================
+  // CFDI NÓMINA (Seguimiento de timbrado)
+  // ============================================================================
+
+  async createCfdiNomina(cfdi: InsertCfdiNomina): Promise<CfdiNomina> {
+    const [created] = await db.insert(cfdiNomina).values(cfdi).returning();
+    return created;
+  }
+
+  async getCfdiNomina(id: string): Promise<CfdiNomina | undefined> {
+    const [cfdi] = await db.select().from(cfdiNomina).where(eq(cfdiNomina.id, id));
+    return cfdi || undefined;
+  }
+
+  async getCfdiNominaByUuid(uuid: string): Promise<CfdiNomina | undefined> {
+    const [cfdi] = await db.select().from(cfdiNomina).where(eq(cfdiNomina.uuidFiscal, uuid));
+    return cfdi || undefined;
+  }
+
+  async getCfdiNominasByEmpleado(empleadoId: string): Promise<CfdiNomina[]> {
+    return db.select().from(cfdiNomina)
+      .where(eq(cfdiNomina.empleadoId, empleadoId))
+      .orderBy(desc(cfdiNomina.fechaTimbrado));
+  }
+
+  async getCfdiNominasByPeriodo(periodoId: string): Promise<CfdiNomina[]> {
+    return db.select().from(cfdiNomina)
+      .where(eq(cfdiNomina.periodoNominaId, periodoId))
+      .orderBy(cfdiNomina.empleadoId);
+  }
+
+  async updateCfdiNomina(id: string, updates: Partial<InsertCfdiNomina>): Promise<CfdiNomina> {
+    const [updated] = await db.update(cfdiNomina)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(cfdiNomina.id, id))
+      .returning();
+    return updated;
   }
 }
 
