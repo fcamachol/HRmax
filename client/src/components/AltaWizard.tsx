@@ -90,6 +90,7 @@ interface AltaFormData {
   // Paso 5: Datos Bancarios y Fiscales
   nss: string;
   banco: string;
+  cuenta: string;
   clabe: string;
   sucursal: string;
   formaPago: string;
@@ -168,6 +169,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     // Paso 5
     nss: "",
     banco: "",
+    cuenta: "",
     clabe: "",
     sucursal: "",
     formaPago: "transferencia",
@@ -258,6 +260,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         telefonoEmergencia: (existingProcess as any).telefonoEmergencia || "",
         nss: existingProcess.nss || "",
         banco: (existingProcess as any).banco || "",
+        cuenta: (existingProcess as any).cuenta || "",
         clabe: (existingProcess as any).clabe || "",
         sucursal: (existingProcess as any).sucursal || "",
         formaPago: (existingProcess as any).formaPago || "transferencia",
@@ -306,6 +309,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       telefonoEmergencia: "",
       nss: "",
       banco: "",
+      cuenta: "",
       clabe: "",
       sucursal: "",
       formaPago: "transferencia",
@@ -350,14 +354,20 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
 
   const saveProcessMutation = useMutation({
     mutationFn: async (data: AltaFormData) => {
+      // Look up position and department names from their IDs
+      const selectedPuesto = puestos?.find(p => p.id === data.puestoId);
+      const selectedDepartamento = departamentos?.find(d => d.id === data.departamentoId);
+      const positionName = selectedPuesto ? `${selectedPuesto.clavePuesto} - ${selectedPuesto.nombrePuesto}` : "";
+      const departmentName = selectedDepartamento?.nombre || "";
+
       const payload = {
         clienteId: "209b253d-42ac-4ab6-8e1f-f6bfa0f801d3",
         empresaId: data.empresaId,
         nombre: data.nombre,
         apellidoPaterno: data.apellidoPaterno,
         apellidoMaterno: data.apellidoMaterno,
-        position: data.puestoId || "",
-        department: data.departamentoId || "",
+        position: positionName,
+        department: departmentName,
         puestoId: data.puestoId,
         departamentoId: data.departamentoId,
         proposedSalary: data.proposedSalary,
@@ -389,6 +399,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         telefonoEmergencia: data.telefonoEmergencia,
         // Datos bancarios
         banco: data.banco,
+        cuenta: data.cuenta,
         clabe: data.clabe,
         sucursal: data.sucursal,
         formaPago: data.formaPago,
@@ -1189,6 +1200,21 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
               </div>
               
               <div>
+                <Label htmlFor="cuenta" data-testid="label-cuenta">
+                  Número de Cuenta
+                </Label>
+                <Input
+                  id="cuenta"
+                  data-testid="input-cuenta"
+                  value={formData.cuenta}
+                  onChange={(e) => setFormData({ ...formData, cuenta: e.target.value })}
+                  placeholder="Número de cuenta bancaria"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
                 <Label htmlFor="clabe" data-testid="label-clabe">
                   CLABE Interbancaria
                 </Label>
@@ -1199,21 +1225,6 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   onChange={(e) => setFormData({ ...formData, clabe: e.target.value })}
                   placeholder="18 dígitos"
                   maxLength={18}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="sucursal" data-testid="label-sucursal">
-                  Sucursal
-                </Label>
-                <Input
-                  id="sucursal"
-                  data-testid="input-sucursal"
-                  value={formData.sucursal}
-                  onChange={(e) => setFormData({ ...formData, sucursal: e.target.value })}
-                  placeholder="Número de sucursal"
                 />
               </div>
               
@@ -1237,6 +1248,19 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="sucursal" data-testid="label-sucursal">
+                Sucursal
+              </Label>
+              <Input
+                id="sucursal"
+                data-testid="input-sucursal"
+                value={formData.sucursal}
+                onChange={(e) => setFormData({ ...formData, sucursal: e.target.value })}
+                placeholder="Número de sucursal (opcional)"
+              />
             </div>
           </div>
         );

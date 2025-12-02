@@ -920,6 +920,7 @@ export const hiringProcess = pgTable("hiring_process", {
   telefonoEmergencia: varchar("telefono_emergencia", { length: 10 }),
   // Datos bancarios
   banco: varchar("banco"),
+  cuenta: varchar("cuenta"), // Número de cuenta bancaria
   clabe: varchar("clabe", { length: 18 }),
   sucursal: varchar("sucursal"),
   formaPago: varchar("forma_pago"),

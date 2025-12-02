@@ -74,14 +74,9 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
     >
       <CardHeader className="p-2 space-y-1">
         <div className="flex justify-between items-start gap-1">
-          <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-            <Badge variant="default" className="text-xs w-fit">
-              {process.position}
-            </Badge>
-            <span className="text-xs text-muted-foreground line-clamp-1">
-              {process.department}
-            </span>
-          </div>
+          <CardTitle className="text-sm font-medium line-clamp-1 flex-1" data-testid={`text-process-name-${process.id}`}>
+            {process.nombre} {process.apellidoPaterno}{process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}
+          </CardTitle>
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
               <Button
@@ -94,13 +89,16 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(process)} data-testid={`menu-edit-${process.id}`}>
+              <DropdownMenuItem 
+                onClick={(e) => { e.stopPropagation(); onEdit(process); }} 
+                data-testid={`menu-edit-${process.id}`}
+              >
                 <Edit className="w-4 h-4 mr-2" />
                 Editar
               </DropdownMenuItem>
               {stage === 'oferta' && (
                 <DropdownMenuItem
-                  onClick={() => onShowCarta(process)}
+                  onClick={(e) => { e.stopPropagation(); onShowCarta(process); }}
                   data-testid={`menu-carta-oferta-${process.id}`}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -108,7 +106,7 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
-                onClick={() => onDelete(process.id)}
+                onClick={(e) => { e.stopPropagation(); onDelete(process.id); }}
                 className="text-destructive"
                 data-testid={`menu-delete-${process.id}`}
               >
@@ -118,9 +116,11 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <CardTitle className="text-xs line-clamp-1" data-testid={`text-process-name-${process.id}`}>
-          {process.nombre} {process.apellidoPaterno}{process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}
-        </CardTitle>
+        {process.position && (
+          <Badge variant="secondary" className="text-xs w-fit mt-1">
+            {process.position}
+          </Badge>
+        )}
         <CardDescription className="text-xs line-clamp-1 flex items-center gap-1" data-testid={`text-process-salary-${process.id}`}>
           <DollarSign className="h-3 w-3" />
           ${parseFloat(process.proposedSalary).toLocaleString('es-MX')}
