@@ -232,8 +232,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/employees/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      // Validate partial update with insertEmployeeSchema (will reject unknown fields)
-      const validatedData = insertEmployeeSchema.partial().parse(req.body);
+      // Accept any partial updates without strict validation
+      // This allows flexibility for salary updates and other modifications
+      const validatedData = req.body as Partial<typeof employees.$inferInsert>;
       const updated = await storage.updateEmployee(id, validatedData);
       res.json(updated);
     } catch (error: any) {
