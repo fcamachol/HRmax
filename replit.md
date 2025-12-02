@@ -28,6 +28,8 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
   - `cat_valores_uma_smg`: UMA, SMG, SMG_FRONTERA values with `vigencia_desde`/`vigencia_hasta` dates for historical tax calculations. Includes 2024-2025 values.
 **Salary Change Tracking (Kardex Compensation)**: Table `kardex_compensation` automatically tracks salary changes (salarioDiario, SBC, SDI) via `storage.trackSalaryChanges()`. Records before/after values, effective date, and change type (CAMBIO_SALARIO, CAMBIO_SBC, CAMBIO_SDI, PROMOCION, AJUSTE_INFLACION).
 **CFDI Nómina Tracking**: Table `cfdi_nomina` stores CFDI 4.0 XML references with `uuid_fiscal`, timbrado dates, PAC info, and status tracking. Supports cancelación with motivo codes per SAT.
+**IMSS Movement Tracking (Phase 2)**: Table `imss_movimientos` tracks employee movements (alta, baja, modificacion_salario, reingreso) with automatic linkage to `kardex_compensation` via `kardexCompensationId`. Stores dual decimal/BP SBC values (`sbcDecimal`, `sbcBp`) for precise audit trails. Movements are auto-created when salary changes are detected via `trackSalaryChanges()`, prioritizing basis-point values as authoritative source. Endpoints validated with Zod schemas.
+**SUA Bimestral Tracking (Phase 2)**: Table `sua_bimestres` manages IMSS bimonthly payment periods using `ejercicio`/`bimestre` (1-6) with status workflow: pendiente → calculado → pagado/vencido. Tracks montos (obrero, patronal, total) and payment dates. Full CRUD API with Zod validation.
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow. Includes comprehensive finiquito/liquidación calculations with LISR exento/gravado splits.
@@ -40,6 +42,7 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 *   **Recruitment & Selection Module**: Includes management of job openings (Vacantes), candidate tracking (Candidatos), and automated candidate-vacancy linking.
 *   **Personal Management - Actas Administrativas (Administrative Records)**: Tracks disciplinary actions, incident documentation, and sanction management.
 *   **Configuration - Medios de Pago (Payment Methods)**: Manages payment platforms with CRUD operations.
+*   **IMSS Module (Phase 2)**: Complete IMSS movement management with Movimientos page (list, filter, create/edit movements) and SUA Bimestres page (bimonthly payment tracking with status management).
 
 ## External Dependencies
 
