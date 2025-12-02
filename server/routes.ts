@@ -164,7 +164,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/employees", async (req, res) => {
     try {
-      const { centroTrabajoId, grupoNominaId } = req.query;
+      const { centroTrabajoId, grupoNominaId, empresaId, activo } = req.query;
+      
+      // Filtrar por empresa (returns active employees by default)
+      if (empresaId) {
+        // Get all centros for this empresa
+        const centros = await storage.getCentrosTrabajoByEmpresa(empresaId as string);
+        const centroIds = centros.map(c => c.id);
+        
+        // Get employees from all centros
+        const allEmployees = [];
+        for (const centroId of centroIds) {
+          const empsByCentro = await storage.getEmployeesByCentroTrabajo(centroId);
+          allEmployees.push(...empsByCentro);
+        }
+        
+        // Filter by active status if specified
+        if (activo === "true") {
+          const activeEmployees = allEmployees.filter(e => e.estatus === "activo");
+          return res.json(activeEmployees);
+        }
+        
+        return res.json(allEmployees);
+      }
       
       // Filtrar por ambos: centro y grupo
       if (centroTrabajoId && grupoNominaId) {
@@ -5196,6 +5218,224 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteSuaBimestre(req.params.id);
       res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== IMSS CALCULATION ENGINE (Phase 3) ====================
+  
+  app.get("/api/imss/configuracion/:anio", async (req, res) => {
+    try {
+      const { getConfiguracionIMSS } = await import("./services/imssCalculator");
+      const anio = parseInt(req.params.anio);
+      const config = await getConfiguracionIMSS(anio);
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/imss/cuotas-catalogo/:anio", async (req, res) => {
+    try {
+      const { getCuotasIMSS } = await import("./services/imssCalculator");
+      const anio = parseInt(req.params.anio);
+      const cuotas = await getCuotasIMSS(anio);
+      res.json(cuotas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/imss/cesantia-vejez-tasas/:anio", async (req, res) => {
+    try {
+      const { getRangosCesantiaVejez } = await import("./services/imssCalculator");
+      const anio = parseInt(req.params.anio);
+      const tasas = await getRangosCesantiaVejez(anio);
+      res.json(tasas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/calcular-cuotas", async (req, res) => {
+    try {
+      const { calcularCuotasIMSS, getConfiguracionIMSS } = await import("./services/imssCalculator");
+      const { empleado, anio } = req.body;
+      
+      if (!empleado || !anio) {
+        return res.status(400).json({ message: "Se requiere empleado y anio" });
+      }
+      
+      const config = await getConfiguracionIMSS(anio);
+      const resultado = await calcularCuotasIMSS(empleado, config);
+      
+      res.json({
+        ...resultado,
+        totalObreroBp: resultado.totalObreroBp.toString(),
+        totalPatronalBp: resultado.totalPatronalBp.toString(),
+        totalBp: resultado.totalBp.toString(),
+        cuotasObrero: resultado.cuotasObrero.map(c => ({
+          ...c,
+          baseBp: c.baseBp.toString(),
+          montoBp: c.montoBp.toString(),
+        })),
+        cuotasPatronal: resultado.cuotasPatronal.map(c => ({
+          ...c,
+          baseBp: c.baseBp.toString(),
+          montoBp: c.montoBp.toString(),
+        })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/imss/calcular-bimestre", async (req, res) => {
+    try {
+      const { calcularCuotasBimestrales } = await import("./services/imssCalculator");
+      const { empresaId, empleados, ejercicio, bimestre } = req.body;
+      
+      if (!empresaId || !empleados || !ejercicio || !bimestre) {
+        return res.status(400).json({ 
+          message: "Se requiere empresaId, empleados, ejercicio y bimestre" 
+        });
+      }
+      
+      const resultado = await calcularCuotasBimestrales(
+        empresaId,
+        empleados,
+        ejercicio,
+        bimestre
+      );
+      
+      res.json({
+        ...resultado,
+        // Serialize bimestral totals (bigint to string)
+        totalesObreroBp: resultado.totalesObreroBp.toString(),
+        totalesPatronalBp: resultado.totalesPatronalBp.toString(),
+        totalesGeneralBp: resultado.totalesGeneralBp.toString(),
+        // Serialize desglose per ramo (bigint to string)
+        desglosePorRamo: resultado.desglosePorRamo.map(r => ({
+          ...r,
+          obreroBp: r.obreroBp.toString(),
+          patronalBp: r.patronalBp.toString(),
+          totalBp: r.totalBp.toString(),
+        })),
+        // Serialize employee-level data
+        empleados: resultado.empleados.map(e => ({
+          ...e,
+          totalObreroBp: e.totalObreroBp.toString(),
+          totalPatronalBp: e.totalPatronalBp.toString(),
+          totalBp: e.totalBp.toString(),
+          cuotasObrero: e.cuotasObrero.map(c => ({
+            ...c,
+            baseBp: c.baseBp.toString(),
+            montoBp: c.montoBp.toString(),
+          })),
+          cuotasPatronal: e.cuotasPatronal.map(c => ({
+            ...c,
+            baseBp: c.baseBp.toString(),
+            montoBp: c.montoBp.toString(),
+          })),
+        })),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SUA/IDSE FILE GENERATION (Phase 3) ====================
+  
+  app.post("/api/sua/generar-archivo", async (req, res) => {
+    try {
+      const { generarArchivoSUA, generarReporteRamos, generarResumenCSV } = await import("./services/suaGenerator");
+      const { patron, empleados, resultado } = req.body;
+      
+      if (!patron || !empleados || !resultado) {
+        return res.status(400).json({ 
+          message: "Se requiere patron, empleados y resultado del cálculo" 
+        });
+      }
+      
+      const archivoSUA = generarArchivoSUA(patron, empleados, resultado);
+      const reporteRamos = generarReporteRamos(resultado);
+      const resumenCSV = generarResumenCSV(resultado);
+      
+      res.json({
+        archivo: archivoSUA,
+        reporteRamos,
+        resumenCSV,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/idse/generar-archivos", async (req, res) => {
+    try {
+      const { generarArchivosIDSE, validarMovimiento, generarResumenMovimientos } = await import("./services/idseGenerator");
+      const { patron, movimientos } = req.body;
+      
+      if (!patron || !movimientos || !Array.isArray(movimientos)) {
+        return res.status(400).json({ 
+          message: "Se requiere patron y array de movimientos" 
+        });
+      }
+      
+      // Validar todos los movimientos
+      const validaciones = movimientos.map((m: any) => ({
+        nss: m.nss,
+        ...validarMovimiento(m)
+      }));
+      
+      const movimientosInvalidos = validaciones.filter((v: any) => !v.valido);
+      
+      if (movimientosInvalidos.length > 0) {
+        return res.status(400).json({
+          message: "Hay movimientos con errores de validación",
+          errores: movimientosInvalidos,
+        });
+      }
+      
+      const archivos = generarArchivosIDSE(patron, movimientos);
+      const resumen = generarResumenMovimientos(movimientos);
+      
+      res.json({
+        archivos,
+        resumen,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/idse/validar-movimientos", async (req, res) => {
+    try {
+      const { validarMovimiento, validarNSS, validarCURP } = await import("./services/idseGenerator");
+      const { movimientos } = req.body;
+      
+      if (!movimientos || !Array.isArray(movimientos)) {
+        return res.status(400).json({ message: "Se requiere array de movimientos" });
+      }
+      
+      const validaciones = movimientos.map((m: any) => ({
+        nss: m.nss,
+        curp: m.curp,
+        nombre: m.nombre,
+        ...validarMovimiento(m),
+        validacionNSS: validarNSS(m.nss),
+        validacionCURP: validarCURP(m.curp),
+      }));
+      
+      const todosValidos = validaciones.every((v: any) => v.valido);
+      
+      res.json({
+        todosValidos,
+        validaciones,
+        totalValidos: validaciones.filter((v: any) => v.valido).length,
+        totalInvalidos: validaciones.filter((v: any) => !v.valido).length,
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

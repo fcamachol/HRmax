@@ -31,6 +31,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { 
   Calendar,
   Calculator,
@@ -42,9 +45,32 @@ import {
   Building2,
   RefreshCw,
   DollarSign,
-  FileDown
+  FileDown,
+  Download,
+  Eye,
+  Loader2
 } from "lucide-react";
 import type { SuaBimestre, Empresa, RegistroPatronal } from "@shared/schema";
+
+interface CalculoResultado {
+  totalesObrero: number;
+  totalesPatronal: number;
+  totalesGeneral: number;
+  empleados: Array<{
+    empleadoId: string;
+    sbcDiario: number;
+    diasCotizados: number;
+    totalObrero: number;
+    totalPatronal: number;
+    total: number;
+  }>;
+  desglosePorRamo: Array<{
+    ramo: string;
+    obrero: number;
+    patronal: number;
+    total: number;
+  }>;
+}
 
 const bimestreLabels: Record<number, string> = {
   1: "Ene-Feb",
@@ -69,8 +95,10 @@ export default function SuaBimestres() {
   const [selectedRegistroPatronal, setSelectedRegistroPatronal] = useState<string>("");
   const [selectedEjercicio, setSelectedEjercicio] = useState<string>(new Date().getFullYear().toString());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogType, setDialogType] = useState<"calcular" | "generar" | "pago">("calcular");
+  const [dialogType, setDialogType] = useState<"calcular" | "generar" | "pago" | "preview">("calcular");
   const [selectedBimestre, setSelectedBimestre] = useState<SuaBimestre | null>(null);
+  const [calculoResultado, setCalculoResultado] = useState<CalculoResultado | null>(null);
+  const [isCalculating, setIsCalculating] = useState(false);
   
   const [pagoData, setPagoData] = useState({
     fechaPago: "",
@@ -165,18 +193,77 @@ export default function SuaBimestres() {
     return `$${num.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
-  const openActionDialog = (bimestre: SuaBimestre, type: "calcular" | "generar" | "pago") => {
+  const openActionDialog = (bimestre: SuaBimestre, type: "calcular" | "generar" | "pago" | "preview") => {
     setSelectedBimestre(bimestre);
     setDialogType(type);
+    setCalculoResultado(null);
     setDialogOpen(true);
+    
+    if (type === "calcular" || type === "preview") {
+      calcularCuotasBimestre(bimestre);
+    }
   };
 
-  const handleDialogConfirm = () => {
+  const calcularCuotasBimestre = async (bimestre: SuaBimestre) => {
+    setIsCalculating(true);
+    try {
+      const empleadosRes = await apiRequest("GET", `/api/employees?empresaId=${selectedEmpresa}&activo=true`);
+      const empleadosData = (empleadosRes as any[]) || [];
+      
+      const empleadosIMSS = empleadosData.map((e: any) => ({
+        empleadoId: e.id,
+        sbcDiario: parseFloat(e.sbc || e.salarioDiario || "0"),
+        diasCotizados: 61,
+        empresaId: selectedEmpresa,
+      }));
+
+      if (empleadosIMSS.length === 0) {
+        toast({ 
+          title: "Sin empleados", 
+          description: "No hay empleados activos para calcular",
+          variant: "destructive" 
+        });
+        setIsCalculating(false);
+        return;
+      }
+
+      const resultado = await apiRequest("POST", "/api/imss/calcular-bimestre", {
+        empresaId: selectedEmpresa,
+        empleados: empleadosIMSS,
+        ejercicio: parseInt(selectedEjercicio),
+        bimestre: bimestre.bimestre,
+      });
+
+      setCalculoResultado(resultado as CalculoResultado);
+    } catch (error: any) {
+      toast({ 
+        title: "Error al calcular", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
+
+  const handleDialogConfirm = async () => {
     if (!selectedBimestre) return;
     
     switch (dialogType) {
       case "calcular":
-        calcularMutation.mutate(selectedBimestre.id);
+        if (calculoResultado) {
+          await apiRequest("PATCH", `/api/sua/bimestres/${selectedBimestre.id}`, {
+            estatus: "calculado",
+            fechaCalculo: new Date().toISOString(),
+            importeObreroDecimal: calculoResultado.totalesObrero.toString(),
+            importePatronalDecimal: calculoResultado.totalesPatronal.toString(),
+            importeTotalDecimal: calculoResultado.totalesGeneral.toString(),
+            numEmpleados: calculoResultado.empleados.length,
+          });
+          refetch();
+          toast({ title: "Bimestre calculado", description: "Las cuotas han sido calculadas y guardadas correctamente" });
+          setDialogOpen(false);
+        }
         break;
       case "generar":
         generarArchivoMutation.mutate(selectedBimestre.id);
@@ -184,7 +271,28 @@ export default function SuaBimestres() {
       case "pago":
         registrarPagoMutation.mutate({ id: selectedBimestre.id, data: pagoData });
         break;
+      case "preview":
+        setDialogOpen(false);
+        break;
     }
+  };
+
+  const downloadCSV = () => {
+    if (!calculoResultado || !selectedBimestre) return;
+    
+    let csv = "Ramo,Cuota Obrero,Cuota Patronal,Total\n";
+    for (const ramo of calculoResultado.desglosePorRamo) {
+      csv += `${ramo.ramo},${ramo.obrero.toFixed(2)},${ramo.patronal.toFixed(2)},${ramo.total.toFixed(2)}\n`;
+    }
+    csv += `\nTOTALES,${calculoResultado.totalesObrero.toFixed(2)},${calculoResultado.totalesPatronal.toFixed(2)},${calculoResultado.totalesGeneral.toFixed(2)}\n`;
+    
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `cuotas_imss_${selectedEjercicio}_b${selectedBimestre.bimestre}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const countByEstatus = (estatus: string) => 
@@ -392,8 +500,20 @@ export default function SuaBimestres() {
                             variant="outline"
                             onClick={() => openActionDialog(bim, "calcular")}
                             data-testid={`button-calcular-${bim.id}`}
+                            title="Calcular cuotas"
                           >
                             <Calculator className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {(bim.estatus === "calculado" || bim.estatus === "archivo_generado" || bim.estatus === "pagado") && (
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => openActionDialog(bim, "preview")}
+                            data-testid={`button-preview-${bim.id}`}
+                            title="Ver detalle de cuotas"
+                          >
+                            <Eye className="h-3 w-3" />
                           </Button>
                         )}
                         {bim.estatus === "calculado" && (
@@ -402,6 +522,7 @@ export default function SuaBimestres() {
                             variant="outline"
                             onClick={() => openActionDialog(bim, "generar")}
                             data-testid={`button-generar-${bim.id}`}
+                            title="Generar archivo SUA"
                           >
                             <FileDown className="h-3 w-3" />
                           </Button>
@@ -412,6 +533,7 @@ export default function SuaBimestres() {
                             variant="outline"
                             onClick={() => openActionDialog(bim, "pago")}
                             data-testid={`button-pago-${bim.id}`}
+                            title="Registrar pago"
                           >
                             <CreditCard className="h-3 w-3" />
                           </Button>
@@ -427,19 +549,151 @@ export default function SuaBimestres() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className={dialogType === "calcular" || dialogType === "preview" ? "max-w-3xl" : "max-w-md"}>
           <DialogHeader>
             <DialogTitle>
               {dialogType === "calcular" && "Calcular Cuotas del Bimestre"}
+              {dialogType === "preview" && "Detalle de Cuotas Calculadas"}
               {dialogType === "generar" && "Generar Archivo SUA"}
               {dialogType === "pago" && "Registrar Pago"}
             </DialogTitle>
             <DialogDescription>
-              {dialogType === "calcular" && "Se calcularán las cuotas IMSS para este bimestre basado en los empleados activos y sus SBC."}
+              {dialogType === "calcular" && "Cuotas IMSS calculadas con tasas progresivas 2025"}
+              {dialogType === "preview" && `Bimestre ${selectedBimestre?.bimestre} - ${selectedEjercicio}`}
               {dialogType === "generar" && "Se generará el archivo de texto para importar en el sistema SUA."}
               {dialogType === "pago" && "Registra los datos del pago realizado ante el banco."}
             </DialogDescription>
           </DialogHeader>
+          
+          {(dialogType === "calcular" || dialogType === "preview") && (
+            <div className="space-y-4">
+              {isCalculating ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                  <p className="text-sm text-muted-foreground">Calculando cuotas con tasas progresivas...</p>
+                </div>
+              ) : calculoResultado ? (
+                <Tabs defaultValue="resumen" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="resumen">Resumen por Ramo</TabsTrigger>
+                    <TabsTrigger value="empleados">Detalle Empleados</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="resumen" className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm text-muted-foreground">Cuota Obrero</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xl font-bold">{formatCurrency(calculoResultado.totalesObrero)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm text-muted-foreground">Cuota Patronal</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xl font-bold">{formatCurrency(calculoResultado.totalesPatronal)}</p>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm text-muted-foreground">Total a Pagar</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <p className="text-xl font-bold text-primary">{formatCurrency(calculoResultado.totalesGeneral)}</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    <Separator />
+                    
+                    <ScrollArea className="h-[250px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ramo de Seguro</TableHead>
+                            <TableHead className="text-right">Obrero</TableHead>
+                            <TableHead className="text-right">Patronal</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {calculoResultado.desglosePorRamo.map((ramo) => (
+                            <TableRow key={ramo.ramo}>
+                              <TableCell className="font-medium capitalize">
+                                {ramo.ramo.replace(/_/g, ' ')}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatCurrency(ramo.obrero)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatCurrency(ramo.patronal)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold">
+                                {formatCurrency(ramo.total)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </TabsContent>
+                  
+                  <TabsContent value="empleados">
+                    <ScrollArea className="h-[300px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Empleado</TableHead>
+                            <TableHead className="text-right">SBC Diario</TableHead>
+                            <TableHead className="text-right">Días</TableHead>
+                            <TableHead className="text-right">Obrero</TableHead>
+                            <TableHead className="text-right">Patronal</TableHead>
+                            <TableHead className="text-right">Total</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {calculoResultado.empleados.slice(0, 50).map((emp) => (
+                            <TableRow key={emp.empleadoId}>
+                              <TableCell className="font-medium text-xs">
+                                {emp.empleadoId.slice(0, 8)}...
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatCurrency(emp.sbcDiario)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {emp.diasCotizados}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatCurrency(emp.totalObrero)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatCurrency(emp.totalPatronal)}
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold">
+                                {formatCurrency(emp.total)}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {calculoResultado.empleados.length > 50 && (
+                            <TableRow>
+                              <TableCell colSpan={6} className="text-center text-muted-foreground">
+                                ... y {calculoResultado.empleados.length - 50} empleados más
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">No hay datos de cálculo disponibles</p>
+              )}
+            </div>
+          )}
           
           {dialogType === "pago" && (
             <div className="space-y-4">
@@ -495,19 +749,29 @@ export default function SuaBimestres() {
             </div>
           )}
           
-          <DialogFooter>
+          <DialogFooter className="gap-2">
+            {(dialogType === "calcular" || dialogType === "preview") && calculoResultado && (
+              <Button variant="outline" onClick={downloadCSV} data-testid="button-download-csv">
+                <Download className="h-4 w-4 mr-2" />
+                Descargar CSV
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancelar
+              {dialogType === "preview" ? "Cerrar" : "Cancelar"}
             </Button>
-            <Button 
-              onClick={handleDialogConfirm}
-              disabled={
-                dialogType === "pago" && (!pagoData.fechaPago || !pagoData.importePagadoDecimal)
-              }
-              data-testid="button-dialog-confirm"
-            >
-              Confirmar
-            </Button>
+            {dialogType !== "preview" && (
+              <Button 
+                onClick={handleDialogConfirm}
+                disabled={
+                  (dialogType === "calcular" && (isCalculating || !calculoResultado)) ||
+                  (dialogType === "pago" && (!pagoData.fechaPago || !pagoData.importePagadoDecimal))
+                }
+                data-testid="button-dialog-confirm"
+              >
+                {isCalculating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {dialogType === "calcular" ? "Guardar Cálculo" : "Confirmar"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
