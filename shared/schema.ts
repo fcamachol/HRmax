@@ -3277,6 +3277,58 @@ export const insertCatImssCuotaSchema = createInsertSchema(catImssCuotas).omit({
 });
 export type InsertCatImssCuota = z.infer<typeof insertCatImssCuotaSchema>;
 
+// Tasas Progresivas de Cesantía y Vejez (Reforma 2020-2030)
+// Las cuotas patronales de CyV aumentan gradualmente según el nivel salarial
+export const catCesantiaVejezTasas = pgTable("cat_cesantia_vejez_tasas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anio: integer("anio").notNull(),
+  orden: integer("orden").notNull(), // Para ordenar los rangos
+  rangoDescripcion: varchar("rango_descripcion", { length: 100 }).notNull(), // "1.00 SM", "1.01 - 1.50 UMA", etc.
+  limiteInferiorUma: numeric("limite_inferior_uma", { precision: 10, scale: 4 }).notNull(), // En múltiplos de UMA
+  limiteSuperiorUma: numeric("limite_superior_uma", { precision: 10, scale: 4 }), // NULL = sin límite superior
+  patronTasaBp: integer("patron_tasa_bp").notNull(), // Tasa patronal en basis points (315 = 3.15%)
+  trabajadorTasaBp: integer("trabajador_tasa_bp").notNull().default(113), // Fija 1.125% para trabajador
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniqueRango: unique().on(table.anio, table.orden),
+}));
+
+export type CatCesantiaVejezTasa = typeof catCesantiaVejezTasas.$inferSelect;
+export const insertCatCesantiaVejezTasaSchema = createInsertSchema(catCesantiaVejezTasas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatCesantiaVejezTasa = z.infer<typeof insertCatCesantiaVejezTasaSchema>;
+
+// Prima de Riesgo de Trabajo por Empresa
+// Cada empresa tiene su propia prima según su clase y siniestralidad
+export const catPrimasRiesgoTrabajo = pgTable("cat_primas_riesgo_trabajo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  registroPatronalId: integer("registro_patronal_id"), // Opcional, puede variar por registro patronal
+  anio: integer("anio").notNull(),
+  claseRiesgo: integer("clase_riesgo").notNull(), // 1-5 según clasificación IMSS
+  primaTasaBp: integer("prima_tasa_bp").notNull(), // Prima en basis points (50 = 0.50%, mínimo legal)
+  primaMinimaBp: integer("prima_minima_bp").notNull().default(50), // 0.50% mínimo
+  primaMaximaBp: integer("prima_maxima_bp").notNull().default(1500), // 15.00% máximo
+  fechaActualizacion: date("fecha_actualizacion"), // Fecha de última actualización de siniestralidad
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  uniqueEmpresaAnio: unique().on(table.empresaId, table.registroPatronalId, table.anio),
+}));
+
+export type CatPrimaRiesgoTrabajo = typeof catPrimasRiesgoTrabajo.$inferSelect;
+export const insertCatPrimaRiesgoTrabajoSchema = createInsertSchema(catPrimasRiesgoTrabajo).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCatPrimaRiesgoTrabajo = z.infer<typeof insertCatPrimaRiesgoTrabajoSchema>;
+
 // ============================================================================
 // SISTEMA DE NÓMINA - TABLAS CORE (CON MULTI-TENANCY)
 // ============================================================================

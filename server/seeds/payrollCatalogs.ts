@@ -7,6 +7,7 @@ import {
   catSubsidioEmpleo,
   catImssConfig,
   catImssCuotas,
+  catCesantiaVejezTasas,
   type CatSatTipoPercepcion,
   type CatSatTipoDeduccion,
   type CatSatTipoOtroPago,
@@ -14,6 +15,7 @@ import {
   type CatSubsidioEmpleo,
   type CatImssConfig,
   type CatImssCuota,
+  type CatCesantiaVejezTasa,
 } from "@shared/schema";
 import { porcentajeToBp, pesosToBp } from "@shared/basisPoints";
 
@@ -156,35 +158,86 @@ const configIMSS: ConfigIMSSBase[] = [
 ];
 
 // ============================================================================
-// CUOTAS IMSS 2025
+// CUOTAS IMSS 2025 - Tasas Completas por Ramo de Seguro
 // ============================================================================
 
 type CuotaIMSSBase = Omit<CatImssCuota, "id" | "createdAt" | "updatedAt" | "patronCuotaFijaBp" | "trabajadorCuotaFijaBp" | "notas">;
 
 const cuotasIMSS: CuotaIMSSBase[] = [
-  // Enfermedad y Maternidad - Cuota Fija
-  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Cuota Fija - Patrón", patronTasaBp: porcentajeToBp(13.9), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: false },
-  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Cuota Fija - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.4), baseCalculo: "sbc", aplicaLimiteSuperior: false },
+  // -------------------------------------------------------------------------
+  // ENFERMEDAD Y MATERNIDAD (EyM)
+  // -------------------------------------------------------------------------
+  // Cuota Fija - Se aplica sobre SBC hasta 3 UMAs (20.40% patrón sobre 1 UMA)
+  // La cuota fija patronal equivale a 20.40% sobre 1 UMA diaria
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Cuota Fija - Patrón", patronTasaBp: porcentajeToBp(20.40), trabajadorTasaBp: null, baseCalculo: "uma", aplicaLimiteSuperior: false },
   
-  // Enfermedad y Maternidad - Excedente 3 UMAs
-  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Excedente 3 UMAs - Patrón", patronTasaBp: porcentajeToBp(1.1), trabajadorTasaBp: null, baseCalculo: "excedente_3uma", aplicaLimiteSuperior: false },
-  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Excedente 3 UMAs - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.4), baseCalculo: "excedente_3uma", aplicaLimiteSuperior: false },
+  // Excedente de 3 UMAs - Solo se aplica al excedente cuando SBC > 3 UMAs
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Excedente 3 UMAs - Patrón", patronTasaBp: porcentajeToBp(1.10), trabajadorTasaBp: null, baseCalculo: "excedente_3uma", aplicaLimiteSuperior: true },
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Excedente 3 UMAs - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.40), baseCalculo: "excedente_3uma", aplicaLimiteSuperior: true },
   
-  // Prestaciones en Dinero
-  { anio: 2025, ramo: "prestaciones_dinero", concepto: "Prestaciones en Dinero - Patrón", patronTasaBp: porcentajeToBp(0.7), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: false },
-  { anio: 2025, ramo: "prestaciones_dinero", concepto: "Prestaciones en Dinero - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.25), baseCalculo: "sbc", aplicaLimiteSuperior: false },
+  // Prestaciones en Dinero - Sobre SBC completo
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Prestaciones en Dinero - Patrón", patronTasaBp: porcentajeToBp(0.70), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Prestaciones en Dinero - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.25), baseCalculo: "sbc", aplicaLimiteSuperior: true },
   
-  // Invalidez y Vida
-  { anio: 2025, ramo: "invalidez_vida", concepto: "Invalidez y Vida - Patrón", patronTasaBp: porcentajeToBp(1.75), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: false },
-  { anio: 2025, ramo: "invalidez_vida", concepto: "Invalidez y Vida - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.625), baseCalculo: "sbc", aplicaLimiteSuperior: false },
+  // Gastos Médicos para Pensionados - Sobre SBC completo
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Gastos Médicos Pensionados - Patrón", patronTasaBp: porcentajeToBp(1.05), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  { anio: 2025, ramo: "enfermedad_maternidad", concepto: "Gastos Médicos Pensionados - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.375), baseCalculo: "sbc", aplicaLimiteSuperior: true },
   
-  // Retiro, Cesantía y Vejez
-  { anio: 2025, ramo: "retiro", concepto: "Retiro - Patrón", patronTasaBp: porcentajeToBp(2), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
-  { anio: 2025, ramo: "cesantia_vejez", concepto: "Cesantía y Vejez - Patrón", patronTasaBp: porcentajeToBp(3.15), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  // -------------------------------------------------------------------------
+  // RIESGO DE TRABAJO (RT) - Variable por empresa según siniestralidad
+  // -------------------------------------------------------------------------
+  // La tasa varía entre 0.50% (mínimo) y 15.00% (máximo) según clase de riesgo
+  // Esta es la tasa mínima por defecto - cada empresa tiene su propia prima
+  { anio: 2025, ramo: "riesgo_trabajo", concepto: "Riesgo de Trabajo - Patrón (Mínimo)", patronTasaBp: porcentajeToBp(0.50), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  
+  // -------------------------------------------------------------------------
+  // INVALIDEZ Y VIDA (IyV)
+  // -------------------------------------------------------------------------
+  { anio: 2025, ramo: "invalidez_vida", concepto: "Invalidez y Vida - Patrón", patronTasaBp: porcentajeToBp(1.75), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  { anio: 2025, ramo: "invalidez_vida", concepto: "Invalidez y Vida - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(0.625), baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  
+  // -------------------------------------------------------------------------
+  // RETIRO
+  // -------------------------------------------------------------------------
+  { anio: 2025, ramo: "retiro", concepto: "Retiro - Patrón", patronTasaBp: porcentajeToBp(2.00), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  
+  // -------------------------------------------------------------------------
+  // CESANTÍA EN EDAD AVANZADA Y VEJEZ (CyV) - TASAS PROGRESIVAS
+  // -------------------------------------------------------------------------
+  // Nota: La cuota patronal de CyV es PROGRESIVA según el nivel salarial
+  // Ver tabla cat_cesantia_vejez_tasas para las tasas escalonadas
+  // Aquí solo registramos la cuota fija del trabajador (1.125%)
   { anio: 2025, ramo: "cesantia_vejez", concepto: "Cesantía y Vejez - Trabajador", patronTasaBp: null, trabajadorTasaBp: porcentajeToBp(1.125), baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  // Nota: La cuota patronal se calcula con tabla progresiva - ver catCesantiaVejezTasas
   
-  // Infonavit
-  { anio: 2025, ramo: "infonavit", concepto: "Infonavit - Patrón", patronTasaBp: porcentajeToBp(5), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  // -------------------------------------------------------------------------
+  // GUARDERÍAS Y PRESTACIONES SOCIALES
+  // -------------------------------------------------------------------------
+  { anio: 2025, ramo: "guarderias", concepto: "Guarderías y Prestaciones Sociales - Patrón", patronTasaBp: porcentajeToBp(1.00), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+  
+  // -------------------------------------------------------------------------
+  // INFONAVIT
+  // -------------------------------------------------------------------------
+  { anio: 2025, ramo: "infonavit", concepto: "Infonavit - Patrón", patronTasaBp: porcentajeToBp(5.00), trabajadorTasaBp: null, baseCalculo: "sbc", aplicaLimiteSuperior: true },
+];
+
+// ============================================================================
+// TASAS PROGRESIVAS DE CESANTÍA Y VEJEZ 2025 (Reforma Pensiones 2020-2030)
+// ============================================================================
+// Las cuotas patronales aumentan gradualmente según el nivel salarial del trabajador
+// La cuota obrera permanece fija en 1.125%
+
+type CesantiaVejezTasaBase = Omit<CatCesantiaVejezTasa, "id" | "createdAt" | "updatedAt">;
+
+const tasasCesantiaVejez2025: CesantiaVejezTasaBase[] = [
+  { anio: 2025, orden: 1, rangoDescripcion: "1.00 SM (Salario Mínimo)", limiteInferiorUma: "0.0000", limiteSuperiorUma: "1.0000", patronTasaBp: 315, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 2, rangoDescripcion: "1.01 SM - 1.50 UMA", limiteInferiorUma: "1.0001", limiteSuperiorUma: "1.5000", patronTasaBp: 354, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 3, rangoDescripcion: "1.51 - 2.00 UMA", limiteInferiorUma: "1.5001", limiteSuperiorUma: "2.0000", patronTasaBp: 443, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 4, rangoDescripcion: "2.01 - 2.50 UMA", limiteInferiorUma: "2.0001", limiteSuperiorUma: "2.5000", patronTasaBp: 495, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 5, rangoDescripcion: "2.51 - 3.00 UMA", limiteInferiorUma: "2.5001", limiteSuperiorUma: "3.0000", patronTasaBp: 531, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 6, rangoDescripcion: "3.01 - 3.50 UMA", limiteInferiorUma: "3.0001", limiteSuperiorUma: "3.5000", patronTasaBp: 556, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 7, rangoDescripcion: "3.51 - 4.00 UMA", limiteInferiorUma: "3.5001", limiteSuperiorUma: "4.0000", patronTasaBp: 575, trabajadorTasaBp: 113 },
+  { anio: 2025, orden: 8, rangoDescripcion: "4.01 UMA en adelante", limiteInferiorUma: "4.0001", limiteSuperiorUma: null, patronTasaBp: 642, trabajadorTasaBp: 113 },
 ];
 
 // ============================================================================
@@ -221,8 +274,11 @@ export async function seedPayrollCatalogs() {
     console.log("⚕️ Seeding IMSS Config 2025...");
     await db.insert(catImssConfig).values(configIMSS).onConflictDoNothing();
 
-    console.log("📊 Seeding IMSS Cuotas 2025...");
+    console.log("📊 Seeding IMSS Cuotas 2025 (con conceptos completos)...");
     await db.insert(catImssCuotas).values(cuotasIMSS).onConflictDoNothing();
+
+    console.log("📈 Seeding Tasas Progresivas Cesantía y Vejez 2025...");
+    await db.insert(catCesantiaVejezTasas).values(tasasCesantiaVejez2025).onConflictDoNothing();
 
     console.log("✅ Payroll catalogs seed completed successfully!");
   } catch (error) {
