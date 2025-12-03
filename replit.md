@@ -34,6 +34,21 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 **SUA/IDSE File Generators (Phase 3)**: Services for generating official IMSS files:
   - `suaGenerator.ts`: Generates SUA files with pipe-delimited format for bimonthly payment uploads. Includes employee records, cuota breakdowns, and totals with checksums.
   - `idseGenerator.ts`: Generates IDSE files with fixed-width columns for affiliate movements (altas, bajas, modificaciones de salario, reingresos). Includes NSS/CURP validation with Módulo 10 algorithm.
+**Employee History System (Phase 2)**: Option B architecture where employees table is the source of truth with automatic kardex triggers:
+  - `kardex_employment`: Tracks employment status changes (estatus, motivo_baja, fecha_baja, fecha_reingreso). Created via database trigger `trg_kardex_employment`.
+  - `kardex_labor_conditions`: Tracks labor condition changes (turno, jornada, tipo_contrato, horas_semanales). Created via database trigger `trg_kardex_labor_conditions`.
+  - `kardex_bank_accounts`: Tracks bank account changes on employee record (banco_id, clabe, numero_cuenta). Created via database trigger `trg_kardex_bank_accounts`.
+  - `employee_bank_accounts`: Multi-account support table with dispersion percentages, priority ordering, and activo flag. Supports payroll dispersion across multiple accounts.
+  - Triggers use OLD/NEW row comparison to detect changes and atomically create kardex entries.
+**Geographic Catalogs**: Standard SAT geographic reference tables:
+  - `cat_paises`: Country catalog with ISO codes
+  - `cat_estados`: State/region catalog with country reference
+  - `cat_municipios`: Municipality catalog with state reference
+  - `cat_codigos_postales`: Postal code catalog with municipality reference and asentamiento details
+**Hiring to Employee Flow**: Complete "Completar Alta" workflow:
+  - `hiringProcess.empleadoId`: Links completed hiring process to materialized employee
+  - `/api/hiring/processes/:id/completar-alta` endpoint: Creates employee from hiring process data, updates status to "completado"
+  - Supports mapping all personal data, address, bank accounts, and organizational assignments
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow. Includes comprehensive finiquito/liquidación calculations with LISR exento/gravado splits.
