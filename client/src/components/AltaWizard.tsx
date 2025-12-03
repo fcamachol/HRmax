@@ -30,7 +30,10 @@ import {
   UserCheck,
   AlertCircle,
   Check,
-  X
+  X,
+  FileSignature,
+  Building2,
+  Loader2
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CartaOferta } from "@/components/CartaOferta";
@@ -124,10 +127,40 @@ const DOCUMENTOS_REQUERIDOS = [
   "Fotografías",
 ];
 
+interface ImssAltaFormData {
+  nss: string;
+  fechaMovimiento: string;
+  sbcDecimal: string;
+  tipoSalario: string;
+  jornada: string;
+  observaciones: string;
+}
+
+const TIPOS_SALARIO_IMSS = [
+  { value: "fijo", label: "Salario Fijo" },
+  { value: "variable", label: "Salario Variable" },
+  { value: "mixto", label: "Salario Mixto" },
+];
+
+const JORNADAS_IMSS = [
+  { value: "completa", label: "Jornada Completa (8 horas)" },
+  { value: "reducida", label: "Jornada Reducida" },
+  { value: "continua", label: "Jornada Continua" },
+];
+
 export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [curpValidation, setCurpValidation] = useState<{ valido: boolean; errores: string[] }>({ valido: true, errores: [] });
   const [showCartaOferta, setShowCartaOferta] = useState(false);
+  const [showImssAltaWizard, setShowImssAltaWizard] = useState(false);
+  const [imssFormData, setImssFormData] = useState<ImssAltaFormData>({
+    nss: "",
+    fechaMovimiento: "",
+    sbcDecimal: "",
+    tipoSalario: "fijo",
+    jornada: "completa",
+    observaciones: "",
+  });
   const [formData, setFormData] = useState<AltaFormData>({
     // Paso 1
     nombre: "",
@@ -445,6 +478,111 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       });
     },
   });
+
+  // Mutation for creating IMSS Alta movement
+  const createImssAltaMutation = useMutation({
+    mutationFn: async (data: ImssAltaFormData) => {
+      const payload = {
+        clienteId: "209b253d-42ac-4ab6-8e1f-f6bfa0f801d3",
+        empresaId: formData.empresaId,
+        empleadoId: existingProcess?.id || "", // This would be the employee ID
+        registroPatronalId: formData.registroPatronalId || null,
+        tipoMovimiento: "alta",
+        fechaMovimiento: data.fechaMovimiento,
+        estatus: "pendiente",
+        nss: data.nss,
+        sbcDecimal: parseFloat(data.sbcDecimal) || null,
+        observaciones: data.observaciones ? `Tipo Salario: ${data.tipoSalario}, Jornada: ${data.jornada}. ${data.observaciones}` : `Tipo Salario: ${data.tipoSalario}, Jornada: ${data.jornada}`,
+      };
+      return await apiRequest("POST", "/api/imss/movimientos", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/imss/movimientos"] });
+      toast({
+        title: "Alta IMSS solicitada",
+        description: "El movimiento de alta se ha creado en el módulo IMSS como pendiente",
+      });
+      setShowImssAltaWizard(false);
+      // Reset IMSS form
+      setImssFormData({
+        nss: formData.nss || "",
+        fechaMovimiento: formData.startDate || "",
+        sbcDecimal: "",
+        tipoSalario: "fijo",
+        jornada: "completa",
+        observaciones: "",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al crear movimiento IMSS",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleGenerarContrato = () => {
+    toast({
+      title: "Generar Contrato",
+      description: "Funcionalidad próximamente disponible. El contrato se generará con los datos del proceso.",
+    });
+  };
+
+  const handleSolicitarAltaImss = () => {
+    // IMSS Alta requires a saved process AND a completed employee registration
+    // Currently, hiring processes don't create employee records automatically
+    // This feature requires the "Completar Alta" flow which creates the employee first
+    toast({
+      title: "Función próximamente disponible",
+      description: "Para solicitar alta IMSS, primero debe completarse el proceso de contratación y crear el registro del empleado. Esta funcionalidad estará disponible pronto.",
+    });
+    
+    // Pre-fill form for when the feature is fully implemented
+    setImssFormData({
+      nss: formData.nss || "",
+      fechaMovimiento: formData.startDate || new Date().toISOString().split("T")[0],
+      sbcDecimal: formData.proposedSalary ? (parseFloat(formData.proposedSalary) / 30).toFixed(2) : "",
+      tipoSalario: "fijo",
+      jornada: "completa",
+      observaciones: "",
+    });
+    // Don't open the wizard yet - feature not fully implemented
+    // setShowImssAltaWizard(true);
+  };
+
+  const handleSubmitImssAlta = () => {
+    // Validate NSS format (11 digits)
+    if (!imssFormData.nss || imssFormData.nss.length !== 11) {
+      toast({
+        title: "NSS inválido",
+        description: "El NSS debe tener exactamente 11 dígitos",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!imssFormData.fechaMovimiento) {
+      toast({
+        title: "Fecha requerida",
+        description: "La fecha de alta es obligatoria",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const sbcValue = parseFloat(imssFormData.sbcDecimal);
+    if (!imssFormData.sbcDecimal || isNaN(sbcValue) || sbcValue <= 0) {
+      toast({
+        title: "SBC inválido",
+        description: "El Salario Base de Cotización debe ser un número mayor a cero",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    createImssAltaMutation.mutate(imssFormData);
+  };
 
   const handleNext = () => {
     // Validaciones por paso
@@ -1493,6 +1631,41 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 </div>
               </CardContent>
             </Card>
+
+            {/* Proceso de Alta Actions */}
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle className="text-lg">Proceso de Alta</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Una vez revisada la información, puedes generar el contrato laboral y solicitar el alta ante el IMSS.
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    onClick={handleGenerarContrato}
+                    data-testid="button-generar-contrato"
+                  >
+                    <FileSignature className="w-4 h-4 mr-2" />
+                    Generar Contrato
+                  </Button>
+                  <Button 
+                    type="button" 
+                    variant="secondary"
+                    onClick={handleSolicitarAltaImss}
+                    data-testid="button-solicitar-alta-imss"
+                  >
+                    <Building2 className="w-4 h-4 mr-2" />
+                    Solicitar Alta IMSS
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Estas acciones estarán disponibles una vez se complete el registro del empleado.
+                </p>
+              </CardContent>
+            </Card>
           </div>
         );
 
@@ -1636,6 +1809,158 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
               notes: formData.notes,
             } as any} 
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* IMSS Alta Mini-Wizard Dialog */}
+      <Dialog open={showImssAltaWizard} onOpenChange={setShowImssAltaWizard}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle data-testid="text-imss-dialog-title">
+              <div className="flex items-center gap-2">
+                <Building2 className="w-5 h-5" />
+                Solicitar Alta IMSS
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Completa los datos requeridos para crear el movimiento de alta en el módulo IMSS.
+            </p>
+
+            <div>
+              <Label htmlFor="imss-nss" data-testid="label-imss-nss">
+                NSS (Número de Seguro Social) <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="imss-nss"
+                data-testid="input-imss-nss"
+                value={imssFormData.nss}
+                onChange={(e) => setImssFormData({ ...imssFormData, nss: e.target.value })}
+                placeholder="11 dígitos"
+                maxLength={11}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="imss-fecha" data-testid="label-imss-fecha">
+                Fecha de Alta <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="imss-fecha"
+                type="date"
+                data-testid="input-imss-fecha"
+                value={imssFormData.fechaMovimiento}
+                onChange={(e) => setImssFormData({ ...imssFormData, fechaMovimiento: e.target.value })}
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="imss-sbc" data-testid="label-imss-sbc">
+                Salario Base de Cotización (Diario) <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="imss-sbc"
+                type="number"
+                step="0.01"
+                data-testid="input-imss-sbc"
+                value={imssFormData.sbcDecimal}
+                onChange={(e) => setImssFormData({ ...imssFormData, sbcDecimal: e.target.value })}
+                placeholder="Ej: 500.00"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Salario diario integrado para cotización IMSS
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="imss-tipo-salario" data-testid="label-imss-tipo-salario">
+                  Tipo de Salario
+                </Label>
+                <Select 
+                  value={imssFormData.tipoSalario} 
+                  onValueChange={(value) => setImssFormData({ ...imssFormData, tipoSalario: value })}
+                >
+                  <SelectTrigger data-testid="select-imss-tipo-salario">
+                    <SelectValue placeholder="Selecciona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_SALARIO_IMSS.map((tipo) => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="imss-jornada" data-testid="label-imss-jornada">
+                  Jornada Laboral
+                </Label>
+                <Select 
+                  value={imssFormData.jornada} 
+                  onValueChange={(value) => setImssFormData({ ...imssFormData, jornada: value })}
+                >
+                  <SelectTrigger data-testid="select-imss-jornada">
+                    <SelectValue placeholder="Selecciona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {JORNADAS_IMSS.map((jornada) => (
+                      <SelectItem key={jornada.value} value={jornada.value}>
+                        {jornada.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="imss-observaciones" data-testid="label-imss-observaciones">
+                Observaciones
+              </Label>
+              <Textarea
+                id="imss-observaciones"
+                data-testid="textarea-imss-observaciones"
+                value={imssFormData.observaciones}
+                onChange={(e) => setImssFormData({ ...imssFormData, observaciones: e.target.value })}
+                placeholder="Notas adicionales para el movimiento..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowImssAltaWizard(false)}
+              data-testid="button-cancel-imss"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSubmitImssAlta}
+              disabled={createImssAltaMutation.isPending}
+              data-testid="button-submit-imss"
+            >
+              {createImssAltaMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Building2 className="w-4 h-4 mr-2" />
+                  Solicitar Alta
+                </>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </Dialog>
