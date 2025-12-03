@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, MoreVertical, Trash2, Edit, User, DollarSign, Calendar, FileText, Phone, Mail, MapPin, CreditCard, Building2, Briefcase } from "lucide-react";
+import { Plus, MoreVertical, Edit, User, DollarSign, Calendar, FileText, Phone, Mail, MapPin, CreditCard, Building2, Briefcase, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { HiringProcess } from "@shared/schema";
 import { hiringStageLabels } from "@shared/schema";
@@ -27,21 +27,22 @@ const STAGES: { value: HiringStage; label: string; color: string; description: s
   { value: 'cancelado', label: '7. No Completado', color: 'bg-red-100 dark:bg-red-900/30', description: 'Proceso cancelado o no finalizado' },
 ];
 
-function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardClick, isDragging }: {
+function DraggableCard({ process, stage, onEdit, onCancel, onShowCarta, onCardClick, isDragging }: {
   process: HiringProcess;
   stage: HiringStage;
   onEdit: (process: HiringProcess) => void;
-  onDelete: (id: string) => void;
+  onCancel: (process: HiringProcess) => void;
   onShowCarta: (process: HiringProcess) => void;
   onCardClick: (process: HiringProcess, e: React.MouseEvent) => void;
   isDragging?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging: isDraggingLocal } = useDraggable({
     id: process.id,
-    data: { stage }, // Agregar data para saber de qué stage viene
+    data: { stage },
   });
 
   const [wasDragging, setWasDragging] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -49,12 +50,33 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    // Si acabamos de arrastrar, no abrir el modal
     if (wasDragging) {
       setWasDragging(false);
       return;
     }
+    if (menuOpen) return;
     onCardClick(process, e);
+  };
+
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+    setTimeout(() => onEdit(process), 100);
+  };
+
+  const handleCancelClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+    onCancel(process);
+  };
+
+  const handleCartaClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(false);
+    setTimeout(() => onShowCarta(process), 100);
   };
 
   return (
@@ -77,20 +99,26 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
           <CardTitle className="text-sm font-medium line-clamp-1 flex-1" data-testid={`text-process-name-${process.id}`}>
             {process.nombre} {process.apellidoPaterno}{process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}
           </CardTitle>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+            <DropdownMenuTrigger asChild>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-5 w-5 flex-shrink-0"
                 data-testid={`button-menu-${process.id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
               >
                 <MoreVertical className="h-3 w-3" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" onPointerDown={(e) => e.stopPropagation()}>
               <DropdownMenuItem 
-                onClick={(e) => { e.stopPropagation(); onEdit(process); }} 
+                onSelect={(e) => e.preventDefault()}
+                onClick={handleEditClick}
                 data-testid={`menu-edit-${process.id}`}
               >
                 <Edit className="w-4 h-4 mr-2" />
@@ -98,7 +126,8 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
               </DropdownMenuItem>
               {stage === 'oferta' && (
                 <DropdownMenuItem
-                  onClick={(e) => { e.stopPropagation(); onShowCarta(process); }}
+                  onSelect={(e) => e.preventDefault()}
+                  onClick={handleCartaClick}
                   data-testid={`menu-carta-oferta-${process.id}`}
                 >
                   <FileText className="w-4 h-4 mr-2" />
@@ -106,12 +135,13 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem
-                onClick={(e) => { e.stopPropagation(); onDelete(process.id); }}
+                onSelect={(e) => e.preventDefault()}
+                onClick={handleCancelClick}
                 className="text-destructive"
-                data-testid={`menu-delete-${process.id}`}
+                data-testid={`menu-cancel-${process.id}`}
               >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Eliminar
+                <X className="w-4 h-4 mr-2" />
+                Cancelar Proceso
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -141,11 +171,11 @@ function DraggableCard({ process, stage, onEdit, onDelete, onShowCarta, onCardCl
   );
 }
 
-function DroppableColumn({ stage, stageProcesses, onEdit, onDelete, onShowCarta, onCardClick, activeId }: {
+function DroppableColumn({ stage, stageProcesses, onEdit, onCancel, onShowCarta, onCardClick, activeId }: {
   stage: { value: HiringStage; label: string; color: string; description: string };
   stageProcesses: HiringProcess[];
   onEdit: (process: HiringProcess) => void;
-  onDelete: (id: string) => void;
+  onCancel: (process: HiringProcess) => void;
   onShowCarta: (process: HiringProcess) => void;
   onCardClick: (process: HiringProcess, e: React.MouseEvent) => void;
   activeId: string | null;
@@ -182,7 +212,7 @@ function DroppableColumn({ stage, stageProcesses, onEdit, onDelete, onShowCarta,
             process={process}
             stage={stage.value}
             onEdit={onEdit}
-            onDelete={onDelete}
+            onCancel={onCancel}
             onShowCarta={onShowCarta}
             onCardClick={onCardClick}
             isDragging={activeId === process.id}
@@ -227,21 +257,24 @@ export function KanbanAltas() {
     },
   });
 
-  const deleteProcessMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/hiring/processes/${id}`);
+  const cancelProcessMutation = useMutation({
+    mutationFn: async (process: HiringProcess) => {
+      return await apiRequest("PATCH", `/api/hiring/processes/${process.id}`, {
+        stage: 'cancelado',
+        status: 'cancelado',
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/hiring/processes'] });
       toast({
-        title: "Proceso eliminado",
-        description: "El proceso ha sido eliminado exitosamente",
+        title: "Proceso cancelado",
+        description: "El proceso ha sido movido a No Completado",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Error al eliminar proceso",
+        description: error.message || "Error al cancelar proceso",
         variant: "destructive",
       });
     },
@@ -291,9 +324,10 @@ export function KanbanAltas() {
     setIsWizardOpen(true);
   };
 
-  const handleDelete = (processId: string) => {
-    if (confirm("¿Estás seguro de eliminar este proceso de contratación?")) {
-      deleteProcessMutation.mutate(processId);
+  const handleCancel = (process: HiringProcess) => {
+    const fullName = `${process.nombre} ${process.apellidoPaterno}${process.apellidoMaterno ? ' ' + process.apellidoMaterno : ''}`;
+    if (confirm(`¿Estás seguro de cancelar el proceso de contratación de ${fullName}? El proceso será movido a "No Completado".`)) {
+      cancelProcessMutation.mutate(process);
     }
   };
 
@@ -344,7 +378,7 @@ export function KanbanAltas() {
                 stage={stage}
                 stageProcesses={stageProcesses}
                 onEdit={handleEdit}
-                onDelete={handleDelete}
+                onCancel={handleCancel}
                 onShowCarta={handleShowCarta}
                 onCardClick={handleCardClick}
                 activeId={activeId}
