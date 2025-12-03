@@ -33,6 +33,7 @@ import {
   X
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CartaOferta } from "@/components/CartaOferta";
 
 interface AltaWizardProps {
   open: boolean;
@@ -126,6 +127,7 @@ const DOCUMENTOS_REQUERIDOS = [
 export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [curpValidation, setCurpValidation] = useState<{ valido: boolean; errores: string[] }>({ valido: true, errores: [] });
+  const [showCartaOferta, setShowCartaOferta] = useState(false);
   const [formData, setFormData] = useState<AltaFormData>({
     // Paso 1
     nombre: "",
@@ -988,6 +990,21 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                 </div>
               )}
             </div>
+
+            <Separator className="my-4" />
+
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowCartaOferta(true)}
+                disabled={!formData.nombre || !formData.apellidoPaterno || !formData.puestoId || !formData.proposedSalary}
+                data-testid="button-generar-carta-oferta"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                Generar Carta Oferta
+              </Button>
+            </div>
           </div>
         );
 
@@ -1576,6 +1593,51 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
           )}
         </div>
       </DialogContent>
+
+      {/* Carta Oferta Dialog */}
+      <Dialog open={showCartaOferta} onOpenChange={setShowCartaOferta}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle data-testid="text-carta-dialog-title">Carta Oferta de Empleo</DialogTitle>
+          </DialogHeader>
+          <CartaOferta 
+            process={{
+              id: existingProcess?.id || '',
+              clienteId: existingProcess?.clienteId || '',
+              empresaId: formData.empresaId,
+              nombre: formData.nombre,
+              apellidoPaterno: formData.apellidoPaterno,
+              apellidoMaterno: formData.apellidoMaterno,
+              position: puestos?.find(p => p.id === formData.puestoId)?.nombrePuesto || '',
+              department: departamentos?.find(d => d.id === formData.departamentoId)?.nombre || '',
+              puestoId: formData.puestoId,
+              departamentoId: formData.departamentoId,
+              proposedSalary: formData.proposedSalary,
+              startDate: formData.startDate,
+              endDate: formData.endDate,
+              stage: existingProcess?.stage || 'oferta',
+              status: existingProcess?.status || 'activo',
+              contractType: formData.contractType,
+              contractDuration: formData.contractDuration,
+              email: formData.email,
+              phone: formData.phone,
+              rfc: formData.rfc,
+              curp: formData.curp,
+              nss: formData.nss,
+              genero: formData.genero,
+              fechaNacimiento: formData.fechaNacimiento,
+              lugarNacimiento: formData.lugarNacimiento,
+              offerLetterSent: existingProcess?.offerLetterSent || 'false',
+              offerAcceptedDate: existingProcess?.offerAcceptedDate || null,
+              documentsChecklist: formData.documentsChecklist,
+              imssNumber: existingProcess?.imssNumber || null,
+              imssRegistrationDate: existingProcess?.imssRegistrationDate || null,
+              contractSignedDate: existingProcess?.contractSignedDate || null,
+              notes: formData.notes,
+            } as any} 
+          />
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
