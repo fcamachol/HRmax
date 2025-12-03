@@ -10,6 +10,12 @@ import { mockAuthMiddleware } from "./auth/middleware";
 
 const app = express();
 
+// Health check endpoint - responds immediately for deployment health checks
+// This MUST be before any middleware that might delay the response
+app.get("/health", (_req, res) => {
+  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+});
+
 declare module 'http' {
   interface IncomingMessage {
     rawBody: unknown
@@ -54,20 +60,29 @@ app.use((req, res, next) => {
   next();
 });
 
+// Background initialization function for migrations and seeds
+async function runBackgroundInitialization() {
+  try {
+    // Ejecutar migraciones automáticas
+    await migrateLegalCaseStatuses();
+    await migrateBajaTypes();
+    
+    // Seed módulos del sistema
+    await seedModulos();
+    
+    // Seed conceptos legales con fórmulas
+    await seedConceptosLegales();
+    
+    // Seed catálogos base (bancos, UMA/SMG)
+    await seedCatalogosBase();
+    
+    log("Background initialization completed successfully");
+  } catch (error) {
+    console.error("Error during background initialization:", error);
+  }
+}
+
 (async () => {
-  // Ejecutar migraciones automáticas
-  await migrateLegalCaseStatuses();
-  await migrateBajaTypes();
-  
-  // Seed módulos del sistema
-  await seedModulos();
-  
-  // Seed conceptos legales con fórmulas
-  await seedConceptosLegales();
-  
-  // Seed catálogos base (bancos, UMA/SMG)
-  await seedCatalogosBase();
-  
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -98,5 +113,9 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+    
+    // Run migrations and seeds in the background AFTER server starts
+    // This ensures health checks pass immediately while initialization runs
+    runBackgroundInitialization();
   });
 })();
