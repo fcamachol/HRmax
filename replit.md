@@ -1,7 +1,7 @@
-# NominaHub - Sistema de Recursos Humanos y Nómina para México
+# PeopleOps - Sistema de Recursos Humanos y Nómina para México
 
 ## Overview
-NominaHub is a comprehensive HR and payroll management system designed for Mexican businesses. Its primary purpose is to centralize employee data, manage payroll in compliance with Mexican tax regulations (ISR, IMSS, Infonavit), track attendance, and generate essential reports. The system supports complex payroll scenarios and aims to provide a modern, user-friendly SaaS experience. Key capabilities include modules for hiring (Altas), employee terminations (Bajas), and multi-company management. NominaHub's ambition is to streamline HR operations, reduce compliance risks, and enhance human capital management for its users in Mexico.
+PeopleOps is a comprehensive HR and payroll management system designed for Mexican businesses. Its primary purpose is to centralize employee data, manage payroll in compliance with Mexican tax regulations (ISR, IMSS, Infonavit), track attendance, and generate essential reports. The system supports complex payroll scenarios and aims to provide a modern, user-friendly SaaS experience. Key capabilities include modules for hiring (Altas), employee terminations (Bajas), and multi-company management. PeopleOps's ambition is to streamline HR operations, reduce compliance risks, and enhance human capital management for its users in Mexico.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.
