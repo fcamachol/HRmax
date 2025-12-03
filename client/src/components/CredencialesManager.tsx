@@ -113,29 +113,6 @@ export default function CredencialesManager({ empresaId }: CredencialesManagerPr
 
   return (
     <div className="space-y-4">
-      <Alert className="border-amber-500/50 bg-amber-500/10">
-        <Shield className="h-4 w-4 text-amber-600" />
-        <AlertTitle className="text-amber-900 dark:text-amber-100">
-          Seguridad: Uso de Replit Secrets
-        </AlertTitle>
-        <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
-          <p className="mb-2">
-            Las contraseñas <strong>NO se almacenan en la base de datos</strong>. Solo guardamos referencias a Replit Secrets.
-          </p>
-          <p className="mb-2">
-            Para cada credencial, debes crear un Secret en Replit con el nombre que especifiques (ej: "EMPRESA_ABC_IMSS_PASSWORD").
-          </p>
-          <a 
-            href="https://docs.replit.com/programming-ide/workspace-features/secrets" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-sm font-medium underline"
-          >
-            Ver documentación de Secrets <ExternalLink className="h-3 w-3" />
-          </a>
-        </AlertDescription>
-      </Alert>
-
       <div className="flex justify-between items-center">
         <p className="text-sm text-muted-foreground">
           Gestiona las credenciales de acceso a sistemas gubernamentales
