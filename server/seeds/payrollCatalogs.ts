@@ -287,7 +287,4 @@ export async function seedPayrollCatalogs() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  await seedPayrollCatalogs();
-  process.exit(0);
-}
+// Export only - run via server initialization or dedicated script

@@ -105,23 +105,6 @@ export default function Empresas() {
         </Dialog>
       </div>
 
-      <Alert className="border-amber-500/50 bg-amber-500/10">
-        <Shield className="h-4 w-4 text-amber-600" />
-        <AlertTitle className="text-amber-900 dark:text-amber-100">Seguridad de Credenciales</AlertTitle>
-        <AlertDescription className="text-amber-800 dark:text-amber-200">
-          Las contraseñas de sistemas <strong>NO se almacenan en la base de datos</strong>. 
-          Debes crear Secrets en Replit para cada credencial. El sistema solo guarda referencias a estos secrets.
-          <a 
-            href="https://docs.replit.com/programming-ide/workspace-features/secrets" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="underline ml-1 font-medium"
-          >
-            Aprende más sobre Secrets
-          </a>
-        </AlertDescription>
-      </Alert>
-
       {empresas.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">

@@ -188,17 +188,6 @@ async function seedPrestaciones() {
   }
 }
 
-// Ejecutar si se llama directamente
-if (import.meta.url === `file://${process.argv[1]}`) {
-  seedPrestaciones()
-    .then(() => {
-      console.log("🎉 Proceso completado");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("💥 Error fatal:", error);
-      process.exit(1);
-    });
-}
+// Export only - run via dedicated script
 
 export { seedPrestaciones, generarTablaLFT2024, generarEsquemaPuestosConfianza };

@@ -74,7 +74,14 @@ app.use((req, res, next) => {
 });
 
 // Background initialization function for migrations and seeds
+// Only runs in development mode to avoid issues in production
 async function runBackgroundInitialization() {
+  // Skip seeds in production - they should be run via separate migration scripts
+  if (process.env.NODE_ENV === 'production') {
+    log("Skipping background initialization in production mode");
+    return;
+  }
+  
   try {
     // Ejecutar migraciones automáticas
     await migrateLegalCaseStatuses();

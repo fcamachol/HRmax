@@ -99,8 +99,4 @@ export async function seedCatalogosBase() {
   }
 }
 
-// Run standalone if executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  await seedCatalogosBase();
-  process.exit(0);
-}
+// Export only - run via server initialization or dedicated script
