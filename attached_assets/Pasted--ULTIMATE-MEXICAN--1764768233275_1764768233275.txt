@@ -1,0 +1,1819 @@
+-- ============================================================================
+-- ULTIMATE MEXICAN PAYROLL SYSTEM - DATABASE SCHEMA
+-- Version: 1.0
+-- Author: Fernando / Claude
+-- Description: Complete schema with ledger patterns, kardex, and granular
+--              concept tracking for Mexican payroll compliance
+-- ============================================================================
+
+-- ============================================================================
+-- SECTION 0: EXTENSIONS AND BASE SETUP
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Custom types
+CREATE TYPE genero_type AS ENUM ('M', 'F', 'X');
+CREATE TYPE estado_civil_type AS ENUM ('soltero', 'casado', 'divorciado', 'viudo', 'union_libre');
+CREATE TYPE tipo_contrato_type AS ENUM ('indeterminado', 'determinado', 'capacitacion', 'temporada', 'prueba');
+CREATE TYPE tipo_jornada_type AS ENUM ('diurna', 'nocturna', 'mixta', 'reducida', 'flexible');
+CREATE TYPE modalidad_trabajo_type AS ENUM ('presencial', 'remoto', 'hibrido');
+CREATE TYPE periodicidad_pago_type AS ENUM ('diario', 'semanal', 'decenal', 'catorcenal', 'quincenal', 'mensual');
+CREATE TYPE tabla_imss_type AS ENUM ('fija', 'variable', 'mixta');
+CREATE TYPE estatus_empleado_type AS ENUM ('activo', 'baja', 'suspendido', 'incapacidad', 'licencia');
+
+-- Ledger types
+CREATE TYPE ledger_entry_type AS ENUM ('cargo', 'abono', 'ajuste');
+CREATE TYPE ledger_source_type AS ENUM (
+    'archivo_externo',      -- FONACOT file, EMA, EBA
+    'calculo_nomina',       -- Payroll calculation
+    'pago_banco',           -- Bank payment
+    'pago_tercero',         -- Payment to third party (FONACOT, INFONAVIT, etc.)
+    'ajuste_manual',        -- Manual adjustment
+    'cancelacion',          -- Cancellation
+    'devolucion'            -- Refund
+);
+
+-- Movement types for kardex
+CREATE TYPE kardex_operation_type AS ENUM ('alta', 'modificacion', 'correccion', 'baja');
+
+-- Concept types for payroll
+CREATE TYPE concepto_tipo_type AS ENUM ('percepcion', 'deduccion', 'otros_pagos', 'informativo');
+CREATE TYPE concepto_naturaleza_type AS ENUM ('fijo', 'variable', 'eventual');
+
+-- IMSS movement types
+CREATE TYPE imss_movimiento_type AS ENUM ('alta', 'baja', 'modificacion_salario', 'reingreso', 'ausentismo');
+CREATE TYPE imss_causa_baja_type AS ENUM (
+    'termino_contrato', 'separacion_voluntaria', 'abandono_empleo', 
+    'defuncion', 'clausura', 'ausentismo', 'pension', 'otro'
+);
+
+-- Incidencia types
+CREATE TYPE incidencia_type AS ENUM (
+    'falta_injustificada', 'falta_justificada', 'retardo', 
+    'incapacidad_enfermedad', 'incapacidad_maternidad', 'incapacidad_riesgo_trabajo',
+    'permiso_sin_goce', 'permiso_con_goce', 'vacaciones', 'descanso_obligatorio',
+    'hora_extra_doble', 'hora_extra_triple', 'dia_festivo_laborado',
+    'suspension_disciplinaria', 'licencia_paternidad'
+);
+
+-- File types
+CREATE TYPE file_direction_type AS ENUM ('import', 'export');
+CREATE TYPE file_type AS ENUM (
+    'fonacot_descuentos', 'fonacot_liquidacion',
+    'infonavit_ema', 'infonavit_eba', 'infonavit_his',
+    'sua_archivo', 'idse_movimientos',
+    'layout_bancario', 'layout_vales', 'layout_dispersion',
+    'cfdi_nomina', 'cfdi_acuse',
+    'imss_listado', 'imss_cedula'
+);
+
+-- ============================================================================
+-- SECTION 1: CATALOGS (Reference Tables)
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 1.1 Geographic catalogs
+-- -----------------------------------------------------------------------------
+CREATE TABLE cat_paises (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo VARCHAR(3) UNIQUE NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_estados (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    pais_id UUID REFERENCES cat_paises(id),
+    codigo VARCHAR(10) NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    codigo_sat VARCHAR(3),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(pais_id, codigo)
+);
+
+CREATE TABLE cat_municipios (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    estado_id UUID REFERENCES cat_estados(id),
+    codigo VARCHAR(10) NOT NULL,
+    nombre VARCHAR(200) NOT NULL,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_codigos_postales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo_postal VARCHAR(5) NOT NULL,
+    colonia VARCHAR(200) NOT NULL,
+    municipio_id UUID REFERENCES cat_municipios(id),
+    tipo_asentamiento VARCHAR(50),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 1.2 Banking catalogs
+-- -----------------------------------------------------------------------------
+CREATE TABLE cat_bancos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo_sat VARCHAR(3) UNIQUE NOT NULL,
+    nombre_corto VARCHAR(50) NOT NULL,
+    nombre_completo VARCHAR(200),
+    longitud_cuenta INTEGER,
+    longitud_clabe INTEGER DEFAULT 18,
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 1.3 Organization structure catalogs
+-- -----------------------------------------------------------------------------
+CREATE TABLE cat_departamentos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID,
+    codigo VARCHAR(20),
+    nombre VARCHAR(100) NOT NULL,
+    departamento_padre_id UUID REFERENCES cat_departamentos(id),
+    centro_costo VARCHAR(50),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_puestos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID,
+    codigo VARCHAR(20),
+    nombre VARCHAR(100) NOT NULL,
+    descripcion TEXT,
+    nivel_jerarquico INTEGER,
+    salario_minimo DECIMAL(12,2),
+    salario_maximo DECIMAL(12,2),
+    departamento_id UUID REFERENCES cat_departamentos(id),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 1.4 PAYROLL CONCEPTS CATALOG (CRITICAL - Enables granular queries)
+-- -----------------------------------------------------------------------------
+CREATE TABLE cat_conceptos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    codigo VARCHAR(20) UNIQUE NOT NULL,
+    codigo_sat VARCHAR(10),
+    nombre VARCHAR(100) NOT NULL,
+    nombre_corto VARCHAR(50),
+    descripcion TEXT,
+    
+    -- Classification
+    tipo concepto_tipo_type NOT NULL,
+    naturaleza concepto_naturaleza_type NOT NULL,
+    categoria VARCHAR(50) NOT NULL,
+    subcategoria VARCHAR(50),
+    
+    -- Tax treatment
+    es_gravado BOOLEAN DEFAULT true,
+    es_exento BOOLEAN DEFAULT false,
+    limite_exencion_uma DECIMAL(10,4),
+    base_calculo VARCHAR(50),
+    
+    -- IMSS treatment
+    integra_sbc BOOLEAN DEFAULT false,
+    es_variable_para_sbc BOOLEAN DEFAULT false,
+    
+    -- ISR treatment
+    es_isr_periodico BOOLEAN DEFAULT true,
+    es_isr_art_96 BOOLEAN DEFAULT false,
+    
+    -- Grouping for reports
+    grupo_reporte VARCHAR(50),
+    orden_nomina INTEGER DEFAULT 100,
+    
+    -- Control
+    activo BOOLEAN DEFAULT true,
+    es_sistema BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_cat_conceptos_tipo ON cat_conceptos(tipo);
+CREATE INDEX idx_cat_conceptos_categoria ON cat_conceptos(categoria);
+CREATE INDEX idx_cat_conceptos_subcategoria ON cat_conceptos(subcategoria);
+
+-- -----------------------------------------------------------------------------
+-- 1.5 Tax tables
+-- -----------------------------------------------------------------------------
+CREATE TABLE cat_tablas_isr (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vigencia_desde DATE NOT NULL,
+    vigencia_hasta DATE,
+    periodicidad periodicidad_pago_type NOT NULL,
+    limite_inferior DECIMAL(14,2) NOT NULL,
+    limite_superior DECIMAL(14,2) NOT NULL,
+    cuota_fija DECIMAL(14,2) NOT NULL,
+    porcentaje_excedente DECIMAL(8,4) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_tablas_subsidio (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vigencia_desde DATE NOT NULL,
+    vigencia_hasta DATE,
+    periodicidad periodicidad_pago_type NOT NULL,
+    limite_inferior DECIMAL(14,2) NOT NULL,
+    limite_superior DECIMAL(14,2) NOT NULL,
+    subsidio DECIMAL(14,2) NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_cuotas_imss (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    vigencia_desde DATE NOT NULL,
+    vigencia_hasta DATE,
+    ramo VARCHAR(50) NOT NULL,
+    descripcion VARCHAR(200),
+    
+    patron_porcentaje_base DECIMAL(8,4),
+    patron_porcentaje_excedente DECIMAL(8,4),
+    patron_cuota_fija_smg DECIMAL(8,4),
+    
+    obrero_porcentaje_base DECIMAL(8,4),
+    obrero_porcentaje_excedente DECIMAL(8,4),
+    
+    limite_inferior_smg DECIMAL(8,4),
+    limite_superior_smg DECIMAL(8,4),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE cat_valores_uma_smg (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tipo VARCHAR(20) NOT NULL,
+    valor_diario DECIMAL(10,2) NOT NULL,
+    valor_mensual DECIMAL(12,2) NOT NULL,
+    valor_anual DECIMAL(14,2) NOT NULL,
+    vigencia_desde DATE NOT NULL,
+    vigencia_hasta DATE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- SECTION 2: COMPANY STRUCTURE
+-- ============================================================================
+
+CREATE TABLE empresas (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    razon_social VARCHAR(200) NOT NULL,
+    nombre_comercial VARCHAR(200),
+    rfc VARCHAR(13) UNIQUE NOT NULL,
+    regimen_fiscal VARCHAR(3),
+    
+    calle VARCHAR(200),
+    numero_exterior VARCHAR(20),
+    numero_interior VARCHAR(20),
+    colonia VARCHAR(200),
+    municipio VARCHAR(200),
+    estado VARCHAR(100),
+    codigo_postal VARCHAR(5),
+    
+    telefono VARCHAR(20),
+    email VARCHAR(200),
+    
+    certificado_sello_digital TEXT,
+    llave_privada TEXT,
+    password_llave VARCHAR(100),
+    
+    timezone VARCHAR(50) DEFAULT 'America/Mexico_City',
+    logo_url VARCHAR(500),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE registros_patronales (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    numero_registro VARCHAR(15) UNIQUE NOT NULL,
+    
+    estado VARCHAR(100),
+    municipio VARCHAR(200),
+    codigo_postal VARCHAR(5),
+    
+    clase_riesgo INTEGER CHECK (clase_riesgo BETWEEN 1 AND 5),
+    fraccion VARCHAR(10),
+    prima_riesgo DECIMAL(8,6) DEFAULT 0.005,
+    prima_riesgo_vigencia_desde DATE,
+    
+    subdelegacion_imss VARCHAR(50),
+    activo BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- SECTION 3: EMPLOYEE IDENTITY (IMMUTABLE CORE)
+-- ============================================================================
+
+CREATE TABLE employees_identity (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    numero_empleado VARCHAR(20) NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    nombre VARCHAR(100) NOT NULL,
+    apellido_paterno VARCHAR(100) NOT NULL,
+    apellido_materno VARCHAR(100),
+    curp VARCHAR(18) UNIQUE,
+    rfc VARCHAR(13),
+    nss VARCHAR(11) UNIQUE,
+    
+    fecha_nacimiento DATE,
+    genero genero_type,
+    lugar_nacimiento VARCHAR(100),
+    entidad_nacimiento VARCHAR(100),
+    nacionalidad VARCHAR(50) DEFAULT 'mexicana',
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID,
+    
+    UNIQUE(empresa_id, numero_empleado)
+);
+
+-- Prevent updates to immutable fields
+CREATE OR REPLACE FUNCTION prevent_identity_update()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.curp IS NOT NULL AND NEW.curp IS DISTINCT FROM OLD.curp THEN
+        RAISE EXCEPTION 'CURP cannot be modified. Use correction process.';
+    END IF;
+    IF OLD.nss IS NOT NULL AND NEW.nss IS DISTINCT FROM OLD.nss THEN
+        RAISE EXCEPTION 'NSS cannot be modified. Use correction process.';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_prevent_identity_update
+BEFORE UPDATE ON employees_identity
+FOR EACH ROW EXECUTE FUNCTION prevent_identity_update();
+
+-- ============================================================================
+-- SECTION 4: EMPLOYEE CURRENT STATE + KARDEX
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 4.1 Personal Info
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_personal_info (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID UNIQUE NOT NULL REFERENCES employees_identity(id),
+    
+    estado_civil estado_civil_type,
+    escolaridad VARCHAR(50),
+    telefono VARCHAR(20),
+    email_personal VARCHAR(200),
+    
+    contacto_emergencia VARCHAR(200),
+    parentesco_emergencia VARCHAR(50),
+    telefono_emergencia VARCHAR(20),
+    
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID
+);
+
+-- -----------------------------------------------------------------------------
+-- 4.2 Address
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_addresses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    calle VARCHAR(200),
+    numero_exterior VARCHAR(20),
+    numero_interior VARCHAR(20),
+    colonia VARCHAR(200),
+    municipio VARCHAR(200),
+    estado VARCHAR(100),
+    codigo_postal VARCHAR(5),
+    
+    is_current BOOLEAN DEFAULT true,
+    effective_from DATE DEFAULT CURRENT_DATE,
+    effective_to DATE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+-- -----------------------------------------------------------------------------
+-- 4.3 Employment Status
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_employment (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID UNIQUE NOT NULL REFERENCES employees_identity(id),
+    
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    registro_patronal_id UUID NOT NULL REFERENCES registros_patronales(id),
+    
+    estatus estatus_empleado_type DEFAULT 'activo',
+    
+    fecha_ingreso DATE NOT NULL,
+    fecha_alta_imss DATE,
+    fecha_antiguedad DATE,
+    reconoce_antiguedad BOOLEAN DEFAULT false,
+    
+    tipo_contrato tipo_contrato_type DEFAULT 'indeterminado',
+    fecha_inicio_contrato DATE,
+    fecha_fin_contrato DATE,
+    periodo_prueba BOOLEAN DEFAULT false,
+    duracion_prueba_dias INTEGER,
+    
+    fecha_baja DATE,
+    fecha_baja_imss DATE,
+    motivo_baja VARCHAR(200),
+    
+    documento_contrato_id UUID,
+    drive_id VARCHAR(200),
+    
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID
+);
+
+-- -----------------------------------------------------------------------------
+-- 4.4 Labor Conditions (CURRENT STATE)
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_labor_conditions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID UNIQUE NOT NULL REFERENCES employees_identity(id),
+    
+    puesto_id UUID REFERENCES cat_puestos(id),
+    puesto_nombre VARCHAR(100),
+    departamento_id UUID REFERENCES cat_departamentos(id),
+    departamento_nombre VARCHAR(100),
+    
+    tipo_jornada tipo_jornada_type DEFAULT 'diurna',
+    dias_laborales VARCHAR(50),
+    horario VARCHAR(50),
+    tiempo_alimentos_minutos INTEGER DEFAULT 30,
+    dias_descanso VARCHAR(50),
+    
+    modalidad_trabajo modalidad_trabajo_type DEFAULT 'presencial',
+    lugar_trabajo VARCHAR(200),
+    
+    funciones TEXT,
+    
+    jefe_directo_id UUID REFERENCES employees_identity(id),
+    cliente_proyecto VARCHAR(200),
+    
+    observaciones_internas TEXT,
+    
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID
+);
+
+-- KARDEX for labor conditions
+CREATE TABLE kardex_labor_conditions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    operation kardex_operation_type NOT NULL,
+    fecha_movimiento DATE NOT NULL,
+    fecha_efectiva DATE NOT NULL,
+    
+    campo_modificado VARCHAR(50) NOT NULL,
+    valor_anterior TEXT,
+    valor_nuevo TEXT,
+    
+    motivo VARCHAR(200),
+    documento_soporte VARCHAR(200),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+-- -----------------------------------------------------------------------------
+-- 4.5 Compensation (CURRENT STATE)
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_compensation (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID UNIQUE NOT NULL REFERENCES employees_identity(id),
+    
+    salario_diario DECIMAL(12,2) NOT NULL,
+    salario_diario_nominal DECIMAL(12,2),
+    salario_mensual DECIMAL(14,2),
+    
+    sbc DECIMAL(12,2) NOT NULL,
+    sdi DECIMAL(12,2),
+    tabla_imss tabla_imss_type DEFAULT 'fija',
+    
+    esquema_pago VARCHAR(50) DEFAULT 'tradicional',
+    periodicidad_pago periodicidad_pago_type DEFAULT 'quincenal',
+    dia_pago INTEGER,
+    
+    dias_vacaciones_ley INTEGER DEFAULT 12,
+    dias_vacaciones_adicionales INTEGER DEFAULT 0,
+    dias_aguinaldo_ley INTEGER DEFAULT 15,
+    dias_aguinaldo_adicionales INTEGER DEFAULT 0,
+    porcentaje_prima_vacacional DECIMAL(5,2) DEFAULT 25.00,
+    
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_by UUID
+);
+
+-- KARDEX for compensation
+CREATE TABLE kardex_compensation (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    operation kardex_operation_type NOT NULL,
+    fecha_movimiento TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    fecha_efectiva DATE NOT NULL,
+    
+    salario_diario_anterior DECIMAL(12,2),
+    sbc_anterior DECIMAL(12,2),
+    sdi_anterior DECIMAL(12,2),
+    
+    salario_diario_nuevo DECIMAL(12,2),
+    sbc_nuevo DECIMAL(12,2),
+    sdi_nuevo DECIMAL(12,2),
+    
+    motivo VARCHAR(200),
+    tipo_incremento VARCHAR(50),
+    porcentaje_incremento DECIMAL(6,2),
+    documento_soporte VARCHAR(200),
+    
+    imss_movimiento_id UUID,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+CREATE INDEX idx_kardex_compensation_employee ON kardex_compensation(employee_id);
+CREATE INDEX idx_kardex_compensation_fecha ON kardex_compensation(fecha_efectiva);
+
+-- -----------------------------------------------------------------------------
+-- 4.6 Bank Accounts
+-- -----------------------------------------------------------------------------
+CREATE TABLE employees_bank_accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    banco_id UUID REFERENCES cat_bancos(id),
+    banco_nombre VARCHAR(100),
+    clabe VARCHAR(18),
+    cuenta VARCHAR(20),
+    sucursal VARCHAR(20),
+    
+    tipo_cuenta VARCHAR(50) DEFAULT 'nomina',
+    porcentaje_dispersion DECIMAL(5,2) DEFAULT 100.00,
+    monto_fijo_dispersion DECIMAL(12,2),
+    
+    is_primary BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    
+    effective_from DATE DEFAULT CURRENT_DATE,
+    effective_to DATE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+-- Kardex for bank accounts
+CREATE TABLE kardex_bank_accounts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    bank_account_id UUID REFERENCES employees_bank_accounts(id),
+    
+    operation kardex_operation_type NOT NULL,
+    fecha_movimiento TIMESTAMPTZ DEFAULT NOW(),
+    
+    campo_modificado VARCHAR(50),
+    valor_anterior TEXT,
+    valor_nuevo TEXT,
+    
+    motivo VARCHAR(200),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+-- ============================================================================
+-- SECTION 5: EXTERNAL OBLIGATIONS LEDGERS
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 5.1 Generic Ledger (for all external obligations)
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_obligations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    tipo_obligacion VARCHAR(50) NOT NULL,
+    obligacion_id UUID NOT NULL,
+    
+    entry_type ledger_entry_type NOT NULL,
+    source_type ledger_source_type NOT NULL,
+    fecha_movimiento DATE NOT NULL,
+    periodo_nomina VARCHAR(20),
+    
+    monto DECIMAL(12,2) NOT NULL,
+    
+    source_reference_type VARCHAR(50),
+    source_reference_id UUID,
+    
+    external_reference VARCHAR(100),
+    
+    reconciled BOOLEAN DEFAULT false,
+    reconciled_at TIMESTAMPTZ,
+    reconciled_by UUID,
+    reconciliation_notes TEXT,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+CREATE INDEX idx_ledger_obligations_employee ON ledger_obligations(employee_id);
+CREATE INDEX idx_ledger_obligations_tipo ON ledger_obligations(tipo_obligacion);
+CREATE INDEX idx_ledger_obligations_periodo ON ledger_obligations(periodo_nomina);
+CREATE INDEX idx_ledger_obligations_obligacion ON ledger_obligations(obligacion_id);
+CREATE INDEX idx_ledger_obligations_reconciled ON ledger_obligations(reconciled) WHERE reconciled = false;
+
+-- -----------------------------------------------------------------------------
+-- 5.2 FONACOT Credits
+-- -----------------------------------------------------------------------------
+CREATE TABLE fonacot_credits (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    numero_cliente_fonacot VARCHAR(20),
+    numero_credito VARCHAR(30) UNIQUE NOT NULL,
+    
+    monto_credito DECIMAL(12,2),
+    descuento_quincenal DECIMAL(12,2),
+    fecha_inicio DATE NOT NULL,
+    fecha_fin_estimada DATE,
+    numero_pagos INTEGER,
+    
+    is_active BOOLEAN DEFAULT true,
+    fecha_liquidacion DATE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 5.3 INFONAVIT Credits
+-- -----------------------------------------------------------------------------
+CREATE TABLE infonavit_credits (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    numero_credito VARCHAR(20) UNIQUE NOT NULL,
+    
+    tipo_descuento VARCHAR(20) NOT NULL,
+    valor_descuento DECIMAL(12,4) NOT NULL,
+    
+    fecha_inicio DATE NOT NULL,
+    fecha_otorgamiento DATE,
+    
+    is_active BOOLEAN DEFAULT true,
+    fecha_suspension DATE,
+    motivo_suspension VARCHAR(200),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 5.4 Pension Alimenticia
+-- -----------------------------------------------------------------------------
+CREATE TABLE pension_alimenticia (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    numero_expediente VARCHAR(50),
+    juzgado VARCHAR(200),
+    fecha_orden DATE NOT NULL,
+    
+    beneficiario_nombre VARCHAR(200) NOT NULL,
+    beneficiario_banco_id UUID REFERENCES cat_bancos(id),
+    beneficiario_clabe VARCHAR(18),
+    beneficiario_cuenta VARCHAR(20),
+    
+    tipo_descuento VARCHAR(20) NOT NULL,
+    valor_descuento DECIMAL(12,4) NOT NULL,
+    
+    is_active BOOLEAN DEFAULT true,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 5.5 Company Loans
+-- -----------------------------------------------------------------------------
+CREATE TABLE prestamos_empresa (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    folio_prestamo VARCHAR(30) UNIQUE NOT NULL,
+    concepto VARCHAR(100),
+    monto_prestado DECIMAL(12,2) NOT NULL,
+    
+    numero_pagos INTEGER NOT NULL,
+    monto_pago DECIMAL(12,2) NOT NULL,
+    
+    fecha_prestamo DATE NOT NULL,
+    fecha_primer_descuento DATE NOT NULL,
+    fecha_ultimo_descuento_estimada DATE,
+    
+    is_active BOOLEAN DEFAULT true,
+    pagos_realizados INTEGER DEFAULT 0,
+    saldo_pendiente DECIMAL(12,2),
+    fecha_liquidacion DATE,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 5.6 Union Dues
+-- -----------------------------------------------------------------------------
+CREATE TABLE sindicato_membership (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    sindicato_nombre VARCHAR(200),
+    numero_afiliacion VARCHAR(50),
+    
+    tipo_cuota VARCHAR(20),
+    valor_cuota DECIMAL(12,4),
+    
+    fecha_afiliacion DATE,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 5.7 Savings Fund
+-- -----------------------------------------------------------------------------
+CREATE TABLE caja_ahorro_participation (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    porcentaje_empleado DECIMAL(5,2) NOT NULL,
+    porcentaje_empresa DECIMAL(5,2) NOT NULL,
+    
+    fecha_inicio DATE NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- SECTION 6: ACCRUAL LEDGERS
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 6.1 Vacation Accrual
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_vacaciones (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    aniversario INTEGER NOT NULL,
+    periodo_inicio DATE NOT NULL,
+    periodo_fin DATE NOT NULL,
+    
+    dias_correspondientes INTEGER NOT NULL,
+    dias_adicionales INTEGER DEFAULT 0,
+    
+    dias_usados INTEGER DEFAULT 0,
+    dias_vencidos INTEGER DEFAULT 0,
+    
+    dias_disponibles INTEGER GENERATED ALWAYS AS 
+        (dias_correspondientes + dias_adicionales - dias_usados - dias_vencidos) STORED,
+    
+    prima_vacacional_pagada BOOLEAN DEFAULT false,
+    prima_vacacional_monto DECIMAL(12,2),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE ledger_vacaciones_movimientos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ledger_vacaciones_id UUID NOT NULL REFERENCES ledger_vacaciones(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    tipo_movimiento VARCHAR(20) NOT NULL,
+    dias INTEGER NOT NULL,
+    fecha_inicio DATE,
+    fecha_fin DATE,
+    
+    payroll_run_id UUID,
+    payroll_concept_id UUID,
+    
+    motivo VARCHAR(200),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+-- -----------------------------------------------------------------------------
+-- 6.2 Aguinaldo Accrual
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_aguinaldo (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    ejercicio INTEGER NOT NULL,
+    
+    dias_correspondientes INTEGER NOT NULL,
+    dias_adicionales INTEGER DEFAULT 0,
+    dias_trabajados INTEGER DEFAULT 0,
+    
+    salario_base_calculo DECIMAL(12,2),
+    monto_calculado DECIMAL(14,2),
+    monto_gravado DECIMAL(14,2),
+    monto_exento DECIMAL(14,2),
+    
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    payroll_run_id UUID,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(employee_id, ejercicio)
+);
+
+-- -----------------------------------------------------------------------------
+-- 6.3 PTU Accrual
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_ptu (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    ejercicio INTEGER NOT NULL,
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    dias_trabajados INTEGER DEFAULT 0,
+    salarios_devengados DECIMAL(14,2),
+    
+    empresa_dias_totales INTEGER,
+    empresa_salarios_totales DECIMAL(16,2),
+    empresa_ptu_repartir DECIMAL(16,2),
+    
+    monto_por_dias DECIMAL(14,2),
+    monto_por_salarios DECIMAL(14,2),
+    monto_total DECIMAL(14,2),
+    monto_gravado DECIMAL(14,2),
+    monto_exento DECIMAL(14,2),
+    
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    payroll_run_id UUID,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(employee_id, ejercicio, empresa_id)
+);
+
+-- -----------------------------------------------------------------------------
+-- 6.4 Prima de Antigüedad
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_prima_antiguedad (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    fecha_calculo DATE NOT NULL,
+    anos_servicio INTEGER NOT NULL,
+    
+    salario_base DECIMAL(12,2),
+    dias_por_ano DECIMAL(6,2) DEFAULT 12,
+    dias_acumulados DECIMAL(10,2),
+    monto_acumulado DECIMAL(14,2),
+    
+    pagado BOOLEAN DEFAULT false,
+    fecha_pago DATE,
+    finiquito_id UUID,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- SECTION 7: INCIDENCIAS (Events + Ledger)
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 7.1 Incidencias (Event Log)
+-- -----------------------------------------------------------------------------
+CREATE TABLE incidencias (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    tipo incidencia_type NOT NULL,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    
+    cantidad DECIMAL(8,2) NOT NULL DEFAULT 1,
+    unidad VARCHAR(20) DEFAULT 'dias',
+    
+    folio_incapacidad VARCHAR(30),
+    tipo_riesgo VARCHAR(50),
+    dias_imss INTEGER,
+    dias_empresa INTEGER,
+    porcentaje_pago_imss DECIMAL(5,2),
+    
+    estatus VARCHAR(20) DEFAULT 'pendiente',
+    aprobado_por UUID,
+    fecha_aprobacion TIMESTAMPTZ,
+    
+    aplicada_en_nomina BOOLEAN DEFAULT false,
+    payroll_run_id UUID,
+    
+    motivo TEXT,
+    documento_soporte VARCHAR(200),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+CREATE INDEX idx_incidencias_employee ON incidencias(employee_id);
+CREATE INDEX idx_incidencias_fecha ON incidencias(fecha_inicio, fecha_fin);
+CREATE INDEX idx_incidencias_tipo ON incidencias(tipo);
+CREATE INDEX idx_incidencias_estatus ON incidencias(estatus);
+
+-- -----------------------------------------------------------------------------
+-- 7.2 Incidencias Ledger (Accumulated by period)
+-- -----------------------------------------------------------------------------
+CREATE TABLE ledger_incidencias_acumulado (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    periodo_nomina VARCHAR(20) NOT NULL,
+    
+    dias_trabajados INTEGER DEFAULT 0,
+    dias_falta_injustificada INTEGER DEFAULT 0,
+    dias_falta_justificada INTEGER DEFAULT 0,
+    dias_incapacidad_enfermedad INTEGER DEFAULT 0,
+    dias_incapacidad_maternidad INTEGER DEFAULT 0,
+    dias_incapacidad_riesgo INTEGER DEFAULT 0,
+    dias_permiso_sin_goce INTEGER DEFAULT 0,
+    dias_permiso_con_goce INTEGER DEFAULT 0,
+    dias_vacaciones INTEGER DEFAULT 0,
+    
+    horas_extra_dobles DECIMAL(8,2) DEFAULT 0,
+    horas_extra_triples DECIMAL(8,2) DEFAULT 0,
+    dias_festivos_laborados INTEGER DEFAULT 0,
+    
+    retardos INTEGER DEFAULT 0,
+    minutos_retardo INTEGER DEFAULT 0,
+    
+    cerrado BOOLEAN DEFAULT false,
+    payroll_run_id UUID,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(employee_id, periodo_nomina)
+);
+
+-- ============================================================================
+-- SECTION 8: IMSS MANAGEMENT
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 8.1 IMSS Movements
+-- -----------------------------------------------------------------------------
+CREATE TABLE imss_movimientos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    registro_patronal_id UUID NOT NULL REFERENCES registros_patronales(id),
+    
+    tipo_movimiento imss_movimiento_type NOT NULL,
+    fecha_movimiento DATE NOT NULL,
+    
+    nss VARCHAR(11) NOT NULL,
+    curp VARCHAR(18),
+    nombre_completo VARCHAR(200),
+    sbc DECIMAL(12,2) NOT NULL,
+    
+    causa_baja imss_causa_baja_type,
+    
+    idse_enviado BOOLEAN DEFAULT false,
+    idse_fecha_envio TIMESTAMPTZ,
+    idse_folio VARCHAR(50),
+    idse_confirmacion TEXT,
+    idse_error TEXT,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    created_by UUID
+);
+
+CREATE INDEX idx_imss_movimientos_employee ON imss_movimientos(employee_id);
+CREATE INDEX idx_imss_movimientos_fecha ON imss_movimientos(fecha_movimiento);
+CREATE INDEX idx_imss_movimientos_tipo ON imss_movimientos(tipo_movimiento);
+
+-- -----------------------------------------------------------------------------
+-- 8.2 SUA Bimestral
+-- -----------------------------------------------------------------------------
+CREATE TABLE sua_bimestral (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    registro_patronal_id UUID NOT NULL REFERENCES registros_patronales(id),
+    
+    ejercicio INTEGER NOT NULL,
+    bimestre INTEGER NOT NULL CHECK (bimestre BETWEEN 1 AND 6),
+    
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    
+    total_trabajadores INTEGER,
+    total_cuotas_obrero DECIMAL(14,2),
+    total_cuotas_patron DECIMAL(14,2),
+    total_rcv_patron DECIMAL(14,2),
+    total_infonavit_patron DECIMAL(14,2),
+    total_general DECIMAL(16,2),
+    
+    archivo_sua VARCHAR(200),
+    archivo_hash VARCHAR(64),
+    
+    estatus VARCHAR(20) DEFAULT 'calculado',
+    fecha_pago DATE,
+    linea_captura VARCHAR(50),
+    comprobante_pago VARCHAR(200),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(registro_patronal_id, ejercicio, bimestre)
+);
+
+-- Full breakdown per employee
+CREATE TABLE sua_bimestral_detalle (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sua_bimestral_id UUID NOT NULL REFERENCES sua_bimestral(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    nss VARCHAR(11) NOT NULL,
+    sbc DECIMAL(12,2) NOT NULL,
+    dias_cotizados INTEGER NOT NULL,
+    
+    -- Enfermedades y Maternidad
+    enf_mat_especie_patron DECIMAL(10,2),
+    enf_mat_especie_obrero DECIMAL(10,2),
+    enf_mat_dinero_patron DECIMAL(10,2),
+    enf_mat_dinero_obrero DECIMAL(10,2),
+    enf_mat_gastos_med_pensionados_patron DECIMAL(10,2),
+    
+    -- Invalidez y Vida
+    invalidez_vida_patron DECIMAL(10,2),
+    invalidez_vida_obrero DECIMAL(10,2),
+    
+    -- Riesgo de Trabajo
+    riesgo_trabajo_patron DECIMAL(10,2),
+    
+    -- Guarderias
+    guarderias_ps_patron DECIMAL(10,2),
+    
+    -- RCV
+    retiro_patron DECIMAL(10,2),
+    cesantia_vejez_patron DECIMAL(10,2),
+    cesantia_vejez_obrero DECIMAL(10,2),
+    
+    -- INFONAVIT
+    infonavit_patron DECIMAL(10,2),
+    
+    -- Calculated totals
+    total_obrero DECIMAL(12,2) GENERATED ALWAYS AS (
+        COALESCE(enf_mat_especie_obrero, 0) +
+        COALESCE(enf_mat_dinero_obrero, 0) +
+        COALESCE(invalidez_vida_obrero, 0) +
+        COALESCE(cesantia_vejez_obrero, 0)
+    ) STORED,
+    
+    total_patron DECIMAL(12,2) GENERATED ALWAYS AS (
+        COALESCE(enf_mat_especie_patron, 0) +
+        COALESCE(enf_mat_dinero_patron, 0) +
+        COALESCE(enf_mat_gastos_med_pensionados_patron, 0) +
+        COALESCE(invalidez_vida_patron, 0) +
+        COALESCE(riesgo_trabajo_patron, 0) +
+        COALESCE(guarderias_ps_patron, 0) +
+        COALESCE(retiro_patron, 0) +
+        COALESCE(cesantia_vejez_patron, 0) +
+        COALESCE(infonavit_patron, 0)
+    ) STORED,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_sua_detalle_employee ON sua_bimestral_detalle(employee_id);
+
+-- ============================================================================
+-- SECTION 9: PAYROLL CORE
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 9.1 Payroll Periods
+-- -----------------------------------------------------------------------------
+CREATE TABLE payroll_periods (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    ejercicio INTEGER NOT NULL,
+    periodicidad periodicidad_pago_type NOT NULL,
+    numero_periodo INTEGER NOT NULL,
+    
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    fecha_pago DATE NOT NULL,
+    
+    codigo_periodo VARCHAR(20) NOT NULL,
+    
+    cerrado BOOLEAN DEFAULT false,
+    fecha_cierre TIMESTAMPTZ,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(empresa_id, ejercicio, periodicidad, numero_periodo)
+);
+
+-- -----------------------------------------------------------------------------
+-- 9.2 Payroll Runs
+-- -----------------------------------------------------------------------------
+CREATE TABLE payroll_runs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    registro_patronal_id UUID REFERENCES registros_patronales(id),
+    payroll_period_id UUID NOT NULL REFERENCES payroll_periods(id),
+    
+    tipo_nomina VARCHAR(20) NOT NULL,
+    folio VARCHAR(30) UNIQUE NOT NULL,
+    descripcion VARCHAR(200),
+    
+    fecha_calculo TIMESTAMPTZ DEFAULT NOW(),
+    fecha_pago DATE NOT NULL,
+    
+    total_empleados INTEGER DEFAULT 0,
+    total_percepciones DECIMAL(16,2) DEFAULT 0,
+    total_deducciones DECIMAL(16,2) DEFAULT 0,
+    total_otros_pagos DECIMAL(16,2) DEFAULT 0,
+    total_neto DECIMAL(16,2) DEFAULT 0,
+    
+    estatus VARCHAR(20) DEFAULT 'borrador',
+    
+    calculado_por UUID,
+    calculado_at TIMESTAMPTZ,
+    aprobado_por UUID,
+    aprobado_at TIMESTAMPTZ,
+    
+    todos_timbrados BOOLEAN DEFAULT false,
+    
+    dispersion_generada BOOLEAN DEFAULT false,
+    dispersion_enviada BOOLEAN DEFAULT false,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_payroll_runs_empresa ON payroll_runs(empresa_id);
+CREATE INDEX idx_payroll_runs_periodo ON payroll_runs(payroll_period_id);
+CREATE INDEX idx_payroll_runs_fecha ON payroll_runs(fecha_pago);
+CREATE INDEX idx_payroll_runs_estatus ON payroll_runs(estatus);
+
+-- -----------------------------------------------------------------------------
+-- 9.3 Payroll Employee Summary
+-- -----------------------------------------------------------------------------
+CREATE TABLE payroll_employee_summary (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payroll_run_id UUID NOT NULL REFERENCES payroll_runs(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    numero_empleado VARCHAR(20),
+    nombre_completo VARCHAR(200),
+    curp VARCHAR(18),
+    rfc VARCHAR(13),
+    nss VARCHAR(11),
+    
+    salario_diario DECIMAL(12,2),
+    sbc DECIMAL(12,2),
+    
+    dias_periodo INTEGER,
+    dias_trabajados INTEGER,
+    dias_pagados INTEGER,
+    
+    total_percepciones DECIMAL(14,2) DEFAULT 0,
+    total_percepciones_gravadas DECIMAL(14,2) DEFAULT 0,
+    total_percepciones_exentas DECIMAL(14,2) DEFAULT 0,
+    total_deducciones DECIMAL(14,2) DEFAULT 0,
+    total_otros_pagos DECIMAL(14,2) DEFAULT 0,
+    total_neto DECIMAL(14,2) DEFAULT 0,
+    
+    base_isr DECIMAL(14,2),
+    isr_antes_subsidio DECIMAL(14,2),
+    subsidio_causado DECIMAL(14,2),
+    subsidio_entregado DECIMAL(14,2),
+    isr_retenido DECIMAL(14,2),
+    
+    imss_obrero DECIMAL(12,2),
+    
+    estatus VARCHAR(20) DEFAULT 'pendiente',
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    UNIQUE(payroll_run_id, employee_id)
+);
+
+CREATE INDEX idx_payroll_summary_employee ON payroll_employee_summary(employee_id);
+CREATE INDEX idx_payroll_summary_run ON payroll_employee_summary(payroll_run_id);
+
+-- -----------------------------------------------------------------------------
+-- 9.4 Payroll Concepts (THE CRITICAL TABLE)
+-- -----------------------------------------------------------------------------
+CREATE TABLE payroll_concepts (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payroll_run_id UUID NOT NULL REFERENCES payroll_runs(id),
+    payroll_employee_summary_id UUID NOT NULL REFERENCES payroll_employee_summary(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    concept_id UUID NOT NULL REFERENCES cat_conceptos(id),
+    concepto_codigo VARCHAR(20) NOT NULL,
+    concepto_nombre VARCHAR(100) NOT NULL,
+    
+    tipo concepto_tipo_type NOT NULL,
+    categoria VARCHAR(50),
+    subcategoria VARCHAR(50),
+    
+    cantidad DECIMAL(10,2) DEFAULT 1,
+    valor_unitario DECIMAL(12,2),
+    monto_total DECIMAL(14,2) NOT NULL,
+    monto_gravado DECIMAL(14,2) DEFAULT 0,
+    monto_exento DECIMAL(14,2) DEFAULT 0,
+    
+    integra_sbc BOOLEAN DEFAULT false,
+    
+    source_type VARCHAR(50),
+    source_id UUID,
+    
+    codigo_sat VARCHAR(10),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- CRITICAL INDEXES
+CREATE INDEX idx_payroll_concepts_employee ON payroll_concepts(employee_id);
+CREATE INDEX idx_payroll_concepts_concepto ON payroll_concepts(concept_id);
+CREATE INDEX idx_payroll_concepts_categoria ON payroll_concepts(categoria);
+CREATE INDEX idx_payroll_concepts_subcategoria ON payroll_concepts(subcategoria);
+CREATE INDEX idx_payroll_concepts_tipo ON payroll_concepts(tipo);
+CREATE INDEX idx_payroll_concepts_run ON payroll_concepts(payroll_run_id);
+
+-- Composite for the query pattern: employee + categoria + subcategoria
+CREATE INDEX idx_payroll_concepts_employee_categoria ON payroll_concepts(employee_id, categoria, subcategoria);
+
+-- ============================================================================
+-- SECTION 10: CFDI NOMINA
+-- ============================================================================
+
+CREATE TABLE cfdi_nomina (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payroll_employee_summary_id UUID NOT NULL REFERENCES payroll_employee_summary(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    payroll_run_id UUID NOT NULL REFERENCES payroll_runs(id),
+    
+    uuid_fiscal UUID UNIQUE,
+    serie VARCHAR(10),
+    folio VARCHAR(30),
+    
+    fecha_timbrado TIMESTAMPTZ,
+    fecha_emision TIMESTAMPTZ,
+    
+    subtotal DECIMAL(14,2),
+    descuento DECIMAL(14,2),
+    total DECIMAL(14,2),
+    
+    tipo_nomina VARCHAR(1),
+    fecha_pago DATE,
+    fecha_inicio_pago DATE,
+    fecha_fin_pago DATE,
+    num_dias_pagados DECIMAL(6,2),
+    total_percepciones DECIMAL(14,2),
+    total_deducciones DECIMAL(14,2),
+    total_otros_pagos DECIMAL(14,2),
+    
+    estatus VARCHAR(20) DEFAULT 'pendiente',
+    fecha_cancelacion TIMESTAMPTZ,
+    motivo_cancelacion VARCHAR(200),
+    uuid_sustitucion UUID,
+    
+    -- Storage reference
+    storage_bucket VARCHAR(100),
+    storage_path VARCHAR(500),
+    xml_hash VARCHAR(64),
+    
+    pac_nombre VARCHAR(50),
+    pac_certificado VARCHAR(50),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_cfdi_uuid ON cfdi_nomina(uuid_fiscal);
+CREATE INDEX idx_cfdi_employee ON cfdi_nomina(employee_id);
+CREATE INDEX idx_cfdi_payroll ON cfdi_nomina(payroll_run_id);
+CREATE INDEX idx_cfdi_estatus ON cfdi_nomina(estatus);
+
+-- ============================================================================
+-- SECTION 11: PAYMENT PROCESSING
+-- ============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 11.1 Payment Batches
+-- -----------------------------------------------------------------------------
+CREATE TABLE payment_batches (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payroll_run_id UUID NOT NULL REFERENCES payroll_runs(id),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    folio VARCHAR(30) UNIQUE NOT NULL,
+    tipo_pago VARCHAR(50) NOT NULL,
+    
+    banco_origen_id UUID REFERENCES cat_bancos(id),
+    cuenta_origen VARCHAR(20),
+    
+    layout_generado BOOLEAN DEFAULT false,
+    layout_path VARCHAR(500),
+    layout_hash VARCHAR(64),
+    
+    total_operaciones INTEGER DEFAULT 0,
+    monto_total DECIMAL(16,2) DEFAULT 0,
+    
+    estatus VARCHAR(20) DEFAULT 'pendiente',
+    fecha_envio TIMESTAMPTZ,
+    fecha_aplicacion DATE,
+    
+    referencia_banco VARCHAR(50),
+    operaciones_exitosas INTEGER,
+    operaciones_rechazadas INTEGER,
+    archivo_respuesta VARCHAR(500),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -----------------------------------------------------------------------------
+-- 11.2 Payment Lines
+-- -----------------------------------------------------------------------------
+CREATE TABLE payment_lines (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    payment_batch_id UUID NOT NULL REFERENCES payment_batches(id),
+    payroll_employee_summary_id UUID NOT NULL REFERENCES payroll_employee_summary(id),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    
+    bank_account_id UUID REFERENCES employees_bank_accounts(id),
+    banco_destino VARCHAR(100),
+    clabe_destino VARCHAR(18),
+    cuenta_destino VARCHAR(20),
+    beneficiario VARCHAR(200),
+    
+    tipo_pago VARCHAR(50) NOT NULL,
+    concepto_pago VARCHAR(200),
+    
+    monto DECIMAL(14,2) NOT NULL,
+    
+    estatus VARCHAR(20) DEFAULT 'pendiente',
+    fecha_aplicacion TIMESTAMPTZ,
+    
+    referencia VARCHAR(50),
+    motivo_rechazo VARCHAR(200),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_payment_lines_employee ON payment_lines(employee_id);
+CREATE INDEX idx_payment_lines_batch ON payment_lines(payment_batch_id);
+CREATE INDEX idx_payment_lines_estatus ON payment_lines(estatus);
+
+-- ============================================================================
+-- SECTION 12: FILE TRACKING
+-- ============================================================================
+
+CREATE TABLE file_registry (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    direction file_direction_type NOT NULL,
+    file_type file_type NOT NULL,
+    
+    nombre_archivo VARCHAR(255) NOT NULL,
+    storage_bucket VARCHAR(100),
+    storage_path VARCHAR(500),
+    file_size_bytes BIGINT,
+    file_hash VARCHAR(64),
+    mime_type VARCHAR(100),
+    
+    fecha_archivo DATE,
+    periodo_referencia VARCHAR(20),
+    
+    registros_totales INTEGER,
+    registros_procesados INTEGER,
+    registros_error INTEGER,
+    
+    estatus VARCHAR(20) DEFAULT 'recibido',
+    error_mensaje TEXT,
+    
+    payroll_run_id UUID REFERENCES payroll_runs(id),
+    payment_batch_id UUID REFERENCES payment_batches(id),
+    sua_bimestral_id UUID REFERENCES sua_bimestral(id),
+    
+    procesado_por UUID,
+    procesado_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_file_registry_empresa ON file_registry(empresa_id);
+CREATE INDEX idx_file_registry_type ON file_registry(file_type);
+CREATE INDEX idx_file_registry_fecha ON file_registry(fecha_archivo);
+
+-- ============================================================================
+-- SECTION 13: FINIQUITOS
+-- ============================================================================
+
+CREATE TABLE finiquitos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES employees_identity(id),
+    empresa_id UUID NOT NULL REFERENCES empresas(id),
+    
+    fecha_baja DATE NOT NULL,
+    tipo_baja VARCHAR(50) NOT NULL,
+    motivo TEXT,
+    
+    fecha_ingreso DATE NOT NULL,
+    antiguedad_anos DECIMAL(6,2),
+    antiguedad_dias INTEGER,
+    salario_diario DECIMAL(12,2) NOT NULL,
+    salario_diario_integrado DECIMAL(12,2),
+    
+    dias_trabajados_periodo INTEGER,
+    sueldo_proporcional DECIMAL(14,2),
+    
+    aguinaldo_dias_proporcional DECIMAL(10,2),
+    aguinaldo_monto DECIMAL(14,2),
+    
+    vacaciones_dias_pendientes DECIMAL(10,2),
+    vacaciones_monto DECIMAL(14,2),
+    
+    prima_vacacional_monto DECIMAL(14,2),
+    
+    prima_antiguedad_dias DECIMAL(10,2),
+    prima_antiguedad_monto DECIMAL(14,2),
+    
+    indemnizacion_90_dias DECIMAL(14,2),
+    indemnizacion_20_dias_ano DECIMAL(14,2),
+    
+    otros_conceptos JSONB,
+    
+    total_percepciones DECIMAL(16,2),
+    total_deducciones DECIMAL(16,2),
+    total_neto DECIMAL(16,2),
+    
+    isr_retenido DECIMAL(14,2),
+    
+    estatus VARCHAR(20) DEFAULT 'calculado',
+    
+    payroll_run_id UUID REFERENCES payroll_runs(id),
+    
+    documento_renuncia_path VARCHAR(500),
+    convenio_path VARCHAR(500),
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================================
+-- SECTION 14: AUDIT TRAIL
+-- ============================================================================
+
+CREATE TABLE audit_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    table_name VARCHAR(100) NOT NULL,
+    record_id UUID NOT NULL,
+    operation VARCHAR(10) NOT NULL,
+    
+    old_values JSONB,
+    new_values JSONB,
+    changed_fields TEXT[],
+    
+    user_id UUID,
+    user_email VARCHAR(200),
+    ip_address INET,
+    user_agent TEXT,
+    
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_log_table ON audit_log(table_name);
+CREATE INDEX idx_audit_log_record ON audit_log(record_id);
+CREATE INDEX idx_audit_log_created ON audit_log(created_at);
+
+-- ============================================================================
+-- SECTION 15: VIEWS
+-- ============================================================================
+
+-- View: Employee concept history (THE KEY VIEW for your query)
+CREATE VIEW vw_employee_concept_history AS
+SELECT 
+    pc.employee_id,
+    ei.numero_empleado,
+    ei.nombre || ' ' || ei.apellido_paterno AS nombre_empleado,
+    pr.fecha_pago,
+    pp.codigo_periodo,
+    pr.tipo_nomina,
+    c.codigo AS concepto_codigo,
+    c.nombre AS concepto_nombre,
+    c.categoria,
+    c.subcategoria,
+    pc.tipo,
+    pc.cantidad,
+    pc.monto_total,
+    pc.monto_gravado,
+    pc.monto_exento
+FROM payroll_concepts pc
+JOIN payroll_runs pr ON pc.payroll_run_id = pr.id
+JOIN payroll_periods pp ON pr.payroll_period_id = pp.id
+JOIN employees_identity ei ON pc.employee_id = ei.id
+JOIN cat_conceptos c ON pc.concept_id = c.id
+WHERE pr.estatus NOT IN ('cancelada', 'borrador');
+
+-- Example usage:
+-- SELECT SUM(monto_total) 
+-- FROM vw_employee_concept_history 
+-- WHERE numero_empleado = 'EMP001' 
+-- AND subcategoria = 'puntualidad' 
+-- AND fecha_pago >= CURRENT_DATE - INTERVAL '3 months';
+
+-- View: Current employees
+CREATE VIEW vw_employees_current AS
+SELECT 
+    ei.id,
+    ei.numero_empleado,
+    ei.nombre,
+    ei.apellido_paterno,
+    ei.apellido_materno,
+    ei.curp,
+    ei.rfc,
+    ei.nss,
+    ei.fecha_nacimiento,
+    ei.genero,
+    
+    ee.estatus,
+    ee.fecha_ingreso,
+    ee.fecha_antiguedad,
+    ee.tipo_contrato,
+    
+    elc.puesto_nombre,
+    elc.departamento_nombre,
+    elc.modalidad_trabajo,
+    elc.tipo_jornada,
+    
+    ec.salario_diario,
+    ec.salario_mensual,
+    ec.sbc,
+    ec.sdi,
+    ec.periodicidad_pago,
+    
+    emp.razon_social AS empresa,
+    rp.numero_registro AS registro_patronal
+    
+FROM employees_identity ei
+LEFT JOIN employees_employment ee ON ei.id = ee.employee_id
+LEFT JOIN employees_labor_conditions elc ON ei.id = elc.employee_id
+LEFT JOIN employees_compensation ec ON ei.id = ec.employee_id
+LEFT JOIN empresas emp ON ee.empresa_id = emp.id
+LEFT JOIN registros_patronales rp ON ee.registro_patronal_id = rp.id
+WHERE ee.estatus = 'activo';
+
+-- View: Ledger balances
+CREATE VIEW vw_ledger_balances AS
+SELECT 
+    employee_id,
+    tipo_obligacion,
+    obligacion_id,
+    SUM(CASE WHEN entry_type = 'cargo' THEN monto ELSE 0 END) AS total_cargos,
+    SUM(CASE WHEN entry_type = 'abono' THEN monto ELSE 0 END) AS total_abonos,
+    SUM(CASE WHEN entry_type = 'ajuste' THEN monto ELSE 0 END) AS total_ajustes,
+    SUM(CASE 
+        WHEN entry_type = 'cargo' THEN monto 
+        WHEN entry_type = 'abono' THEN -monto 
+        ELSE 0 
+    END) AS saldo
+FROM ledger_obligations
+GROUP BY employee_id, tipo_obligacion, obligacion_id;
+
+-- View: FONACOT reconciliation
+CREATE VIEW vw_fonacot_reconciliation AS
+SELECT 
+    fc.id AS credit_id,
+    fc.employee_id,
+    ei.numero_empleado,
+    ei.nombre || ' ' || ei.apellido_paterno AS nombre_empleado,
+    fc.numero_credito,
+    fc.descuento_quincenal AS monto_esperado_periodo,
+    fc.is_active,
+    lb.total_cargos AS total_fonacot_indica,
+    lb.total_abonos AS total_descontado,
+    lb.saldo AS saldo_pendiente,
+    CASE 
+        WHEN lb.saldo = 0 THEN 'OK'
+        WHEN lb.saldo > 0 THEN 'PENDIENTE_DESCUENTO'
+        WHEN lb.saldo < 0 THEN 'EXCESO_DESCUENTO'
+    END AS estatus_reconciliacion
+FROM fonacot_credits fc
+JOIN employees_identity ei ON fc.employee_id = ei.id
+LEFT JOIN vw_ledger_balances lb ON lb.obligacion_id = fc.id AND lb.tipo_obligacion = 'fonacot';
+
+-- ============================================================================
+-- SECTION 16: TRIGGERS FOR AUTOMATIC KARDEX
+-- ============================================================================
+
+-- Trigger for compensation changes
+CREATE OR REPLACE FUNCTION trg_compensation_kardex()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD.salario_diario IS DISTINCT FROM NEW.salario_diario 
+           OR OLD.sbc IS DISTINCT FROM NEW.sbc 
+           OR OLD.sdi IS DISTINCT FROM NEW.sdi THEN
+            INSERT INTO kardex_compensation (
+                employee_id,
+                operation,
+                fecha_movimiento,
+                fecha_efectiva,
+                salario_diario_anterior,
+                sbc_anterior,
+                sdi_anterior,
+                salario_diario_nuevo,
+                sbc_nuevo,
+                sdi_nuevo
+            ) VALUES (
+                NEW.employee_id,
+                'modificacion',
+                NOW(),
+                CURRENT_DATE,
+                OLD.salario_diario,
+                OLD.sbc,
+                OLD.sdi,
+                NEW.salario_diario,
+                NEW.sbc,
+                NEW.sdi
+            );
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_employees_compensation_kardex
+AFTER UPDATE ON employees_compensation
+FOR EACH ROW EXECUTE FUNCTION trg_compensation_kardex();
+
+-- ============================================================================
+-- SECTION 17: SEED DATA
+-- ============================================================================
+
+-- Essential concepts
+INSERT INTO cat_conceptos (codigo, codigo_sat, nombre, tipo, naturaleza, categoria, subcategoria, es_gravado, es_exento, integra_sbc, orden_nomina, es_sistema) VALUES
+-- Percepciones
+('P001', '001', 'Sueldo', 'percepcion', 'fijo', 'sueldo', 'ordinario', true, false, false, 10, true),
+('P002', '001', 'Sueldo Parte Exenta', 'percepcion', 'fijo', 'sueldo', 'exento', false, true, false, 11, true),
+('P003', '002', 'Gratificación Anual (Aguinaldo)', 'percepcion', 'eventual', 'aguinaldo', null, true, true, false, 20, true),
+('P004', '003', 'PTU', 'percepcion', 'eventual', 'ptu', null, true, true, false, 21, true),
+('P005', '004', 'Prima Vacacional', 'percepcion', 'eventual', 'vacaciones', 'prima', true, true, false, 30, true),
+('P006', '021', 'Prima Dominical', 'percepcion', 'variable', 'prima', 'dominical', true, true, true, 31, true),
+('P007', '019', 'Horas Extra Dobles', 'percepcion', 'variable', 'horas_extra', 'dobles', true, true, true, 40, true),
+('P008', '019', 'Horas Extra Triples', 'percepcion', 'variable', 'horas_extra', 'triples', true, false, true, 41, true),
+('P009', '010', 'Premio por Puntualidad', 'percepcion', 'variable', 'bono', 'puntualidad', true, true, true, 50, true),
+('P010', '010', 'Premio por Asistencia', 'percepcion', 'variable', 'bono', 'asistencia', true, true, true, 51, true),
+('P011', '010', 'Bono de Productividad', 'percepcion', 'variable', 'bono', 'productividad', true, false, true, 52, true),
+('P012', '038', 'Otros Ingresos', 'percepcion', 'eventual', 'otros', null, true, false, false, 100, true),
+('P013', '013', 'Fondo de Ahorro Patronal', 'percepcion', 'fijo', 'prevision_social', 'fondo_ahorro', false, true, true, 60, true),
+('P014', '017', 'Vales de Despensa', 'percepcion', 'fijo', 'prevision_social', 'despensa', false, true, true, 61, true),
+('P015', '005', 'Comisiones', 'percepcion', 'variable', 'comision', null, true, false, true, 53, true),
+('P016', '023', 'Vacaciones Pagadas', 'percepcion', 'eventual', 'vacaciones', 'pago', true, true, false, 32, true),
+
+-- Deducciones
+('D001', '001', 'Seguridad Social (IMSS Obrero)', 'deduccion', 'fijo', 'imss', 'obrero', false, false, false, 200, true),
+('D002', '002', 'ISR', 'deduccion', 'fijo', 'impuesto', 'isr', false, false, false, 201, true),
+('D003', '010', 'INFONAVIT', 'deduccion', 'fijo', 'infonavit', null, false, false, false, 210, true),
+('D004', '011', 'FONACOT', 'deduccion', 'fijo', 'fonacot', null, false, false, false, 211, true),
+('D005', '006', 'Préstamo Empresa', 'deduccion', 'fijo', 'prestamo', 'empresa', false, false, false, 220, true),
+('D006', '004', 'Cuota Sindical', 'deduccion', 'fijo', 'sindicato', null, false, false, false, 230, true),
+('D007', '012', 'Pensión Alimenticia', 'deduccion', 'fijo', 'pension_alimenticia', null, false, false, false, 240, true),
+('D008', '007', 'Fondo de Ahorro Empleado', 'deduccion', 'fijo', 'caja_ahorro', 'empleado', false, false, false, 250, true),
+('D009', '004', 'Caja de Ahorro', 'deduccion', 'fijo', 'caja_ahorro', null, false, false, false, 251, true),
+('D010', '004', 'Vales (Descuento)', 'deduccion', 'fijo', 'vales', null, false, false, false, 260, true),
+
+-- Otros pagos
+('O001', '002', 'Subsidio para el Empleo', 'otros_pagos', 'fijo', 'subsidio', 'empleo', false, false, false, 300, true),
+('O002', '004', 'Saldo a Favor por Compensación', 'otros_pagos', 'eventual', 'subsidio', 'compensacion', false, false, false, 301, true),
+
+-- Informativos
+('I001', null, 'Total Gravado', 'informativo', 'fijo', 'total', 'gravado', false, false, false, 900, true),
+('I002', null, 'Total Exento', 'informativo', 'fijo', 'total', 'exento', false, false, false, 901, true);
+
+-- UMA/SMG values
+INSERT INTO cat_valores_uma_smg (tipo, valor_diario, valor_mensual, valor_anual, vigencia_desde, vigencia_hasta) VALUES
+('UMA', 108.57, 3301.82, 39621.84, '2024-02-01', '2025-01-31'),
+('UMA', 113.14, 3441.02, 41292.24, '2025-02-01', NULL),
+('SMG', 248.93, 7571.88, 90862.56, '2024-01-01', '2024-12-31'),
+('SMG', 278.80, 8479.95, 101759.40, '2025-01-01', NULL),
+('SMG_FRONTERA', 374.89, 11405.90, 136870.85, '2024-01-01', '2024-12-31'),
+('SMG_FRONTERA', 419.88, 12770.17, 153242.04, '2025-01-01', NULL);
+
+-- Mexico country
+INSERT INTO cat_paises (codigo, nombre) VALUES ('MEX', 'México');
+
+-- Banks
+INSERT INTO cat_bancos (codigo_sat, nombre_corto, nombre_completo, longitud_cuenta) VALUES
+('002', 'BANAMEX', 'Banco Nacional de México, S.A.', 10),
+('012', 'BBVA', 'BBVA México, S.A.', 10),
+('014', 'SANTANDER', 'Banco Santander México, S.A.', 11),
+('021', 'HSBC', 'HSBC México, S.A.', 10),
+('030', 'BAJIO', 'Banco del Bajío, S.A.', 10),
+('036', 'INBURSA', 'Banco Inbursa, S.A.', 11),
+('044', 'SCOTIABANK', 'Scotiabank Inverlat, S.A.', 11),
+('058', 'BANREGIO', 'Banco Regional de Monterrey, S.A.', 11),
+('072', 'BANORTE', 'Banco Mercantil del Norte, S.A.', 10),
+('127', 'AZTECA', 'Banco Azteca, S.A.', 10),
+('128', 'AUTOFIN', 'Banco Autofin México, S.A.', 10),
+('137', 'BANCOPPEL', 'BanCoppel, S.A.', 10);
+
+-- ============================================================================
+-- END OF SCHEMA
+-- ============================================================================
+
+/*
+================================================================================
+USAGE EXAMPLES
+================================================================================
+
+-- 1. Query: How much did Fernando earn from punctuality bonuses in the last 3 months?
+
+SELECT 
+    SUM(monto_total) AS total_bonos_puntualidad
+FROM vw_employee_concept_history 
+WHERE numero_empleado = 'EMP001' 
+AND subcategoria = 'puntualidad' 
+AND fecha_pago >= CURRENT_DATE - INTERVAL '3 months';
+
+-- 2. Query: Detailed breakdown by concept category for an employee
+
+SELECT 
+    categoria,
+    subcategoria,
+    COUNT(*) AS num_pagos,
+    SUM(monto_total) AS total
+FROM vw_employee_concept_history 
+WHERE numero_empleado = 'EMP001' 
+AND fecha_pago >= '2024-01-01'
+GROUP BY categoria, subcategoria
+ORDER BY total DESC;
+
+-- 3. Query: FONACOT reconciliation status
+
+SELECT * FROM vw_fonacot_reconciliation 
+WHERE estatus_reconciliacion != 'OK';
+
+-- 4. Query: Salary history for an employee
+
+SELECT 
+    fecha_efectiva,
+    salario_diario_anterior,
+    salario_diario_nuevo,
+    porcentaje_incremento,
+    motivo
+FROM kardex_compensation
+WHERE employee_id = 'uuid-here'
+ORDER BY fecha_efectiva;
+
+-- 5. Query: All obligations ledger for an employee
+
+SELECT 
+    tipo_obligacion,
+    fecha_movimiento,
+    entry_type,
+    monto,
+    source_type,
+    reconciled
+FROM ledger_obligations
+WHERE employee_id = 'uuid-here'
+ORDER BY fecha_movimiento;
+
+================================================================================
+*/

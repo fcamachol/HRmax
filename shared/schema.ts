@@ -60,6 +60,8 @@ export const employees = pgTable("employees", {
   sdi: numeric("sdi"),
   sbcBp: bigint("sbc_bp", { mode: "bigint" }), // Salario Base de Cotización en basis points (autoritativo)
   sdiBp: bigint("sdi_bp", { mode: "bigint" }), // Salario Diario Integrado en basis points (autoritativo)
+  salarioMensualNetoBp: bigint("salario_mensual_neto_bp", { mode: "bigint" }), // Salario Mensual Neto en basis points
+  horasSemanales: integer("horas_semanales").default(48), // Horas semanales (para contrato laboral)
   tablaImss: varchar("tabla_imss").default("fija"),
   diasVacacionesAnuales: integer("dias_vacaciones_anuales").default(12),
   diasVacacionesDisponibles: integer("dias_vacaciones_disponibles").default(12),
@@ -929,6 +931,8 @@ export const hiringProcess = pgTable("hiring_process", {
   centroTrabajoId: varchar("centro_trabajo_id").references(() => centrosTrabajo.id, { onDelete: "set null" }), // Centro de trabajo (FK)
   // Registro patronal
   registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "set null" }), // Registro patronal (FK)
+  // Empleado creado (cuando se completa el alta)
+  empleadoId: varchar("empleado_id").references(() => employees.id, { onDelete: "set null" }), // NULL hasta que se complete el alta
   // Datos de la oferta
   offerLetterSent: text("offer_letter_sent").default("false"), // 'true' o 'false'
   offerAcceptedDate: date("offer_accepted_date"),
@@ -3767,6 +3771,82 @@ export type EmpleadoBeneficioExtra = typeof empleadoBeneficiosExtra.$inferSelect
 export type InsertEmpleadoBeneficioExtra = z.infer<typeof insertEmpleadoBeneficioExtraSchema>;
 
 // ============================================================================
+// CATÁLOGOS GEOGRÁFICOS (Requeridos para CFDI)
+// ============================================================================
+
+export const catPaises = pgTable("cat_paises", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codigo: varchar("codigo", { length: 3 }).notNull().unique(), // ISO 3166-1 alpha-3
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export type CatPais = typeof catPaises.$inferSelect;
+export const insertCatPaisSchema = createInsertSchema(catPaises).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCatPais = z.infer<typeof insertCatPaisSchema>;
+
+export const catEstados = pgTable("cat_estados", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  paisId: varchar("pais_id").references(() => catPaises.id),
+  codigo: varchar("codigo", { length: 10 }).notNull(),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  codigoSat: varchar("codigo_sat", { length: 3 }), // Código SAT para CFDI
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  paisCodigoIdx: unique().on(table.paisId, table.codigo),
+}));
+
+export type CatEstado = typeof catEstados.$inferSelect;
+export const insertCatEstadoSchema = createInsertSchema(catEstados).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCatEstado = z.infer<typeof insertCatEstadoSchema>;
+
+export const catMunicipios = pgTable("cat_municipios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  estadoId: varchar("estado_id").references(() => catEstados.id),
+  codigo: varchar("codigo", { length: 10 }).notNull(),
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  estadoIdx: index("cat_municipios_estado_idx").on(table.estadoId),
+}));
+
+export type CatMunicipio = typeof catMunicipios.$inferSelect;
+export const insertCatMunicipioSchema = createInsertSchema(catMunicipios).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCatMunicipio = z.infer<typeof insertCatMunicipioSchema>;
+
+export const catCodigosPostales = pgTable("cat_codigos_postales", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  codigoPostal: varchar("codigo_postal", { length: 5 }).notNull(),
+  colonia: varchar("colonia", { length: 200 }).notNull(),
+  municipioId: varchar("municipio_id").references(() => catMunicipios.id),
+  tipoAsentamiento: varchar("tipo_asentamiento", { length: 50 }),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  cpIdx: index("cat_cp_codigo_idx").on(table.codigoPostal),
+  municipioIdx: index("cat_cp_municipio_idx").on(table.municipioId),
+}));
+
+export type CatCodigoPostal = typeof catCodigosPostales.$inferSelect;
+export const insertCatCodigoPostalSchema = createInsertSchema(catCodigosPostales).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCatCodigoPostal = z.infer<typeof insertCatCodigoPostalSchema>;
+
+// ============================================================================
 // CATÁLOGO DE BANCOS (Códigos SAT)
 // ============================================================================
 
@@ -3884,6 +3964,161 @@ export const insertKardexCompensationSchema = createInsertSchema(kardexCompensat
   porcentajeIncremento: z.coerce.number().optional().nullable(),
 });
 export type InsertKardexCompensation = z.infer<typeof insertKardexCompensationSchema>;
+
+// ============================================================================
+// KARDEX DE EMPLEO (Historial de cambios de estatus, registro patronal, contrato)
+// ============================================================================
+
+export const kardexEmployment = pgTable("kardex_employment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  operacion: varchar("operacion", { length: 20 }).notNull().default("modificacion"), // alta, modificacion, correccion, baja
+  fechaMovimiento: timestamp("fecha_movimiento").notNull().default(sql`now()`),
+  fechaEfectiva: date("fecha_efectiva").notNull(),
+  
+  campoModificado: varchar("campo_modificado", { length: 50 }).notNull(), // estatus, registro_patronal, tipo_contrato, etc.
+  valorAnterior: text("valor_anterior"),
+  valorNuevo: text("valor_nuevo"),
+  
+  motivo: varchar("motivo", { length: 200 }),
+  documentoSoporte: varchar("documento_soporte", { length: 500 }),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("kardex_employment_empleado_idx").on(table.empleadoId),
+  fechaIdx: index("kardex_employment_fecha_idx").on(table.fechaEfectiva),
+  campoIdx: index("kardex_employment_campo_idx").on(table.campoModificado),
+  clienteEmpresaIdx: index("kardex_employment_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type KardexEmployment = typeof kardexEmployment.$inferSelect;
+export const insertKardexEmploymentSchema = createInsertSchema(kardexEmployment).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertKardexEmployment = z.infer<typeof insertKardexEmploymentSchema>;
+
+// ============================================================================
+// KARDEX DE CONDICIONES LABORALES (Historial de cambios de puesto, depto, jornada)
+// ============================================================================
+
+export const kardexLaborConditions = pgTable("kardex_labor_conditions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  operacion: varchar("operacion", { length: 20 }).notNull().default("modificacion"), // alta, modificacion, correccion, baja
+  fechaMovimiento: timestamp("fecha_movimiento").notNull().default(sql`now()`),
+  fechaEfectiva: date("fecha_efectiva").notNull(),
+  
+  campoModificado: varchar("campo_modificado", { length: 50 }).notNull(), // puesto, departamento, jornada, horario, modalidad, etc.
+  valorAnterior: text("valor_anterior"),
+  valorNuevo: text("valor_nuevo"),
+  valorAnteriorId: varchar("valor_anterior_id"), // Para FK (puestoId, departamentoId)
+  valorNuevoId: varchar("valor_nuevo_id"),
+  
+  motivo: varchar("motivo", { length: 200 }),
+  documentoSoporte: varchar("documento_soporte", { length: 500 }),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("kardex_labor_empleado_idx").on(table.empleadoId),
+  fechaIdx: index("kardex_labor_fecha_idx").on(table.fechaEfectiva),
+  campoIdx: index("kardex_labor_campo_idx").on(table.campoModificado),
+  clienteEmpresaIdx: index("kardex_labor_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type KardexLaborConditions = typeof kardexLaborConditions.$inferSelect;
+export const insertKardexLaborConditionsSchema = createInsertSchema(kardexLaborConditions).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertKardexLaborConditions = z.infer<typeof insertKardexLaborConditionsSchema>;
+
+// ============================================================================
+// CUENTAS BANCARIAS DE EMPLEADOS (Multi-cuenta con porcentajes de dispersión)
+// ============================================================================
+
+export const employeeBankAccounts = pgTable("employee_bank_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  bancoId: integer("banco_id").references(() => catBancos.id),
+  bancoNombre: varchar("banco_nombre", { length: 100 }),
+  clabe: varchar("clabe", { length: 18 }),
+  cuenta: varchar("cuenta", { length: 20 }),
+  sucursal: varchar("sucursal", { length: 20 }),
+  
+  tipoCuenta: varchar("tipo_cuenta", { length: 50 }).default("nomina"), // nomina, ahorro, cheques
+  porcentajeDispersion: numeric("porcentaje_dispersion", { precision: 5, scale: 2 }).default("100.00"),
+  montoFijoDispersion: numeric("monto_fijo_dispersion", { precision: 12, scale: 2 }),
+  
+  isPrimary: boolean("is_primary").default(false),
+  isActive: boolean("is_active").default(true),
+  
+  effectiveFrom: date("effective_from").default(sql`CURRENT_DATE`),
+  effectiveTo: date("effective_to"),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("employee_bank_empleado_idx").on(table.empleadoId),
+  activeIdx: index("employee_bank_active_idx").on(table.empleadoId, table.isActive),
+  clienteEmpresaIdx: index("employee_bank_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type EmployeeBankAccount = typeof employeeBankAccounts.$inferSelect;
+export const insertEmployeeBankAccountSchema = createInsertSchema(employeeBankAccounts).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  porcentajeDispersion: z.coerce.number().optional(),
+  montoFijoDispersion: z.coerce.number().optional().nullable(),
+});
+export type InsertEmployeeBankAccount = z.infer<typeof insertEmployeeBankAccountSchema>;
+
+// ============================================================================
+// KARDEX DE CUENTAS BANCARIAS (Historial de cambios en cuentas)
+// ============================================================================
+
+export const kardexBankAccounts = pgTable("kardex_bank_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  bankAccountId: varchar("bank_account_id").references(() => employeeBankAccounts.id),
+  
+  operacion: varchar("operacion", { length: 20 }).notNull(), // alta, modificacion, baja
+  fechaMovimiento: timestamp("fecha_movimiento").notNull().default(sql`now()`),
+  
+  campoModificado: varchar("campo_modificado", { length: 50 }),
+  valorAnterior: text("valor_anterior"),
+  valorNuevo: text("valor_nuevo"),
+  
+  motivo: varchar("motivo", { length: 200 }),
+  
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("kardex_bank_empleado_idx").on(table.empleadoId),
+  bankAccountIdx: index("kardex_bank_account_idx").on(table.bankAccountId),
+  clienteEmpresaIdx: index("kardex_bank_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type KardexBankAccount = typeof kardexBankAccounts.$inferSelect;
+export const insertKardexBankAccountSchema = createInsertSchema(kardexBankAccounts).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertKardexBankAccount = z.infer<typeof insertKardexBankAccountSchema>;
 
 // ============================================================================
 // CFDI NÓMINA (Seguimiento de CFDIs timbrados)

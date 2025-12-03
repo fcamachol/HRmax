@@ -218,7 +218,27 @@ import {
   kardexCompensation,
   cfdiNomina,
   imssMovimientos,
-  suaBimestres
+  suaBimestres,
+  type EmployeeBankAccount,
+  type InsertEmployeeBankAccount,
+  employeeBankAccounts,
+  type KardexEmployment,
+  type InsertKardexEmployment,
+  kardexEmployment,
+  type KardexLaborConditions,
+  type InsertKardexLaborConditions,
+  kardexLaborConditions,
+  type KardexBankAccounts,
+  type InsertKardexBankAccounts,
+  kardexBankAccounts,
+  type CatPais,
+  catPaises,
+  type CatEstado,
+  catEstados,
+  type CatMunicipio,
+  catMunicipios,
+  type CatCodigoPostal,
+  catCodigosPostales
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -825,6 +845,52 @@ export interface IStorage {
   getSuaBimestresPendientes(empresaId?: string): Promise<SuaBimestre[]>;
   updateSuaBimestre(id: string, updates: Partial<InsertSuaBimestre>): Promise<SuaBimestre>;
   deleteSuaBimestre(id: string): Promise<void>;
+  
+  // Employee Bank Accounts (Multi-account payment dispersion)
+  createEmployeeBankAccount(account: InsertEmployeeBankAccount): Promise<EmployeeBankAccount>;
+  getEmployeeBankAccount(id: string): Promise<EmployeeBankAccount | undefined>;
+  getEmployeeBankAccountsByEmpleado(empleadoId: string): Promise<EmployeeBankAccount[]>;
+  getEmployeeBankAccountsByEmpresa(empresaId: string): Promise<EmployeeBankAccount[]>;
+  getEmployeeBankAccountByClabe(clabe: string): Promise<EmployeeBankAccount | undefined>;
+  updateEmployeeBankAccount(id: string, updates: Partial<InsertEmployeeBankAccount>): Promise<EmployeeBankAccount>;
+  deleteEmployeeBankAccount(id: string): Promise<void>;
+  
+  // Kardex Employment (Status/Contract tracking)
+  createKardexEmployment(kardex: InsertKardexEmployment): Promise<KardexEmployment>;
+  getKardexEmployment(id: string): Promise<KardexEmployment | undefined>;
+  getKardexEmploymentByEmpleado(empleadoId: string): Promise<KardexEmployment[]>;
+  getKardexEmploymentByEmpresa(empresaId: string): Promise<KardexEmployment[]>;
+  
+  // Kardex Labor Conditions (Position/Department tracking)
+  createKardexLaborConditions(kardex: InsertKardexLaborConditions): Promise<KardexLaborConditions>;
+  getKardexLaborConditions(id: string): Promise<KardexLaborConditions | undefined>;
+  getKardexLaborConditionsByEmpleado(empleadoId: string): Promise<KardexLaborConditions[]>;
+  getKardexLaborConditionsByEmpresa(empresaId: string): Promise<KardexLaborConditions[]>;
+  
+  // Kardex Bank Accounts (Bank info change tracking)
+  createKardexBankAccounts(kardex: InsertKardexBankAccounts): Promise<KardexBankAccounts>;
+  getKardexBankAccounts(id: string): Promise<KardexBankAccounts | undefined>;
+  getKardexBankAccountsByEmpleado(empleadoId: string): Promise<KardexBankAccounts[]>;
+  getKardexBankAccountsByEmpresa(empresaId: string): Promise<KardexBankAccounts[]>;
+  
+  // Geographic Catalogs (CFDI compliance)
+  getCatPaises(): Promise<CatPais[]>;
+  getCatPais(id: string): Promise<CatPais | undefined>;
+  getCatPaisByCodigo(codigoPais: string): Promise<CatPais | undefined>;
+  
+  getCatEstados(): Promise<CatEstado[]>;
+  getCatEstado(id: string): Promise<CatEstado | undefined>;
+  getCatEstadosByCodigo(codigoPais: string): Promise<CatEstado[]>;
+  getCatEstadoByCodigo(codigoPais: string, codigoEstado: string): Promise<CatEstado | undefined>;
+  
+  getCatMunicipios(): Promise<CatMunicipio[]>;
+  getCatMunicipio(id: string): Promise<CatMunicipio | undefined>;
+  getCatMunicipiosByEstado(codigoPais: string, codigoEstado: string): Promise<CatMunicipio[]>;
+  
+  getCatCodigosPostales(codigoPais: string, codigoEstado: string): Promise<CatCodigoPostal[]>;
+  getCatCodigoPostal(id: string): Promise<CatCodigoPostal | undefined>;
+  getCatCodigoPostalByCodigo(codigoPostal: string): Promise<CatCodigoPostal | undefined>;
+  getCatCodigosPostalesByMunicipio(codigoPais: string, codigoEstado: string, codigoMunicipio: string): Promise<CatCodigoPostal[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5158,6 +5224,216 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSuaBimestre(id: string): Promise<void> {
     await db.delete(suaBimestres).where(eq(suaBimestres.id, id));
+  }
+
+  // ============================================================================
+  // EMPLOYEE BANK ACCOUNTS (Multi-account payment dispersion)
+  // ============================================================================
+
+  async createEmployeeBankAccount(account: InsertEmployeeBankAccount): Promise<EmployeeBankAccount> {
+    const [created] = await db.insert(employeeBankAccounts).values(account).returning();
+    return created;
+  }
+
+  async getEmployeeBankAccount(id: string): Promise<EmployeeBankAccount | undefined> {
+    const [account] = await db.select().from(employeeBankAccounts).where(eq(employeeBankAccounts.id, id));
+    return account || undefined;
+  }
+
+  async getEmployeeBankAccountsByEmpleado(empleadoId: string): Promise<EmployeeBankAccount[]> {
+    return db.select().from(employeeBankAccounts)
+      .where(eq(employeeBankAccounts.empleadoId, empleadoId))
+      .orderBy(desc(employeeBankAccounts.esPrincipal), employeeBankAccounts.createdAt);
+  }
+
+  async getEmployeeBankAccountsByEmpresa(empresaId: string): Promise<EmployeeBankAccount[]> {
+    return db.select().from(employeeBankAccounts)
+      .where(eq(employeeBankAccounts.empresaId, empresaId))
+      .orderBy(employeeBankAccounts.empleadoId, desc(employeeBankAccounts.esPrincipal));
+  }
+
+  async getEmployeeBankAccountByClabe(clabe: string): Promise<EmployeeBankAccount | undefined> {
+    const [account] = await db.select().from(employeeBankAccounts).where(eq(employeeBankAccounts.clabe, clabe));
+    return account || undefined;
+  }
+
+  async updateEmployeeBankAccount(id: string, updates: Partial<InsertEmployeeBankAccount>): Promise<EmployeeBankAccount> {
+    const [updated] = await db.update(employeeBankAccounts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(employeeBankAccounts.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmployeeBankAccount(id: string): Promise<void> {
+    await db.delete(employeeBankAccounts).where(eq(employeeBankAccounts.id, id));
+  }
+
+  // ============================================================================
+  // KARDEX EMPLOYMENT (Status/Contract tracking)
+  // ============================================================================
+
+  async createKardexEmployment(kardex: InsertKardexEmployment): Promise<KardexEmployment> {
+    const [created] = await db.insert(kardexEmployment).values(kardex).returning();
+    return created;
+  }
+
+  async getKardexEmployment(id: string): Promise<KardexEmployment | undefined> {
+    const [kardex] = await db.select().from(kardexEmployment).where(eq(kardexEmployment.id, id));
+    return kardex || undefined;
+  }
+
+  async getKardexEmploymentByEmpleado(empleadoId: string): Promise<KardexEmployment[]> {
+    return db.select().from(kardexEmployment)
+      .where(eq(kardexEmployment.empleadoId, empleadoId))
+      .orderBy(desc(kardexEmployment.fechaEfectiva));
+  }
+
+  async getKardexEmploymentByEmpresa(empresaId: string): Promise<KardexEmployment[]> {
+    return db.select().from(kardexEmployment)
+      .where(eq(kardexEmployment.empresaId, empresaId))
+      .orderBy(desc(kardexEmployment.fechaEfectiva));
+  }
+
+  // ============================================================================
+  // KARDEX LABOR CONDITIONS (Position/Department tracking)
+  // ============================================================================
+
+  async createKardexLaborConditions(kardex: InsertKardexLaborConditions): Promise<KardexLaborConditions> {
+    const [created] = await db.insert(kardexLaborConditions).values(kardex).returning();
+    return created;
+  }
+
+  async getKardexLaborConditions(id: string): Promise<KardexLaborConditions | undefined> {
+    const [kardex] = await db.select().from(kardexLaborConditions).where(eq(kardexLaborConditions.id, id));
+    return kardex || undefined;
+  }
+
+  async getKardexLaborConditionsByEmpleado(empleadoId: string): Promise<KardexLaborConditions[]> {
+    return db.select().from(kardexLaborConditions)
+      .where(eq(kardexLaborConditions.empleadoId, empleadoId))
+      .orderBy(desc(kardexLaborConditions.fechaEfectiva));
+  }
+
+  async getKardexLaborConditionsByEmpresa(empresaId: string): Promise<KardexLaborConditions[]> {
+    return db.select().from(kardexLaborConditions)
+      .where(eq(kardexLaborConditions.empresaId, empresaId))
+      .orderBy(desc(kardexLaborConditions.fechaEfectiva));
+  }
+
+  // ============================================================================
+  // KARDEX BANK ACCOUNTS (Bank info change tracking)
+  // ============================================================================
+
+  async createKardexBankAccounts(kardex: InsertKardexBankAccounts): Promise<KardexBankAccounts> {
+    const [created] = await db.insert(kardexBankAccounts).values(kardex).returning();
+    return created;
+  }
+
+  async getKardexBankAccounts(id: string): Promise<KardexBankAccounts | undefined> {
+    const [kardex] = await db.select().from(kardexBankAccounts).where(eq(kardexBankAccounts.id, id));
+    return kardex || undefined;
+  }
+
+  async getKardexBankAccountsByEmpleado(empleadoId: string): Promise<KardexBankAccounts[]> {
+    return db.select().from(kardexBankAccounts)
+      .where(eq(kardexBankAccounts.empleadoId, empleadoId))
+      .orderBy(desc(kardexBankAccounts.fechaEfectiva));
+  }
+
+  async getKardexBankAccountsByEmpresa(empresaId: string): Promise<KardexBankAccounts[]> {
+    return db.select().from(kardexBankAccounts)
+      .where(eq(kardexBankAccounts.empresaId, empresaId))
+      .orderBy(desc(kardexBankAccounts.fechaEfectiva));
+  }
+
+  // ============================================================================
+  // GEOGRAPHIC CATALOGS (CFDI compliance)
+  // ============================================================================
+
+  async getCatPaises(): Promise<CatPais[]> {
+    return db.select().from(catPaises).orderBy(catPaises.nombre);
+  }
+
+  async getCatPais(id: string): Promise<CatPais | undefined> {
+    const [pais] = await db.select().from(catPaises).where(eq(catPaises.id, id));
+    return pais || undefined;
+  }
+
+  async getCatPaisByCodigo(codigoPais: string): Promise<CatPais | undefined> {
+    const [pais] = await db.select().from(catPaises).where(eq(catPaises.codigoPais, codigoPais));
+    return pais || undefined;
+  }
+
+  async getCatEstados(): Promise<CatEstado[]> {
+    return db.select().from(catEstados).orderBy(catEstados.nombre);
+  }
+
+  async getCatEstado(id: string): Promise<CatEstado | undefined> {
+    const [estado] = await db.select().from(catEstados).where(eq(catEstados.id, id));
+    return estado || undefined;
+  }
+
+  async getCatEstadosByCodigo(codigoPais: string): Promise<CatEstado[]> {
+    return db.select().from(catEstados)
+      .where(eq(catEstados.codigoPais, codigoPais))
+      .orderBy(catEstados.nombre);
+  }
+
+  async getCatEstadoByCodigo(codigoPais: string, codigoEstado: string): Promise<CatEstado | undefined> {
+    const [estado] = await db.select().from(catEstados)
+      .where(and(
+        eq(catEstados.codigoPais, codigoPais),
+        eq(catEstados.codigoEstado, codigoEstado)
+      ));
+    return estado || undefined;
+  }
+
+  async getCatMunicipios(): Promise<CatMunicipio[]> {
+    return db.select().from(catMunicipios).orderBy(catMunicipios.nombre);
+  }
+
+  async getCatMunicipio(id: string): Promise<CatMunicipio | undefined> {
+    const [municipio] = await db.select().from(catMunicipios).where(eq(catMunicipios.id, id));
+    return municipio || undefined;
+  }
+
+  async getCatMunicipiosByEstado(codigoPais: string, codigoEstado: string): Promise<CatMunicipio[]> {
+    return db.select().from(catMunicipios)
+      .where(and(
+        eq(catMunicipios.codigoPais, codigoPais),
+        eq(catMunicipios.codigoEstado, codigoEstado)
+      ))
+      .orderBy(catMunicipios.nombre);
+  }
+
+  async getCatCodigosPostales(codigoPais: string, codigoEstado: string): Promise<CatCodigoPostal[]> {
+    return db.select().from(catCodigosPostales)
+      .where(and(
+        eq(catCodigosPostales.codigoPais, codigoPais),
+        eq(catCodigosPostales.codigoEstado, codigoEstado)
+      ))
+      .orderBy(catCodigosPostales.codigoPostal);
+  }
+
+  async getCatCodigoPostal(id: string): Promise<CatCodigoPostal | undefined> {
+    const [cp] = await db.select().from(catCodigosPostales).where(eq(catCodigosPostales.id, id));
+    return cp || undefined;
+  }
+
+  async getCatCodigoPostalByCodigo(codigoPostal: string): Promise<CatCodigoPostal | undefined> {
+    const [cp] = await db.select().from(catCodigosPostales).where(eq(catCodigosPostales.codigoPostal, codigoPostal));
+    return cp || undefined;
+  }
+
+  async getCatCodigosPostalesByMunicipio(codigoPais: string, codigoEstado: string, codigoMunicipio: string): Promise<CatCodigoPostal[]> {
+    return db.select().from(catCodigosPostales)
+      .where(and(
+        eq(catCodigosPostales.codigoPais, codigoPais),
+        eq(catCodigosPostales.codigoEstado, codigoEstado),
+        eq(catCodigosPostales.codigoMunicipio, codigoMunicipio)
+      ))
+      .orderBy(catCodigosPostales.codigoPostal);
   }
 }
 
