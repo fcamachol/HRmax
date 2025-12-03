@@ -315,6 +315,49 @@ export function IncidenciasAsistenciaGrid({
     return filtered.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
   }, [employeeData, searchTerm]);
 
+  const incidenciaTipos: IncidenciaTipo[] = [
+    "faltas",
+    "retardos",
+    "horasExtra",
+    "horasDescontadas",
+    "incapacidades",
+    "permisos",
+    "vacaciones",
+    "diasDomingo",
+    "diasFestivos",
+  ];
+
+  const domingosPeriodo = useMemo(() => {
+    return dateRange.filter(date => isSunday(date));
+  }, [dateRange]);
+
+  const diasFestivosPeriodo = useMemo(() => {
+    if (dateRange.length === 0) return [];
+    const years = new Set(dateRange.map(d => getYear(d)));
+    const todosFestivos: string[] = [];
+    years.forEach(year => {
+      const festivosAnio = obtenerDiasFestivosDelAnio(year);
+      festivosAnio.forEach(f => todosFestivos.push(f.fecha));
+    });
+    return dateRange.filter(date => {
+      const dateStr = format(date, "yyyy-MM-dd");
+      return todosFestivos.includes(dateStr);
+    });
+  }, [dateRange]);
+
+  const getFilteredDates = (tipo: IncidenciaTipo): Date[] => {
+    if (tipo === "diasDomingo") return domingosPeriodo;
+    if (tipo === "diasFestivos") return diasFestivosPeriodo;
+    return dateRange;
+  };
+
+  const getNombreFestivo = (dateStr: string): string => {
+    const year = parseInt(dateStr.substring(0, 4));
+    const festivos = obtenerDiasFestivosDelAnio(year);
+    const festivo = festivos.find(f => f.fecha === dateStr);
+    return festivo?.nombre || "";
+  };
+
   const handleDiscardChanges = () => {
     setEmployeeData((prev) => {
       const newData = new Map(prev);
@@ -399,53 +442,6 @@ export function IncidenciasAsistenciaGrid({
       </Card>
     );
   }
-
-  const incidenciaTipos: IncidenciaTipo[] = [
-    "faltas",
-    "retardos",
-    "horasExtra",
-    "horasDescontadas",
-    "incapacidades",
-    "permisos",
-    "vacaciones",
-    "diasDomingo",
-    "diasFestivos",
-  ];
-
-  // Calcular domingos del periodo
-  const domingosPeriodo = useMemo(() => {
-    return dateRange.filter(date => isSunday(date));
-  }, [dateRange]);
-
-  // Calcular días festivos del periodo
-  const diasFestivosPeriodo = useMemo(() => {
-    if (dateRange.length === 0) return [];
-    const years = new Set(dateRange.map(d => getYear(d)));
-    const todosFestivos: string[] = [];
-    years.forEach(year => {
-      const festivosAnio = obtenerDiasFestivosDelAnio(year);
-      festivosAnio.forEach(f => todosFestivos.push(f.fecha));
-    });
-    return dateRange.filter(date => {
-      const dateStr = format(date, "yyyy-MM-dd");
-      return todosFestivos.includes(dateStr);
-    });
-  }, [dateRange]);
-
-  // Obtener fechas filtradas según tipo de incidencia
-  const getFilteredDates = (tipo: IncidenciaTipo): Date[] => {
-    if (tipo === "diasDomingo") return domingosPeriodo;
-    if (tipo === "diasFestivos") return diasFestivosPeriodo;
-    return dateRange;
-  };
-
-  // Obtener nombre del día festivo
-  const getNombreFestivo = (dateStr: string): string => {
-    const year = parseInt(dateStr.substring(0, 4));
-    const festivos = obtenerDiasFestivosDelAnio(year);
-    const festivo = festivos.find(f => f.fecha === dateStr);
-    return festivo?.nombre || "";
-  };
 
   return (
     <Card className={isFullscreen ? "fixed inset-0 z-50 flex flex-col" : ""}>
