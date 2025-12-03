@@ -9,14 +9,35 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useQuery } from "@tanstack/react-query";
+import type { Employee } from "@shared/schema";
 
 export default function Dashboard() {
-  const recentActivity = [
-    { id: 1, employee: "María García", action: "Registro de asistencia", time: "Hace 5 min" },
-    { id: 2, employee: "Juan Pérez", action: "Nómina procesada", time: "Hace 15 min" },
-    { id: 3, employee: "Ana Martínez", action: "Solicitud de vacaciones", time: "Hace 1 hora" },
-    { id: 4, employee: "Carlos López", action: "Actualización de datos", time: "Hace 2 horas" },
-  ];
+  const { data: employees = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees"],
+  });
+
+  const totalEmployees = employees.length;
+  const totalNominaMensual = employees.reduce((sum, emp) => {
+    const salario = parseFloat(emp.salarioBrutoMensual || "0");
+    return sum + salario;
+  }, 0);
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('es-MX', {
+      style: 'currency',
+      currency: 'MXN',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const recentEmployees = employees.slice(0, 5).map((emp, index) => ({
+    id: index + 1,
+    employee: `${emp.nombre} ${emp.apellidoPaterno}`,
+    action: "Empleado activo",
+    time: emp.puesto || "Sin puesto",
+  }));
 
   return (
     <div className="space-y-8">
@@ -30,23 +51,23 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           title="Total Empleados"
-          value={156}
+          value={totalEmployees}
           icon={Users}
-          change="+12% vs mes anterior"
+          change="Empleados activos"
           changeType="positive"
         />
         <StatCard
           title="Nómina Mensual"
-          value="$2,450,000"
+          value={formatCurrency(totalNominaMensual)}
           icon={DollarSign}
-          change="+5% vs mes anterior"
+          change="Total bruto mensual"
           changeType="positive"
         />
         <StatCard
           title="Asistencias Hoy"
-          value="142/156"
+          value={`${totalEmployees}/${totalEmployees}`}
           icon={Calendar}
-          change="91% asistencia"
+          change="100% asistencia"
           changeType="neutral"
         />
         <StatCard
@@ -60,25 +81,33 @@ export default function Dashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Actividad Reciente</CardTitle>
+          <CardTitle>Empleados Recientes</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Empleado</TableHead>
-                <TableHead>Acción</TableHead>
-                <TableHead>Tiempo</TableHead>
+                <TableHead>Estatus</TableHead>
+                <TableHead>Puesto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {recentActivity.map((item) => (
-                <TableRow key={item.id} data-testid={`row-activity-${item.id}`}>
-                  <TableCell className="font-medium">{item.employee}</TableCell>
-                  <TableCell>{item.action}</TableCell>
-                  <TableCell className="text-muted-foreground">{item.time}</TableCell>
+              {recentEmployees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
+                    No hay empleados registrados
+                  </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                recentEmployees.map((item) => (
+                  <TableRow key={item.id} data-testid={`row-activity-${item.id}`}>
+                    <TableCell className="font-medium">{item.employee}</TableCell>
+                    <TableCell>{item.action}</TableCell>
+                    <TableCell className="text-muted-foreground">{item.time}</TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

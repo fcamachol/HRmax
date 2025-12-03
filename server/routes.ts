@@ -162,6 +162,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Helper to serialize BigInt values to strings for JSON response
+  const serializeEmployee = (emp: any) => ({
+    ...emp,
+    sbcBp: emp.sbcBp?.toString() ?? null,
+    sdiBp: emp.sdiBp?.toString() ?? null,
+    salarioMensualNetoBp: emp.salarioMensualNetoBp?.toString() ?? null,
+  });
+  
+  const serializeEmployees = (emps: any[]) => emps.map(serializeEmployee);
+
   app.get("/api/employees", async (req, res) => {
     try {
       const { centroTrabajoId, grupoNominaId, empresaId, activo } = req.query;
@@ -182,10 +192,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Filter by active status if specified
         if (activo === "true") {
           const activeEmployees = allEmployees.filter(e => e.estatus === "activo");
-          return res.json(activeEmployees);
+          return res.json(serializeEmployees(activeEmployees));
         }
         
-        return res.json(allEmployees);
+        return res.json(serializeEmployees(allEmployees));
       }
       
       // Filtrar por ambos: centro y grupo
@@ -194,23 +204,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           centroTrabajoId as string, 
           grupoNominaId as string
         );
-        return res.json(employees);
+        return res.json(serializeEmployees(employees));
       }
       
       // Filtrar solo por centro
       if (centroTrabajoId) {
         const employees = await storage.getEmployeesByCentroTrabajo(centroTrabajoId as string);
-        return res.json(employees);
+        return res.json(serializeEmployees(employees));
       }
       
       // Filtrar solo por grupo de nómina
       if (grupoNominaId) {
         const employees = await storage.getEmployeesByGrupoNomina(grupoNominaId as string);
-        return res.json(employees);
+        return res.json(serializeEmployees(employees));
       }
       
       const employees = await storage.getEmployees();
-      res.json(employees);
+      res.json(serializeEmployees(employees));
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -223,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
-      res.json(employee);
+      res.json(serializeEmployee(employee));
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
