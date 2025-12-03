@@ -638,6 +638,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Completar Alta - Materializar empleado desde proceso de contratación
+  app.post("/api/hiring/processes/:id/completar-alta", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const process = await storage.getHiringProcess(id);
+      
+      if (!process) {
+        return res.status(404).json({ message: "Proceso de contratación no encontrado" });
+      }
+      
+      if (process.empleadoId) {
+        return res.status(400).json({ message: "Este proceso ya tiene un empleado asociado" });
+      }
+      
+      if (process.status !== "activo") {
+        return res.status(400).json({ message: "El proceso debe estar activo para completar el alta" });
+      }
+      
+      const employeeData = {
+        clienteId: process.clienteId,
+        empresaId: process.empresaId,
+        nombre: process.nombre,
+        apellidoPaterno: process.apellidoPaterno,
+        apellidoMaterno: process.apellidoMaterno || undefined,
+        email: process.email || undefined,
+        telefono: process.phone || undefined,
+        rfc: process.rfc || undefined,
+        curp: process.curp || undefined,
+        nss: process.nss || undefined,
+        genero: process.genero || undefined,
+        fechaNacimiento: process.fechaNacimiento || undefined,
+        calle: process.calle || undefined,
+        numeroExterior: process.numeroExterior || undefined,
+        numeroInterior: process.numeroInterior || undefined,
+        colonia: process.colonia || undefined,
+        municipio: process.municipio || undefined,
+        estado: process.estado || undefined,
+        codigoPostal: process.codigoPostal || undefined,
+        contactoEmergenciaNombre: process.contactoEmergencia || undefined,
+        contactoEmergenciaParentesco: process.parentescoEmergencia || undefined,
+        contactoEmergenciaTelefono: process.telefonoEmergencia || undefined,
+        bancoId: undefined as string | undefined,
+        numeroCuenta: process.cuenta || undefined,
+        clabe: process.clabe || undefined,
+        puestoId: process.puestoId || undefined,
+        departamentoId: process.departamentoId || undefined,
+        centroTrabajoId: process.centroTrabajoId || undefined,
+        registroPatronalId: process.registroPatronalId || undefined,
+        fechaIngreso: process.startDate,
+        tipoContrato: process.contractType || "indeterminado",
+        salarioDiario: process.proposedSalary ? String(parseFloat(process.proposedSalary) / 30) : "0",
+        estatus: "activo",
+        jornadaLaboral: "completa",
+      };
+      
+      const employee = await storage.createEmployee(employeeData);
+      
+      await storage.updateHiringProcess(id, {
+        empleadoId: employee.id,
+        status: "completado",
+        stage: "completado",
+      });
+      
+      res.status(201).json({
+        message: "Alta completada exitosamente",
+        employee,
+        hiringProcessId: id,
+      });
+    } catch (error: any) {
+      console.error("Error completing alta:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Object Storage endpoints for document upload
   app.post("/api/objects/upload", async (req, res) => {
     try {
@@ -5437,6 +5511,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
         totalValidos: validaciones.filter((v: any) => v.valido).length,
         totalInvalidos: validaciones.filter((v: any) => !v.valido).length,
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== EMPLOYEE BANK ACCOUNTS ====================
+  
+  app.get("/api/employees/:empleadoId/bank-accounts", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const accounts = await storage.getEmployeeBankAccountsByEmpleado(empleadoId);
+      res.json(accounts);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/employees/:empleadoId/bank-accounts", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const account = await storage.createEmployeeBankAccount({
+        ...req.body,
+        empleadoId,
+      });
+      res.status(201).json(account);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/bank-accounts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const account = await storage.updateEmployeeBankAccount(id, req.body);
+      res.json(account);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/bank-accounts/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteEmployeeBankAccount(id);
+      res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== KARDEX HISTORY (Read-only) ====================
+  
+  app.get("/api/employees/:empleadoId/kardex/compensation", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const kardex = await storage.getKardexCompensationByEmpleado(empleadoId);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/employees/:empleadoId/kardex/employment", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const kardex = await storage.getKardexEmploymentByEmpleado(empleadoId);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/employees/:empleadoId/kardex/labor-conditions", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const kardex = await storage.getKardexLaborConditionsByEmpleado(empleadoId);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/employees/:empleadoId/kardex/bank-accounts", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const kardex = await storage.getKardexBankAccountsByEmpleado(empleadoId);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/employees/:empleadoId/kardex/vacaciones", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const kardex = await storage.getKardexVacacionesByEmpleado(empleadoId);
+      res.json(kardex);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Complete kardex history for an employee
+  app.get("/api/employees/:empleadoId/kardex", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      
+      const [compensation, employment, laborConditions, bankAccounts, vacaciones] = await Promise.all([
+        storage.getKardexCompensationByEmpleado(empleadoId),
+        storage.getKardexEmploymentByEmpleado(empleadoId),
+        storage.getKardexLaborConditionsByEmpleado(empleadoId),
+        storage.getKardexBankAccountsByEmpleado(empleadoId),
+        storage.getKardexVacacionesByEmpleado(empleadoId),
+      ]);
+      
+      res.json({
+        compensation,
+        employment,
+        laborConditions,
+        bankAccounts,
+        vacaciones,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== GEOGRAPHIC CATALOGS (Read-only) ====================
+  
+  app.get("/api/catalogs/paises", async (req, res) => {
+    try {
+      const paises = await storage.getCatPaises();
+      res.json(paises);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogs/estados", async (req, res) => {
+    try {
+      const { codigoPais } = req.query;
+      if (codigoPais) {
+        const estados = await storage.getCatEstadosByCodigo(codigoPais as string);
+        res.json(estados);
+      } else {
+        const estados = await storage.getCatEstados();
+        res.json(estados);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogs/municipios", async (req, res) => {
+    try {
+      const { codigoPais, codigoEstado } = req.query;
+      if (codigoPais && codigoEstado) {
+        const municipios = await storage.getCatMunicipiosByEstado(codigoPais as string, codigoEstado as string);
+        res.json(municipios);
+      } else {
+        const municipios = await storage.getCatMunicipios();
+        res.json(municipios);
+      }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/catalogs/codigos-postales", async (req, res) => {
+    try {
+      const { codigoPais, codigoEstado, codigoMunicipio, codigoPostal } = req.query;
+      
+      if (codigoPostal) {
+        const cp = await storage.getCatCodigoPostalByCodigo(codigoPostal as string);
+        res.json(cp ? [cp] : []);
+      } else if (codigoPais && codigoEstado && codigoMunicipio) {
+        const cps = await storage.getCatCodigosPostalesByMunicipio(
+          codigoPais as string, 
+          codigoEstado as string, 
+          codigoMunicipio as string
+        );
+        res.json(cps);
+      } else if (codigoPais && codigoEstado) {
+        const cps = await storage.getCatCodigosPostales(codigoPais as string, codigoEstado as string);
+        res.json(cps);
+      } else {
+        res.status(400).json({ message: "Se requiere al menos codigoPais y codigoEstado" });
+      }
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
