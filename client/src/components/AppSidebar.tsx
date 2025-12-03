@@ -235,11 +235,6 @@ const mainMenuItems = [
     url: "/empresas",
     icon: Building2,
   },
-  {
-    title: "Ajustes",
-    url: "/settings",
-    icon: Settings,
-  },
 ];
 
 export function AppSidebar() {
