@@ -377,24 +377,6 @@ function CredencialForm({ empresaId, credencial, onSuccess, onCancel }: Credenci
           />
         </div>
 
-        <Alert className="border-blue-500/50 bg-blue-500/10">
-          <AlertTriangle className="h-4 w-4 text-blue-600" />
-          <AlertTitle className="text-blue-900 dark:text-blue-100 text-sm">
-            Contraseñas seguras con Replit Secrets
-          </AlertTitle>
-          <AlertDescription className="text-blue-800 dark:text-blue-200 text-xs space-y-1">
-            <p>
-              1. Especifica un nombre de Secret (ej: <code className="bg-muted px-1 rounded">EMPRESA_ABC_IMSS_PASSWORD</code>)
-            </p>
-            <p>
-              2. Ve a la pestaña "Secrets" en Replit y crea el Secret con ese nombre exacto
-            </p>
-            <p>
-              3. El valor del Secret será la contraseña real (nunca se almacena en la base de datos)
-            </p>
-          </AlertDescription>
-        </Alert>
-
         <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
           <h4 className="text-sm font-medium">Credenciales de Acceso</h4>
           
