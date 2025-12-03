@@ -253,7 +253,7 @@ export function AppSidebar() {
         <div className="flex items-center gap-2">
           <Building2 className="h-8 w-8 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">NominaHub</h1>
+            <h1 className="text-lg font-semibold">PeopleOps</h1>
             <p className="text-xs text-muted-foreground">Sistema RH México</p>
           </div>
         </div>
