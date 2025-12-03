@@ -10,10 +10,23 @@ import { mockAuthMiddleware } from "./auth/middleware";
 
 const app = express();
 
-// Health check endpoint - responds immediately for deployment health checks
-// This MUST be before any middleware that might delay the response
-app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+// Health check for Replit Autoscale - responds at root path
+// This intercepts GET / requests that have no Accept header or accept JSON
+// Regular browser requests will fall through to the static file handler
+app.use((req, res, next) => {
+  // Only intercept root path GET requests for health checks
+  if (req.method === 'GET' && req.path === '/') {
+    const acceptHeader = req.headers.accept || '';
+    // Health checks typically don't send Accept header or accept anything
+    // Browsers send Accept: text/html,...
+    if (!acceptHeader || acceptHeader === '*/*' || acceptHeader.includes('application/json')) {
+      // Check if this looks like a health check (no cookies, no referer, etc.)
+      if (!req.headers.referer && !req.headers.cookie) {
+        return res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+      }
+    }
+  }
+  next();
 });
 
 declare module 'http' {
