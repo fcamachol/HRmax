@@ -464,7 +464,7 @@ function UserPermissionsDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const [selectedModulo, setSelectedModulo] = useState("");
-  const [selectedScope, setSelectedScope] = useState<string>("");
+  const [selectedScope, setSelectedScope] = useState<string>("global");
   const [selectedScopeId, setSelectedScopeId] = useState("");
   const { toast } = useToast();
 
@@ -539,8 +539,8 @@ function UserPermissionsDialog({
     createPermissionMutation.mutate({
       userId: user.id,
       moduloId: selectedModulo,
-      scope: selectedScope || null,
-      scopeId: selectedScopeId || null,
+      scope: selectedScope === "global" ? null : selectedScope,
+      scopeId: selectedScope === "global" ? null : (selectedScopeId || null),
     });
   };
 
@@ -604,7 +604,7 @@ function UserPermissionsDialog({
                       <SelectValue placeholder="Selecciona alcance" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Global (todos)</SelectItem>
+                      <SelectItem value="global">Global (todos)</SelectItem>
                       <SelectItem value="cliente">Cliente</SelectItem>
                       <SelectItem value="empresa">Empresa</SelectItem>
                       <SelectItem value="centro_trabajo">Centro de Trabajo</SelectItem>
