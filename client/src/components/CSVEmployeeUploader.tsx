@@ -228,9 +228,13 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           // Empresa (nombre, no ID)
           'nombre_empresa': 'empresa',
           'nombre empresa': 'empresa',
+          'nombrecomercial': 'empresa',
+          'nombre_comercial': 'empresa',
+          'nombre comercial': 'empresa',
           'razon_social': 'empresa',
           'razón social': 'empresa',
           'razon social': 'empresa',
+          'razonsocial': 'empresa',
           
           // Dirección
           'numero_exterior': 'numeroExterior',
@@ -687,7 +691,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         <DialogHeader>
           <DialogTitle>Importar Empleados desde CSV</DialogTitle>
           <DialogDescription>
-            Sube un archivo CSV con la información de los empleados. La plantilla incluye 78 campos disponibles del sistema (excluye campos autogenerados y complejos JSONB).
+            Sube un archivo CSV con la información de los empleados. La plantilla incluye 79 campos disponibles del sistema (excluye campos autogenerados y complejos JSONB). El campo "empresa" es obligatorio y debe contener el nombre comercial o razón social de la empresa.
           </DialogDescription>
         </DialogHeader>
 
@@ -732,9 +736,9 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>Formato del CSV:</strong> La plantilla incluye 78 campos disponibles del sistema.
+                <strong>Formato del CSV:</strong> La plantilla incluye 79 campos. 10 son obligatorios (incluyendo "empresa" que es el nombre de la empresa, no ID).
                 <br />
-                <strong>Campos requeridos:</strong> numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
+                <strong>Campos requeridos:</strong> empresa, numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
                 <br />
                 <strong>Campos opcionales:</strong> Todos los demás campos son opcionales y pueden dejarse vacíos.
               </AlertDescription>
