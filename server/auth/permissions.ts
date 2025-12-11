@@ -1,5 +1,5 @@
 import { db } from "../db";
-import { usuariosPermisos, modulos, empresas, centrosTrabajo } from "@shared/schema";
+import { usuariosPermisos, modulos, empresas, centrosTrabajo, users } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 
 export interface PermissionCheck {
@@ -14,6 +14,36 @@ export interface PermissionResult {
   permissionLevel?: "cliente" | "empresa" | "centro_trabajo";
   scopeId?: string;
   message?: string;
+}
+
+async function isClienteAdmin(userId: string, clienteId: string): Promise<boolean> {
+  const [user] = await db
+    .select({ role: users.role, userClienteId: users.clienteId })
+    .from(users)
+    .where(eq(users.id, userId));
+
+  if (!user) return false;
+  
+  return user.role === "cliente_admin" && user.userClienteId === clienteId;
+}
+
+async function getClienteIdFromEmpresa(empresaId: string): Promise<string | null> {
+  const [empresa] = await db
+    .select({ clienteId: empresas.clienteId })
+    .from(empresas)
+    .where(eq(empresas.id, empresaId));
+  
+  return empresa?.clienteId || null;
+}
+
+async function getClienteIdFromCentroTrabajo(centroTrabajoId: string): Promise<string | null> {
+  const [centro] = await db
+    .select({ empresaId: centrosTrabajo.empresaId })
+    .from(centrosTrabajo)
+    .where(eq(centrosTrabajo.id, centroTrabajoId));
+  
+  if (!centro) return null;
+  return await getClienteIdFromEmpresa(centro.empresaId);
 }
 
 export async function checkUserPermission(
@@ -31,6 +61,27 @@ export async function checkUserPermission(
       hasPermission: false,
       message: `Módulo '${moduleCode}' no existe o está inactivo`,
     };
+  }
+
+  if (scope && scopeId) {
+    let clienteIdToCheck: string | null = null;
+    
+    if (scope === "cliente") {
+      clienteIdToCheck = scopeId;
+    } else if (scope === "empresa") {
+      clienteIdToCheck = await getClienteIdFromEmpresa(scopeId);
+    } else if (scope === "centro_trabajo") {
+      clienteIdToCheck = await getClienteIdFromCentroTrabajo(scopeId);
+    }
+    
+    if (clienteIdToCheck && await isClienteAdmin(userId, clienteIdToCheck)) {
+      return {
+        hasPermission: true,
+        permissionLevel: "cliente",
+        scopeId: clienteIdToCheck,
+        message: "Acceso completo como Admin de Cliente",
+      };
+    }
   }
 
   if (!scope || !scopeId) {

@@ -8,6 +8,7 @@ declare module "express-serve-static-core" {
       username: string;
       tipoUsuario?: string;
       clienteId?: string | null;
+      role?: string;
       isSuperAdmin?: boolean;
     };
   }
@@ -51,8 +52,15 @@ export function requirePermission(
       scopeId = req.params[options.scopeIdParam];
     } else if (options.scopeIdQuery) {
       scopeId = req.query[options.scopeIdQuery] as string;
-    } else if (scope === "cliente" && req.user.clienteId) {
-      scopeId = req.user.clienteId;
+    }
+    
+    if (!scopeId && req.user.clienteId) {
+      if (!scope) {
+        scope = "cliente";
+      }
+      if (scope === "cliente") {
+        scopeId = req.user.clienteId;
+      }
     }
 
     const permissionCheck = await checkUserPermission({
@@ -81,6 +89,7 @@ export function mockAuthMiddleware(
   const username = req.header("X-Username") || "mock-admin";
   const tipoUsuario = req.header("X-User-Type") || "maxtalent";
   const clienteId = req.header("X-Cliente-Id") || null;
+  const role = req.header("X-User-Role") || "user";
   const isSuperAdmin = req.header("X-Is-Super-Admin") === "true";
 
   req.user = {
@@ -88,6 +97,7 @@ export function mockAuthMiddleware(
     username,
     tipoUsuario,
     clienteId,
+    role,
     isSuperAdmin,
   };
 
