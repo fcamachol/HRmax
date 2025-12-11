@@ -11,6 +11,7 @@ import {
   insertLawsuitSchema,
   updateLawsuitSchema,
   insertEmployeeSchema,
+  bulkInsertEmployeeSchema,
   insertBajaSpecialConceptSchema,
   insertHiringProcessSchema,
   updateHiringProcessSchema,
@@ -160,56 +161,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // If resolveReferences is true, look up empresa/departamento/puesto by name
-      let resolvedEmployees = employeeList;
-      if (resolveReferences) {
-        // Get lookup tables for this cliente
-        const empresas = await storage.getEmpresas();
-        const clienteEmpresas = empresas.filter(e => e.clienteId === clienteId);
-        const bancos = await storage.getCatBancos();
+      // Get lookup tables for this cliente
+      const empresas = await storage.getEmpresas();
+      const clienteEmpresas = empresas.filter(e => e.clienteId === clienteId);
+      const bancos = await storage.getCatBancos();
+      const allRegistrosPatronales = await storage.getRegistrosPatronales();
+      
+      // Filter registros patronales by empresas in this cliente
+      const clienteEmpresaIds = new Set(clienteEmpresas.map(e => e.id));
+      const clienteRegistros = allRegistrosPatronales.filter((rp: any) => 
+        clienteEmpresaIds.has(rp.empresaId)
+      );
+      
+      // Resolve references and set defaults for required fields
+      let resolvedEmployees = employeeList.map((emp: any, idx: number) => {
+        const resolved = { ...emp, clienteId };
         
-        resolvedEmployees = employeeList.map((emp: any) => {
-          const resolved = { ...emp, clienteId };
-          
-          // Resolve empresa by nombre comercial or razón social
-          if (emp.empresa && !emp.empresaId) {
-            const empresa = clienteEmpresas.find(e => 
-              e.nombreComercial?.toLowerCase() === emp.empresa.toLowerCase() ||
-              e.razonSocial?.toLowerCase() === emp.empresa.toLowerCase()
-            );
-            if (empresa) {
-              resolved.empresaId = empresa.id;
-            }
+        // Resolve empresa by nombre comercial or razón social
+        if (emp.empresa && !emp.empresaId) {
+          const empresa = clienteEmpresas.find(e => 
+            e.nombreComercial?.toLowerCase() === emp.empresa.toLowerCase() ||
+            e.razonSocial?.toLowerCase() === emp.empresa.toLowerCase()
+          );
+          if (empresa) {
+            resolved.empresaId = empresa.id;
           }
-          
-          // Resolve banco by nombre
-          if (emp.banco && typeof emp.banco === 'string') {
-            const banco = bancos.find((b: any) => 
-              b.nombre?.toLowerCase() === emp.banco.toLowerCase() ||
-              b.nombreCorto?.toLowerCase() === emp.banco.toLowerCase()
-            );
-            if (banco) {
-              resolved.banco = banco.nombre; // Keep banco as string field in schema
-            }
+        }
+        
+        // Resolve registroPatronalId by numero (filter by client's registros only)
+        if (emp.registroPatronal && !emp.registroPatronalId) {
+          const regPatronal = clienteRegistros.find((rp: any) => 
+            rp.numeroRegistroPatronal === emp.registroPatronal
+          );
+          if (regPatronal) {
+            resolved.registroPatronalId = regPatronal.id;
           }
-          
-          // Remove helper fields not in schema
-          delete resolved.empresa;
-          
-          return resolved;
-        });
-      } else {
-        // Just add clienteId to each employee
-        resolvedEmployees = employeeList.map((emp: any) => ({
-          ...emp,
-          clienteId
-        }));
-      }
+        }
+        // If registroPatronalId is a string, try to find it in client's registros
+        if (emp.registroPatronalId && typeof emp.registroPatronalId === 'string') {
+          const regPatronal = clienteRegistros.find((rp: any) => 
+            rp.numeroRegistroPatronal === emp.registroPatronalId || rp.id === emp.registroPatronalId
+          );
+          if (regPatronal) {
+            resolved.registroPatronalId = regPatronal.id;
+          } else {
+            delete resolved.registroPatronalId; // Remove invalid reference
+          }
+        }
+        
+        // Resolve banco by nombre
+        if (emp.banco && typeof emp.banco === 'string') {
+          const banco = bancos.find((b: any) => 
+            b.nombre?.toLowerCase() === emp.banco.toLowerCase() ||
+            b.nombreCorto?.toLowerCase() === emp.banco.toLowerCase()
+          );
+          if (banco) {
+            resolved.banco = banco.nombre;
+          }
+        }
+        
+        // Remove helper fields not in schema
+        delete resolved.empresa;
+        delete resolved.registroPatronal;
+        
+        return resolved;
+      });
 
-      // Validate each employee
+      // Validate each employee with relaxed bulk schema, then apply defaults
       const validatedEmployees = resolvedEmployees.map((emp: any, index: number) => {
         try {
-          return insertEmployeeSchema.parse(emp);
+          const validated = bulkInsertEmployeeSchema.parse(emp);
+          // Apply defaults for DB required fields after validation
+          return {
+            ...validated,
+            numeroEmpleado: validated.numeroEmpleado || `EMP-${Date.now()}-${index + 1}`,
+            telefono: validated.telefono || null,
+            email: validated.email || null,
+            puesto: validated.puesto || null,
+            departamento: validated.departamento || null,
+            salarioBrutoMensual: validated.salarioBrutoMensual || "0",
+          };
         } catch (error: any) {
           throw new Error(`Fila ${index + 2}: ${error.message}`);
         }

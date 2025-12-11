@@ -23,8 +23,8 @@ export const employees = pgTable("employees", {
   municipio: varchar("municipio"),
   estado: varchar("estado"),
   codigoPostal: varchar("codigo_postal"),
-  telefono: varchar("telefono").notNull(),
-  email: varchar("email").notNull(),
+  telefono: varchar("telefono"),
+  email: varchar("email"),
   correo: varchar("correo"),
   contactoEmergencia: varchar("contacto_emergencia"),
   parentescoEmergencia: varchar("parentesco_emergencia"),
@@ -43,8 +43,8 @@ export const employees = pgTable("employees", {
   fechaAntiguedad: date("fecha_antiguedad"),
   modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
   lugarTrabajo: varchar("lugar_trabajo"),
-  puesto: varchar("puesto").notNull(),
-  departamento: varchar("departamento").notNull(),
+  puesto: varchar("puesto"),
+  departamento: varchar("departamento"),
   funciones: text("funciones"),
   diasLaborales: varchar("dias_laborales").default("lunes_viernes"),
   horario: varchar("horario"),
@@ -752,6 +752,18 @@ export const insertEmployeeSchema = createInsertSchema(employees).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+});
+
+// Bulk import schema - only 5 required fields, rest are optional with defaults
+export const bulkInsertEmployeeSchema = createInsertSchema(employees).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  // Make salarioBrutoMensual and numeroEmpleado optional for bulk import
+  // Accept both string and number for salarioBrutoMensual
+  salarioBrutoMensual: z.union([z.string(), z.number()]).optional().nullable().transform(v => v?.toString() ?? null),
+  numeroEmpleado: z.string().optional().nullable(),
 });
 
 export const insertDepartmentSchema = createInsertSchema(departments).omit({
