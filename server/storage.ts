@@ -1035,8 +1035,8 @@ export class DatabaseStorage implements IStorage {
         salarioDiarioReal: updates.salarioDiarioReal ?? existingEmployee?.salarioDiarioReal,
         salarioDiarioNominal: updates.salarioDiarioNominal ?? existingEmployee?.salarioDiarioNominal,
       };
-      const { salarioDiarioExento } = this.calculateSalarioDiarioExento(mergedData);
-      updatesWithExento = { ...updates, salarioDiarioExento };
+      const calculated = this.calculateSalarioDiarioExento(mergedData);
+      updatesWithExento = { ...updates, salarioDiarioExento: calculated.salarioDiarioExento };
     }
     
     const [updated] = await db
