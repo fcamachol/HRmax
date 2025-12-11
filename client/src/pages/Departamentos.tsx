@@ -1,16 +1,30 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Building, Pencil, Trash2, Users } from "lucide-react";
+import { Plus, Search, MoreVertical, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +34,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -29,8 +42,10 @@ import type { Departamento, Empresa } from "@shared/schema";
 import DepartamentoForm from "@/components/DepartamentoForm";
 
 export default function Departamentos() {
+  const [search, setSearch] = useState("");
   const [selectedDepartamento, setSelectedDepartamento] = useState<Departamento | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [deletingDepartamento, setDeletingDepartamento] = useState<Departamento | null>(null);
   const { toast } = useToast();
 
   const { data: departamentos = [], isLoading } = useQuery<Departamento[]>({
@@ -47,6 +62,7 @@ export default function Departamentos() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/departamentos"] });
+      setDeletingDepartamento(null);
       toast({
         title: "Departamento eliminado",
         description: "El departamento ha sido eliminado correctamente",
@@ -68,162 +84,186 @@ export default function Departamentos() {
   };
 
   const getEmpresaNombre = (empresaId: string) => {
-    return empresas.find((e) => e.id === empresaId)?.razonSocial || "Sin empresa";
+    const empresa = empresas.find((e) => e.id === empresaId);
+    return empresa?.nombreComercial || empresa?.razonSocial || "Sin empresa";
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-muted-foreground">Cargando departamentos...</p>
-      </div>
-    );
-  }
+  const filteredDepartamentos = departamentos.filter((dept) =>
+    search === ""
+      ? true
+      : dept.nombre.toLowerCase().includes(search.toLowerCase()) ||
+        dept.descripcion?.toLowerCase().includes(search.toLowerCase()) ||
+        getEmpresaNombre(dept.empresaId).toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleEdit = (departamento: Departamento) => {
+    setSelectedDepartamento(departamento);
+    setIsFormOpen(true);
+  };
+
+  const handleCreate = () => {
+    setSelectedDepartamento(null);
+    setIsFormOpen(true);
+  };
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-3xl font-bold">Departamentos</h1>
           <p className="text-muted-foreground mt-1">
             Gestiona los departamentos de tu organización
           </p>
         </div>
-
-        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setSelectedDepartamento(null)} data-testid="button-nuevo-departamento">
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Departamento
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {selectedDepartamento ? "Editar Departamento" : "Nuevo Departamento"}
-              </DialogTitle>
-              <DialogDescription>
-                {selectedDepartamento
-                  ? "Actualiza la información del departamento"
-                  : "Registra un nuevo departamento"}
-              </DialogDescription>
-            </DialogHeader>
-            <DepartamentoForm
-              departamento={selectedDepartamento || undefined}
-              onSuccess={handleDepartamentoCreated}
-              onCancel={() => setIsFormOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
       </div>
 
-      {departamentos.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <Building className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium mb-2">No hay departamentos registrados</p>
-            <p className="text-muted-foreground text-sm mb-4">
-              Crea tu primer departamento para comenzar
-            </p>
-            <Button onClick={() => setIsFormOpen(true)} data-testid="button-crear-primero">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, descripción o empresa..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+            data-testid="input-search"
+          />
+        </div>
+        <Button onClick={handleCreate} data-testid="button-nuevo-departamento">
+          <Plus className="h-4 w-4 mr-2" />
+          Nuevo Departamento
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">Cargando departamentos...</p>
+        </div>
+      ) : filteredDepartamentos.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg">
+          <Building className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">
+            {search
+              ? "No se encontraron departamentos con ese criterio"
+              : "No hay departamentos registrados"}
+          </p>
+          {!search && (
+            <Button onClick={handleCreate} className="mt-4" data-testid="button-crear-primero">
               <Plus className="h-4 w-4 mr-2" />
               Crear Departamento
             </Button>
-          </CardContent>
-        </Card>
+          )}
+        </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {departamentos.map((departamento) => (
-            <Card key={departamento.id} data-testid={`card-departamento-${departamento.id}`}>
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg">{departamento.nombre}</CardTitle>
-                    <CardDescription className="mt-1">
-                      {getEmpresaNombre(departamento.empresaId)}
-                    </CardDescription>
-                  </div>
-                  <Badge variant={departamento.estatus === "activo" ? "default" : "secondary"}>
-                    {departamento.estatus}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {departamento.descripcion && (
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {departamento.descripcion}
-                  </p>
-                )}
-
-                <div className="space-y-2 text-sm">
-                  {departamento.responsable && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Responsable:</span>
-                      <span>{departamento.responsable}</span>
-                    </div>
-                  )}
-                  {departamento.numeroEmpleados !== undefined && (
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>{departamento.numeroEmpleados} empleados</span>
-                    </div>
-                  )}
-                  {departamento.presupuestoAnual && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Presupuesto:</span>
-                      <span>${parseFloat(departamento.presupuestoAnual).toLocaleString()}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 pt-2 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      setSelectedDepartamento(departamento);
-                      setIsFormOpen(true);
-                    }}
-                    data-testid={`button-editar-${departamento.id}`}
-                  >
-                    <Pencil className="h-3 w-3 mr-1" />
-                    Editar
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        data-testid={`button-eliminar-${departamento.id}`}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>¿Eliminar departamento?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Esta acción no se puede deshacer. El departamento "{departamento.nombre}"
-                          será eliminado permanentemente.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => deleteDepartamentoMutation.mutate(departamento.id)}
-                          data-testid={`button-confirmar-eliminar-${departamento.id}`}
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nombre</TableHead>
+                <TableHead>Descripción</TableHead>
+                <TableHead>Empresa</TableHead>
+                <TableHead>Responsable</TableHead>
+                <TableHead>Estatus</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredDepartamentos.map((departamento) => (
+                <TableRow key={departamento.id} data-testid={`row-departamento-${departamento.id}`}>
+                  <TableCell className="font-medium">
+                    {departamento.nombre}
+                  </TableCell>
+                  <TableCell className="max-w-xs truncate text-muted-foreground">
+                    {departamento.descripcion || "-"}
+                  </TableCell>
+                  <TableCell>
+                    {getEmpresaNombre(departamento.empresaId)}
+                  </TableCell>
+                  <TableCell>
+                    {departamento.responsable || "-"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={departamento.estatus === "activo" ? "default" : "secondary"}
+                    >
+                      {departamento.estatus === "activo" ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          data-testid={`button-actions-${departamento.id}`}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Acciones</DropdownMenuLabel>
+                        <DropdownMenuItem
+                          onClick={() => handleEdit(departamento)}
+                          data-testid={`button-edit-${departamento.id}`}
+                        >
+                          Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeletingDepartamento(departamento)}
+                          data-testid={`button-delete-${departamento.id}`}
                         >
                           Eliminar
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
+
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedDepartamento ? "Editar Departamento" : "Nuevo Departamento"}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedDepartamento
+                ? "Actualiza la información del departamento"
+                : "Registra un nuevo departamento"}
+            </DialogDescription>
+          </DialogHeader>
+          <DepartamentoForm
+            departamento={selectedDepartamento || undefined}
+            onSuccess={handleDepartamentoCreated}
+            onCancel={() => setIsFormOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deletingDepartamento} onOpenChange={(open) => !open && setDeletingDepartamento(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar departamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer. El departamento "{deletingDepartamento?.nombre}"
+              será eliminado permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deletingDepartamento && deleteDepartamentoMutation.mutate(deletingDepartamento.id)}
+              data-testid="button-confirmar-eliminar"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
