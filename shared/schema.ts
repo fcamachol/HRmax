@@ -57,6 +57,7 @@ export const employees = pgTable("employees", {
   salarioDiarioReal: numeric("salario_diario_real"),
   salarioDiarioNominal: numeric("salario_diario_nominal"),
   salarioDiarioExento: numeric("salario_diario_exento"),
+  medioPagoExentoId: varchar("medio_pago_exento_id"), // FK a medios_pago - Medio de pago para salario exento
   sbc: numeric("sbc"),
   sdi: numeric("sdi"),
   sbcBp: bigint("sbc_bp", { mode: "bigint" }), // Salario Base de Cotización en basis points (autoritativo)
