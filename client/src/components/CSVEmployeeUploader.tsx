@@ -946,7 +946,52 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                   </span>
                 </div>
 
-                <ScrollArea className="h-[300px] border rounded-md">
+                {/* Show errors summary first if there are any */}
+                {errors.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <AlertCircle className="h-5 w-5" />
+                      <span className="font-medium">
+                        Se encontraron {errors.length} error(es) en {new Set(errors.map(e => e.row)).size} fila(s)
+                      </span>
+                    </div>
+                    <ScrollArea className="h-[200px] border border-destructive/30 rounded-md bg-destructive/5 p-4">
+                      <div className="space-y-3">
+                        {Array.from(new Set(errors.map(e => e.row))).sort((a, b) => a - b).map(rowNum => {
+                          const rowErrors = errors.filter(e => e.row === rowNum);
+                          const rowData = csvData[rowNum - 2];
+                          return (
+                            <div key={rowNum} className="border-b border-destructive/20 pb-3 last:border-0">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Badge variant="destructive" className="text-xs">
+                                  Fila {rowNum}
+                                </Badge>
+                                {rowData && (
+                                  <span className="text-sm text-muted-foreground">
+                                    {rowData.nombre} {rowData.apellidoPaterno}
+                                  </span>
+                                )}
+                              </div>
+                              <ul className="space-y-1 ml-4">
+                                {rowErrors.map((error, idx) => (
+                                  <li key={idx} className="text-sm text-destructive flex items-start gap-2">
+                                    <span className="font-medium min-w-[100px]">{error.field}:</span>
+                                    <span>{error.message}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                    <p className="text-sm text-muted-foreground">
+                      Corrige los errores en tu archivo CSV y vuelve a cargarlo.
+                    </p>
+                  </div>
+                )}
+
+                <ScrollArea className="h-[250px] border rounded-md">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -967,10 +1012,18 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                             className={rowErrors.length > 0 ? "bg-destructive/10" : ""}
                           >
                             <TableCell>{index + 1}</TableCell>
-                            <TableCell>{row.nombre}</TableCell>
-                            <TableCell>{row.apellidoPaterno} {row.apellidoMaterno}</TableCell>
-                            <TableCell className="font-mono text-xs">{row.curp}</TableCell>
-                            <TableCell>{row.fechaIngreso}</TableCell>
+                            <TableCell className={rowErrors.some(e => e.field === 'nombre') ? "text-destructive font-medium" : ""}>
+                              {row.nombre || <span className="text-destructive italic">vacío</span>}
+                            </TableCell>
+                            <TableCell className={rowErrors.some(e => e.field === 'apellidoPaterno' || e.field === 'apellidoMaterno') ? "text-destructive font-medium" : ""}>
+                              {row.apellidoPaterno || <span className="text-destructive italic">vacío</span>} {row.apellidoMaterno}
+                            </TableCell>
+                            <TableCell className={`font-mono text-xs ${rowErrors.some(e => e.field === 'curp') ? "text-destructive font-medium" : ""}`}>
+                              {row.curp || <span className="text-destructive italic">vacío</span>}
+                            </TableCell>
+                            <TableCell className={rowErrors.some(e => e.field === 'fechaIngreso') ? "text-destructive font-medium" : ""}>
+                              {row.fechaIngreso || <span className="text-destructive italic">vacío</span>}
+                            </TableCell>
                             <TableCell>
                               {rowErrors.length > 0 ? (
                                 <Badge variant="destructive">
