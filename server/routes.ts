@@ -147,6 +147,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!clienteId) {
         return res.status(400).json({ message: "Debes seleccionar un cliente primero" });
       }
+      
+      // Security: Validate clienteId access based on user type
+      const user = req.user;
+      if (user) {
+        // MaxTalent users can import to any client
+        // Client users can only import to their own client
+        if (user.tipoUsuario !== "maxtalent" && user.clienteId !== clienteId) {
+          return res.status(403).json({ 
+            message: "No tienes permiso para importar empleados a este cliente" 
+          });
+        }
+      }
 
       // If resolveReferences is true, look up empresa/departamento/puesto by name
       let resolvedEmployees = employeeList;

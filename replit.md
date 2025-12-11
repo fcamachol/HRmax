@@ -62,6 +62,16 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
 *   **Personal Management - Actas Administrativas (Administrative Records)**: Tracks disciplinary actions, incident documentation, and sanction management.
 *   **Configuration - Medios de Pago (Payment Methods)**: Manages payment platforms with CRUD operations.
 *   **IMSS Module (Phase 2)**: Complete IMSS movement management with Movimientos page (list, filter, create/edit movements) and SUA Bimestres page (bimonthly payment tracking with status management).
+*   **CSV Bulk Employee Import**: Multi-step wizard (`CSVEmployeeUploader.tsx`) for importing employees from CSV files. Features:
+  - Supports 78+ employee fields with flexible Spanish/English header mapping
+  - Empresa name-to-ID resolution (matches by `nombreComercial` or `razonSocial`)
+  - Banco name-to-nombre resolution using `cat_bancos` catalog
+  - Validation for RFC, CURP, NSS, email, and other field formats
+  - Preview mode with error highlighting before import
+  - Downloadable CSV template with all supported fields
+  - Tenant-aware: imports are scoped to the selected cliente via `ClienteContext`
+  - Triggers automatic kardex population via Option B database triggers
+  - Security: MaxTalent users can import to any cliente; client users restricted to their own clienteId (NOTE: requires real authentication in production)
 
 ## External Dependencies
 
