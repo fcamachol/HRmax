@@ -487,7 +487,12 @@ export const users = pgTable("users", {
   tipoUsuario: varchar("tipo_usuario").notNull().default("cliente"), // "maxtalent" | "cliente"
   clienteId: varchar("cliente_id").references(() => clientes.id), // Solo para tipo "cliente"
   
-  // Super Admin - permite bypass de permisos con auditoría completa
+  // Rol del usuario dentro de su alcance
+  // - "user": Usuario normal con permisos granulares
+  // - "cliente_admin": Admin de cliente con acceso total a su cliente
+  role: varchar("role").notNull().default("user"), // "user" | "cliente_admin"
+  
+  // Super Admin - permite bypass de permisos con auditoría completa (GLOBAL)
   isSuperAdmin: boolean("is_super_admin").notNull().default(false),
   
   // Información adicional
