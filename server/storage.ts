@@ -914,11 +914,38 @@ export class DatabaseStorage implements IStorage {
 
   // Employees
   async createEmployee(employee: InsertEmployee): Promise<Employee> {
+    // Calculate salarioDiarioExento automatically
+    const employeeWithExento = this.calculateSalarioDiarioExento(employee);
+    
     const [newEmployee] = await db
       .insert(employees)
-      .values(employee)
+      .values(employeeWithExento)
       .returning();
     return newEmployee;
+  }
+  
+  // Helper function to calculate Salario Diario Exento
+  private calculateSalarioDiarioExento<T extends Partial<InsertEmployee>>(data: T): T {
+    const salarioDiarioReal = data.salarioDiarioReal ? parseFloat(String(data.salarioDiarioReal)) : null;
+    const salarioDiarioNominal = data.salarioDiarioNominal ? parseFloat(String(data.salarioDiarioNominal)) : null;
+    
+    // Formula: Exento = Real - Nominal. If Nominal doesn't exist, Exento = 0
+    let salarioDiarioExento: string | null = null;
+    
+    if (salarioDiarioReal !== null) {
+      if (salarioDiarioNominal !== null && salarioDiarioNominal > 0) {
+        const exento = Math.max(0, salarioDiarioReal - salarioDiarioNominal);
+        salarioDiarioExento = exento.toFixed(4);
+      } else {
+        // If Nominal doesn't exist, Exento = 0
+        salarioDiarioExento = "0";
+      }
+    }
+    
+    return {
+      ...data,
+      salarioDiarioExento,
+    };
   }
 
   async createBulkEmployees(employeeList: InsertEmployee[]): Promise<Employee[]> {
@@ -926,9 +953,12 @@ export class DatabaseStorage implements IStorage {
       return [];
     }
     
+    // Calculate salarioDiarioExento for all employees
+    const employeesWithExento = employeeList.map(emp => this.calculateSalarioDiarioExento(emp));
+    
     const newEmployees = await db
       .insert(employees)
-      .values(employeeList)
+      .values(employeesWithExento)
       .returning();
     return newEmployees;
   }
@@ -997,9 +1027,21 @@ export class DatabaseStorage implements IStorage {
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
     const existingEmployee = await this.getEmployee(id);
     
+    // Recalculate salarioDiarioExento if salary fields are being updated
+    let updatesWithExento = updates;
+    if ('salarioDiarioReal' in updates || 'salarioDiarioNominal' in updates) {
+      // Merge existing values with updates to calculate correctly
+      const mergedData = {
+        salarioDiarioReal: updates.salarioDiarioReal ?? existingEmployee?.salarioDiarioReal,
+        salarioDiarioNominal: updates.salarioDiarioNominal ?? existingEmployee?.salarioDiarioNominal,
+      };
+      const { salarioDiarioExento } = this.calculateSalarioDiarioExento(mergedData);
+      updatesWithExento = { ...updates, salarioDiarioExento };
+    }
+    
     const [updated] = await db
       .update(employees)
-      .set(updates)
+      .set(updatesWithExento)
       .where(eq(employees.id, id))
       .returning();
     
