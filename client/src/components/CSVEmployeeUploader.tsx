@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle2, X, Building2, ChevronRight, ChevronLeft, Plus, Search } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -18,35 +18,47 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import Papa from "papaparse";
 import { useToast } from "@/hooks/use-toast";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useCliente } from "@/contexts/ClienteContext";
 
 interface CSVRow {
-  // Campos requeridos
-  numeroEmpleado: string;
+  // Campos requeridos (5)
   nombre: string;
   apellidoPaterno: string;
-  telefono: string;
-  email: string;
-  puesto: string;
-  departamento: string;
-  salarioBrutoMensual: string;
+  apellidoMaterno: string;
+  curp: string;
   fechaIngreso: string;
-  empresa: string; // Nombre de la empresa (se resuelve a empresaId en el backend)
   
-  // Campos opcionales - Información personal
-  apellidoMaterno?: string;
+  // Campos opcionales
+  numeroEmpleado?: string;
+  telefono?: string;
+  email?: string;
+  puesto?: string;
+  departamento?: string;
+  salarioNetoMensual?: string;
+  salarioBrutoMensual?: string;
+  
+  // Información personal
   genero?: string;
   fechaNacimiento?: string;
-  curp?: string;
   rfc?: string;
   nss?: string;
   estadoCivil?: string;
   
-  // Campos opcionales - Dirección
+  // Dirección
   calle?: string;
   numeroExterior?: string;
   numeroInterior?: string;
@@ -55,13 +67,13 @@ interface CSVRow {
   estado?: string;
   codigoPostal?: string;
   
-  // Campos opcionales - Contacto adicional
+  // Contacto adicional
   correo?: string;
   contactoEmergencia?: string;
   parentescoEmergencia?: string;
   telefonoEmergencia?: string;
   
-  // Campos opcionales - Información bancaria
+  // Información bancaria
   banco?: string;
   clabe?: string;
   sucursal?: string;
@@ -69,7 +81,7 @@ interface CSVRow {
   formaPago?: string;
   periodicidadPago?: string;
   
-  // Campos opcionales - Contrato
+  // Contrato
   tipoCalculoSalario?: string;
   tipoContrato?: string;
   fechaAltaImss?: string;
@@ -77,7 +89,7 @@ interface CSVRow {
   reconoceAntiguedad?: string;
   fechaAntiguedad?: string;
   
-  // Campos opcionales - Trabajo
+  // Trabajo
   modalidadTrabajo?: string;
   lugarTrabajo?: string;
   funciones?: string;
@@ -87,7 +99,7 @@ interface CSVRow {
   tiempoParaAlimentos?: string;
   diasDescanso?: string;
   
-  // Campos opcionales - Salario y prestaciones
+  // Salario y prestaciones
   esquemaPago?: string;
   salarioDiarioReal?: string;
   salarioDiarioNominal?: string;
@@ -96,28 +108,27 @@ interface CSVRow {
   sdi?: string;
   tablaImss?: string;
   
-  // Campos opcionales - Vacaciones y aguinaldo
+  // Vacaciones y aguinaldo
   diasVacacionesAnuales?: string;
   diasVacacionesDisponibles?: string;
   diasVacacionesUsados?: string;
   diasAguinaldoAdicionales?: string;
   diasVacacionesAdicionales?: string;
   
-  // Campos opcionales - Créditos
+  // Créditos
   creditoInfonavit?: string;
   numeroFonacot?: string;
   
-  // Campos opcionales - Estado y organización
+  // Estado y organización
   estatus?: string;
   clienteProyecto?: string;
   observacionesInternas?: string;
   timezone?: string;
   jefeDirectoId?: string;
-  registroPatronalId?: string;
   documentoContratoId?: string;
   puestoId?: string;
   
-  // Campos opcionales - Otros
+  // Otros
   esquemaContratacion?: string;
   lugarNacimiento?: string;
   entidadNacimiento?: string;
@@ -135,59 +146,109 @@ interface ValidationError {
   message: string;
 }
 
+interface PuestoMatch {
+  csvPuesto: string;
+  matchedPuestoId: string | null;
+  matchedPuestoName: string | null;
+  isNew: boolean;
+}
+
+interface Empresa {
+  id: string;
+  nombreComercial: string;
+  razonSocial: string;
+}
+
+interface RegistroPatronal {
+  id: string;
+  empresaId: string;
+  numeroRegistroPatronal: string;
+  descripcion?: string;
+}
+
 interface CSVEmployeeUploaderProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
+type WizardStep = 1 | 2 | 3 | 4;
+
 export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderProps) {
+  const [step, setStep] = useState<WizardStep>(1);
   const [csvData, setCsvData] = useState<CSVRow[]>([]);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [fileName, setFileName] = useState<string>("");
+  const [selectedEmpresaId, setSelectedEmpresaId] = useState<string>("");
+  const [selectedRegistroPatronalId, setSelectedRegistroPatronalId] = useState<string>("");
+  const [puestoMatches, setPuestoMatches] = useState<PuestoMatch[]>([]);
+  const [newPuestoNames, setNewPuestoNames] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { selectedCliente } = useCliente();
 
+  // Fetch all empresas (filter by cliente on backend via storage)
+  const { data: allEmpresas = [] } = useQuery<Empresa[]>({
+    queryKey: ['/api/empresas'],
+    enabled: open,
+  });
+  
+  // Filter empresas by selected cliente on client-side
+  const empresas = selectedCliente?.id 
+    ? allEmpresas.filter((e: any) => e.clienteId === selectedCliente.id)
+    : [];
+
+  // Fetch all registros patronales and filter by selected empresa
+  const { data: allRegistrosPatronales = [] } = useQuery<RegistroPatronal[]>({
+    queryKey: ['/api/registros-patronales'],
+    enabled: open,
+  });
+  
+  // Filter registros by selected empresa
+  const registrosPatronales = selectedEmpresaId
+    ? allRegistrosPatronales.filter((rp: RegistroPatronal) => rp.empresaId === selectedEmpresaId)
+    : [];
+
+  // Fetch all puestos
+  const { data: allPuestos = [] } = useQuery<{ id: string; nombrePuesto: string; clienteId?: string }[]>({
+    queryKey: ['/api/puestos'],
+    enabled: open,
+  });
+  
+  // Filter and map puestos
+  const existingPuestos = (selectedCliente?.id 
+    ? allPuestos.filter((p: any) => !p.clienteId || p.clienteId === selectedCliente.id)
+    : allPuestos
+  ).map(p => ({ id: p.id, nombre: p.nombrePuesto }));
+
   const validateRow = (row: CSVRow, index: number): ValidationError[] => {
     const rowErrors: ValidationError[] = [];
     const rowNum = index + 2;
 
-    if (!row.numeroEmpleado?.trim()) {
-      rowErrors.push({ row: rowNum, field: "numeroEmpleado", message: "Número de empleado requerido" });
-    }
+    // Solo 5 campos requeridos
     if (!row.nombre?.trim()) {
       rowErrors.push({ row: rowNum, field: "nombre", message: "Nombre requerido" });
     }
     if (!row.apellidoPaterno?.trim()) {
       rowErrors.push({ row: rowNum, field: "apellidoPaterno", message: "Apellido paterno requerido" });
     }
-    if (!row.email?.trim()) {
-      rowErrors.push({ row: rowNum, field: "email", message: "Email requerido" });
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
-      rowErrors.push({ row: rowNum, field: "email", message: "Email inválido" });
+    if (!row.apellidoMaterno?.trim()) {
+      rowErrors.push({ row: rowNum, field: "apellidoMaterno", message: "Apellido materno requerido" });
     }
-    if (!row.telefono?.trim()) {
-      rowErrors.push({ row: rowNum, field: "telefono", message: "Teléfono requerido" });
-    }
-    if (!row.departamento?.trim()) {
-      rowErrors.push({ row: rowNum, field: "departamento", message: "Departamento requerido" });
-    }
-    if (!row.puesto?.trim()) {
-      rowErrors.push({ row: rowNum, field: "puesto", message: "Puesto requerido" });
-    }
-    if (!row.salarioBrutoMensual?.trim()) {
-      rowErrors.push({ row: rowNum, field: "salarioBrutoMensual", message: "Salario requerido" });
-    } else if (isNaN(parseFloat(row.salarioBrutoMensual))) {
-      rowErrors.push({ row: rowNum, field: "salarioBrutoMensual", message: "Salario debe ser un número" });
+    if (!row.curp?.trim()) {
+      rowErrors.push({ row: rowNum, field: "curp", message: "CURP requerido" });
+    } else if (!/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/.test(row.curp.toUpperCase())) {
+      rowErrors.push({ row: rowNum, field: "curp", message: "CURP inválido (debe tener 18 caracteres)" });
     }
     if (!row.fechaIngreso?.trim()) {
       rowErrors.push({ row: rowNum, field: "fechaIngreso", message: "Fecha de ingreso requerida" });
     } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.fechaIngreso)) {
       rowErrors.push({ row: rowNum, field: "fechaIngreso", message: "Fecha debe estar en formato YYYY-MM-DD" });
     }
-    if (!row.empresa?.trim()) {
-      rowErrors.push({ row: rowNum, field: "empresa", message: "Empresa requerida (nombre comercial o razón social)" });
+
+    // Validaciones opcionales
+    if (row.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(row.email)) {
+      rowErrors.push({ row: rowNum, field: "email", message: "Email inválido" });
     }
 
     return rowErrors;
@@ -211,9 +272,13 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'apellido paterno': 'apellidoPaterno',
           'apellido_materno': 'apellidoMaterno',
           'apellido materno': 'apellidoMaterno',
+          'salario_neto_mensual': 'salarioNetoMensual',
+          'salario neto mensual': 'salarioNetoMensual',
+          'salario_neto': 'salarioNetoMensual',
+          'salario neto': 'salarioNetoMensual',
+          'salario': 'salarioNetoMensual',
           'salario_bruto_mensual': 'salarioBrutoMensual',
           'salario bruto mensual': 'salarioBrutoMensual',
-          'salario': 'salarioBrutoMensual',
           'fecha_ingreso': 'fechaIngreso',
           'fecha de ingreso': 'fechaIngreso',
           'fecha_nacimiento': 'fechaNacimiento',
@@ -224,17 +289,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'correo': 'email',
           'estado_civil': 'estadoCivil',
           'estado civil': 'estadoCivil',
-          
-          // Empresa (nombre, no ID)
-          'nombre_empresa': 'empresa',
-          'nombre empresa': 'empresa',
-          'nombrecomercial': 'empresa',
-          'nombre_comercial': 'empresa',
-          'nombre comercial': 'empresa',
-          'razon_social': 'empresa',
-          'razón social': 'empresa',
-          'razon social': 'empresa',
-          'razonsocial': 'empresa',
           
           // Dirección
           'numero_exterior': 'numeroExterior',
@@ -336,8 +390,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'observaciones internas': 'observacionesInternas',
           'jefe_directo_id': 'jefeDirectoId',
           'jefe directo id': 'jefeDirectoId',
-          'registro_patronal_id': 'registroPatronalId',
-          'registro patronal id': 'registroPatronalId',
           'documento_contrato_id': 'documentoContratoId',
           'documento contrato id': 'documentoContratoId',
           'puesto_id': 'puestoId',
@@ -378,10 +430,29 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         setCsvData(data);
         setErrors(allErrors);
 
+        // Extract unique puestos
+        const puestoSet = new Set<string>();
+        data.forEach(row => {
+          if (row.puesto?.trim()) puestoSet.add(row.puesto.trim());
+        });
+        const uniquePuestos = Array.from(puestoSet);
+        const matches: PuestoMatch[] = uniquePuestos.map(csvPuesto => {
+          const exactMatch = existingPuestos.find(p => 
+            p.nombre.toLowerCase() === csvPuesto.toLowerCase()
+          );
+          return {
+            csvPuesto,
+            matchedPuestoId: exactMatch?.id || null,
+            matchedPuestoName: exactMatch?.nombre || null,
+            isNew: !exactMatch,
+          };
+        });
+        setPuestoMatches(matches);
+
         if (allErrors.length === 0) {
           toast({
             title: "CSV validado",
-            description: `${data.length} empleado(s) listos para importar`,
+            description: `${data.length} empleado(s) listos para revisar`,
           });
         } else {
           toast({
@@ -407,28 +478,46 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
 
   const bulkCreateMutation = useMutation({
     mutationFn: async (employees: CSVRow[]) => {
-      const transformedEmployees = employees.map((emp) => {
+      const transformedEmployees = employees.map((emp, index) => {
         const employeeData: any = {
           // Campos requeridos
-          numeroEmpleado: emp.numeroEmpleado.trim(),
           nombre: emp.nombre.trim(),
           apellidoPaterno: emp.apellidoPaterno.trim(),
-          email: emp.email.trim(),
-          telefono: emp.telefono.trim(),
-          departamento: emp.departamento.trim(),
-          puesto: emp.puesto.trim(),
-          salarioBrutoMensual: emp.salarioBrutoMensual.trim(),
+          apellidoMaterno: emp.apellidoMaterno?.trim() || "",
+          curp: emp.curp.trim().toUpperCase(),
           fechaIngreso: emp.fechaIngreso.trim(),
+          // Empresa y registro patronal from wizard
+          empresaId: selectedEmpresaId,
+          registroPatronalId: selectedRegistroPatronalId || undefined,
         };
 
-        // Agregar todos los campos opcionales si están presentes
-        if (emp.apellidoMaterno) employeeData.apellidoMaterno = emp.apellidoMaterno.trim();
+        // Numero de empleado (autogenerate if not provided)
+        if (emp.numeroEmpleado?.trim()) {
+          employeeData.numeroEmpleado = emp.numeroEmpleado.trim();
+        }
+
+        // Agregar campos opcionales si están presentes
+        if (emp.telefono) employeeData.telefono = emp.telefono.trim();
+        if (emp.email) employeeData.email = emp.email.trim();
         if (emp.genero) employeeData.genero = emp.genero.trim();
         if (emp.fechaNacimiento) employeeData.fechaNacimiento = emp.fechaNacimiento.trim();
-        if (emp.curp) employeeData.curp = emp.curp.trim();
         if (emp.rfc) employeeData.rfc = emp.rfc.trim();
         if (emp.nss) employeeData.nss = emp.nss.trim();
         if (emp.estadoCivil) employeeData.estadoCivil = emp.estadoCivil.trim();
+        
+        // Salario
+        if (emp.salarioNetoMensual) employeeData.salarioNetoMensual = emp.salarioNetoMensual.trim();
+        if (emp.salarioBrutoMensual) employeeData.salarioBrutoMensual = emp.salarioBrutoMensual.trim();
+        
+        // Puesto - resolve from matches
+        if (emp.puesto?.trim()) {
+          const match = puestoMatches.find(m => m.csvPuesto === emp.puesto?.trim());
+          if (match?.matchedPuestoId) {
+            employeeData.puestoId = match.matchedPuestoId;
+          }
+          employeeData.puesto = emp.puesto.trim();
+        }
+        if (emp.departamento) employeeData.departamento = emp.departamento.trim();
         
         // Dirección
         if (emp.calle) employeeData.calle = emp.calle.trim();
@@ -480,7 +569,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         if (emp.sdi) employeeData.sdi = emp.sdi.trim();
         if (emp.tablaImss) employeeData.tablaImss = emp.tablaImss.trim();
         
-        // Vacaciones y aguinaldo
+        // Vacaciones
         if (emp.diasVacacionesAnuales) employeeData.diasVacacionesAnuales = parseInt(emp.diasVacacionesAnuales);
         if (emp.diasVacacionesDisponibles) employeeData.diasVacacionesDisponibles = parseInt(emp.diasVacacionesDisponibles);
         if (emp.diasVacacionesUsados) employeeData.diasVacacionesUsados = parseInt(emp.diasVacacionesUsados);
@@ -497,12 +586,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         if (emp.observacionesInternas) employeeData.observacionesInternas = emp.observacionesInternas.trim();
         if (emp.timezone) employeeData.timezone = emp.timezone.trim();
         if (emp.jefeDirectoId) employeeData.jefeDirectoId = emp.jefeDirectoId.trim();
-        if (emp.registroPatronalId) employeeData.registroPatronalId = parseInt(emp.registroPatronalId);
         if (emp.documentoContratoId) employeeData.documentoContratoId = emp.documentoContratoId.trim();
-        if (emp.puestoId) employeeData.puestoId = emp.puestoId.trim();
-        
-        // Empresa (se resuelve a empresaId en el backend)
-        if (emp.empresa) employeeData.empresa = emp.empresa.trim();
         
         // Otros
         if (emp.esquemaContratacion) employeeData.esquemaContratacion = emp.esquemaContratacion.trim();
@@ -511,32 +595,41 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         if (emp.nacionalidad) employeeData.nacionalidad = emp.nacionalidad.trim();
         if (emp.escolaridad) employeeData.escolaridad = emp.escolaridad.trim();
         if (emp.periodoPrueba) employeeData.periodoPrueba = emp.periodoPrueba.toLowerCase() === 'true' || emp.periodoPrueba === '1';
-        if (emp.duracionPrueba) employeeData.duracionPrueba = parseInt(emp.duracionPrueba);
+        if (emp.duracionPrueba) employeeData.duracionPrueba = emp.duracionPrueba.trim();
         if (emp.diaPago) employeeData.diaPago = emp.diaPago.trim();
         if (emp.driveId) employeeData.driveId = emp.driveId.trim();
 
         return employeeData;
       });
 
+      // Create new puestos first if needed
+      const newPuestos = puestoMatches.filter(m => m.isNew && !m.matchedPuestoId);
+      if (newPuestos.length > 0) {
+        await apiRequest("POST", "/api/puestos/bulk", {
+          puestos: newPuestos.map(p => ({ nombre: p.csvPuesto })),
+          clienteId: selectedCliente?.id,
+          empresaId: selectedEmpresaId,
+        });
+      }
+
       const response = await apiRequest("POST", "/api/employees/bulk", {
         employees: transformedEmployees,
         clienteId: selectedCliente?.id,
-        resolveReferences: true
       });
-      return await response.json();
+      return response.json();
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+    onSuccess: (data: any) => {
       toast({
-        title: "Empleados importados",
-        description: `Se importaron ${data.created} empleado(s) exitosamente`,
+        title: "Importación exitosa",
+        description: `Se importaron ${data.created || csvData.length} empleado(s) correctamente`,
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       handleClose();
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
-        title: "Error al importar",
-        description: error.message || "Error al importar empleados",
+        title: "Error en la importación",
+        description: error.message,
         variant: "destructive",
       });
     },
@@ -568,95 +661,54 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     setCsvData([]);
     setErrors([]);
     setFileName("");
+    setStep(1);
+    setSelectedEmpresaId("");
+    setSelectedRegistroPatronalId("");
+    setPuestoMatches([]);
+    setNewPuestoNames([]);
     onOpenChange(false);
   };
 
   const downloadTemplate = () => {
-    console.log("📥 Iniciando descarga de plantilla CSV...");
-    
-    // Encabezados de todas las columnas - campos esenciales para importación
     const headers = [
-      // Campos requeridos (10) - OBLIGATORIOS
-      "numeroEmpleado", "nombre", "apellidoPaterno", "telefono", "email", "puesto", "departamento", "salarioBrutoMensual", "fechaIngreso", "empresa",
-      // Información personal (7)
-      "apellidoMaterno", "genero", "fechaNacimiento", "curp", "rfc", "nss", "estadoCivil",
-      // Dirección (7)
+      // Campos requeridos (5)
+      "nombre", "apellidoPaterno", "apellidoMaterno", "curp", "fechaIngreso",
+      // Campos opcionales frecuentes
+      "numeroEmpleado", "telefono", "email", "puesto", "departamento", "salarioNetoMensual",
+      // Información personal
+      "genero", "fechaNacimiento", "rfc", "nss", "estadoCivil",
+      // Dirección
       "calle", "numeroExterior", "numeroInterior", "colonia", "municipio", "estado", "codigoPostal",
-      // Contacto adicional (4)
-      "correo", "contactoEmergencia", "parentescoEmergencia", "telefonoEmergencia",
-      // Información bancaria (6)
-      "banco", "clabe", "sucursal", "formaPago", "periodicidadPago", "cuenta",
-      // Contrato (6)
-      "tipoCalculoSalario", "tipoContrato", "fechaAltaImss", "fechaTerminacion", "reconoceAntiguedad", "fechaAntiguedad",
-      // Trabajo (8)
-      "modalidadTrabajo", "lugarTrabajo", "funciones", "diasLaborales", "horario", "tipoJornada", "tiempoParaAlimentos", "diasDescanso",
-      // Salario y prestaciones (7)
-      "esquemaPago", "salarioDiarioReal", "salarioDiarioNominal", "salarioDiarioExento", "sbc", "sdi", "tablaImss",
-      // Vacaciones y aguinaldo (5)
-      "diasVacacionesAnuales", "diasVacacionesDisponibles", "diasVacacionesUsados", "diasAguinaldoAdicionales", "diasVacacionesAdicionales",
-      // Créditos (2)
-      "creditoInfonavit", "numeroFonacot",
-      // Estado y organización (8)
-      "estatus", "clienteProyecto", "observacionesInternas", "timezone", "jefeDirectoId", "registroPatronalId", "documentoContratoId", "puestoId",
-      // Otros (9)
-      "esquemaContratacion", "lugarNacimiento", "entidadNacimiento", "nacionalidad", "escolaridad", "periodoPrueba", "duracionPrueba", "diaPago", "driveId"
+      // Contacto emergencia
+      "contactoEmergencia", "parentescoEmergencia", "telefonoEmergencia",
+      // Banco
+      "banco", "clabe", "cuenta", "formaPago", "periodicidadPago",
+      // Contrato
+      "tipoContrato", "fechaAltaImss",
+      // Trabajo
+      "modalidadTrabajo", "horario", "tipoJornada"
     ];
 
-    console.log(`📋 Plantilla generada con ${headers.length} campos`);
-
-    // Dos filas de ejemplo con datos completos
     const row1 = [
-      // Campos requeridos
-      "EMP001", "Juan", "Pérez", "5512345678", "juan.perez@example.com", "Gerente", "Ventas", "25000", "2024-01-15", "Mi Empresa SA de CV",
-      // Información personal
-      "Martínez", "M", "1990-02-15", "PEXJ900215HDFRNS01", "PEXJ900215AB1", "12345678901", "casado",
-      // Dirección
+      "Juan", "Pérez", "Martínez", "PEXJ900215HDFRNS01", "2024-01-15",
+      "", "5512345678", "juan.perez@example.com", "Gerente", "Ventas", "20000",
+      "M", "1990-02-15", "PEXJ900215AB1", "12345678901", "casado",
       "Insurgentes Sur", "1234", "5A", "Del Valle", "Benito Juárez", "Ciudad de México", "03100",
-      // Contacto adicional
-      "", "María García", "esposa", "5598765432",
-      // Información bancaria
-      "Banamex", "012180001234567890", "001", "transferencia", "quincenal", "0123456789",
-      // Contrato
-      "diario", "indeterminado", "2024-01-15", "", "false", "",
-      // Trabajo
-      "presencial", "Oficina Central", "Gestión de ventas y equipo", "lunes_viernes", "09:00-18:00", "diurna", "30_minutos", "sabado_domingo",
-      // Salario y prestaciones
-      "tradicional", "833.33", "833.33", "", "833.33", "833.33", "fija",
-      // Vacaciones
-      "12", "12", "0", "0", "0",
-      // Créditos
-      "", "",
-      // Estado y organización
-      "activo", "", "", "America/Mexico_City", "", "", "", "",
-      // Otros
-      "", "Ciudad de México", "Ciudad de México", "mexicana", "licenciatura", "false", "", "", ""
+      "María García", "esposa", "5598765432",
+      "Banamex", "012180001234567890", "0123456789", "transferencia", "quincenal",
+      "indeterminado", "2024-01-15",
+      "presencial", "09:00-18:00", "diurna"
     ];
 
     const row2 = [
-      // Campos requeridos
-      "EMP002", "María", "García", "5598765432", "maria.garcia@example.com", "Desarrollador", "IT", "30000", "2024-02-01", "Mi Empresa SA de CV",
-      // Información personal
-      "López", "F", "1985-01-01", "GACM850101MDFRNS02", "GACM850101CD2", "98765432109", "soltera",
-      // Dirección
+      "María", "García", "López", "GACM850101MDFRNS02", "2024-02-01",
+      "", "5598765432", "maria.garcia@example.com", "Desarrollador", "IT", "25000",
+      "F", "1985-01-01", "GACM850101CD2", "98765432109", "soltera",
       "Reforma", "567", "", "Juárez", "Cuauhtémoc", "Ciudad de México", "06600",
-      // Contacto adicional
-      "", "Pedro López", "padre", "5587654321",
-      // Información bancaria
-      "BBVA", "012180009876543210", "002", "transferencia", "quincenal", "9876543210",
-      // Contrato
-      "diario", "indeterminado", "2024-02-01", "", "false", "",
-      // Trabajo
-      "hibrido", "Oficina Central", "Desarrollo de software", "lunes_viernes", "10:00-19:00", "diurna", "30_minutos", "sabado_domingo",
-      // Salario y prestaciones
-      "tradicional", "1000", "1000", "", "1000", "1000", "fija",
-      // Vacaciones
-      "12", "12", "0", "0", "0",
-      // Créditos
-      "", "",
-      // Estado y organización
-      "activo", "", "", "America/Mexico_City", "", "", "", "",
-      // Otros
-      "", "Guadalajara", "Jalisco", "mexicana", "maestria", "false", "", "", ""
+      "Pedro López", "padre", "5587654321",
+      "BBVA", "012180009876543210", "9876543210", "transferencia", "quincenal",
+      "indeterminado", "2024-02-01",
+      "hibrido", "10:00-19:00", "diurna"
     ];
 
     const template = [
@@ -669,15 +721,13 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = "plantilla_empleados_completa.csv";
+    link.download = "plantilla_empleados.csv";
     link.click();
     URL.revokeObjectURL(url);
     
-    console.log(`✅ Descarga de plantilla CSV completada: plantilla_empleados_completa.csv con ${headers.length} campos`);
-    
     toast({
       title: "Plantilla descargada",
-      description: `La plantilla CSV con ${headers.length} campos ha sido descargada exitosamente`,
+      description: "La plantilla CSV ha sido descargada exitosamente",
     });
   };
 
@@ -685,168 +735,419 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     return errors.filter(e => e.row === rowIndex + 2);
   };
 
+  const selectedEmpresa = empresas.find(e => e.id === selectedEmpresaId);
+  const selectedRegistroPatronal = registrosPatronales.find(r => r.id === selectedRegistroPatronalId);
+
+  const canProceedToStep2 = selectedEmpresaId !== "";
+  const canProceedToStep3 = csvData.length > 0 && errors.length === 0;
+  const hasPuestosToMatch = puestoMatches.length > 0;
+  const canProceedToStep4 = !hasPuestosToMatch || puestoMatches.every(m => m.matchedPuestoId || m.isNew);
+
+  const handlePuestoMatch = (csvPuesto: string, puestoId: string | null) => {
+    setPuestoMatches(prev => prev.map(m => {
+      if (m.csvPuesto === csvPuesto) {
+        const matchedPuesto = existingPuestos.find(p => p.id === puestoId);
+        return {
+          ...m,
+          matchedPuestoId: puestoId,
+          matchedPuestoName: matchedPuesto?.nombre || null,
+          isNew: puestoId === null,
+        };
+      }
+      return m;
+    }));
+  };
+
+  const handleCreateNewPuesto = (csvPuesto: string) => {
+    setPuestoMatches(prev => prev.map(m => {
+      if (m.csvPuesto === csvPuesto) {
+        return {
+          ...m,
+          matchedPuestoId: null,
+          matchedPuestoName: csvPuesto,
+          isNew: true,
+        };
+      }
+      return m;
+    }));
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Importar Empleados desde CSV</DialogTitle>
           <DialogDescription>
-            Sube un archivo CSV con la información de los empleados. La plantilla incluye 79 campos disponibles del sistema (excluye campos autogenerados y complejos JSONB). El campo "empresa" es obligatorio y debe contener el nombre comercial o razón social de la empresa.
+            {step === 1 && "Paso 1 de 4: Selecciona la empresa y registro patronal"}
+            {step === 2 && "Paso 2 de 4: Sube el archivo CSV con los datos de empleados"}
+            {step === 3 && "Paso 3 de 4: Revisa y empareja los puestos"}
+            {step === 4 && "Paso 4 de 4: Confirma e importa"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".csv"
-              onChange={handleFileSelect}
-              className="hidden"
-              id="csv-upload"
-              data-testid="input-csv-file"
-            />
-            <label htmlFor="csv-upload">
-              <Button asChild variant="outline" data-testid="button-select-csv">
-                <span>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Seleccionar CSV
-                </span>
-              </Button>
-            </label>
+        {/* Progress indicator */}
+        <div className="flex items-center justify-center gap-2 py-4">
+          {[1, 2, 3, 4].map((s) => (
+            <div key={s} className="flex items-center gap-2">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                  step >= s
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {s}
+              </div>
+              {s < 4 && (
+                <div className={`w-8 h-0.5 ${step > s ? "bg-primary" : "bg-muted"}`} />
+              )}
+            </div>
+          ))}
+        </div>
 
-            <Button
-              variant="ghost"
-              onClick={downloadTemplate}
-              data-testid="button-download-template"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Descargar Plantilla Completa
-            </Button>
+        {/* Step 1: Select Empresa + Registro Patronal */}
+        {step === 1 && (
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="empresa">Empresa *</Label>
+              <Select value={selectedEmpresaId} onValueChange={(value) => {
+                setSelectedEmpresaId(value);
+                setSelectedRegistroPatronalId("");
+              }}>
+                <SelectTrigger data-testid="select-empresa">
+                  <SelectValue placeholder="Selecciona una empresa" />
+                </SelectTrigger>
+                <SelectContent>
+                  {empresas.map((empresa) => (
+                    <SelectItem key={empresa.id} value={empresa.id}>
+                      {empresa.nombreComercial || empresa.razonSocial}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Todos los empleados importados se asignarán a esta empresa
+              </p>
+            </div>
 
-            {fileName && (
-              <Badge variant="secondary" className="gap-2">
-                <FileText className="h-3 w-3" />
-                {fileName}
-              </Badge>
+            {selectedEmpresaId && (
+              <div className="space-y-2">
+                <Label htmlFor="registroPatronal">Registro Patronal (opcional)</Label>
+                <Select value={selectedRegistroPatronalId} onValueChange={setSelectedRegistroPatronalId}>
+                  <SelectTrigger data-testid="select-registro-patronal">
+                    <SelectValue placeholder="Selecciona un registro patronal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {registrosPatronales.length === 0 ? (
+                      <SelectItem value="" disabled>No hay registros patronales</SelectItem>
+                    ) : (
+                      registrosPatronales.map((rp) => (
+                        <SelectItem key={rp.id} value={rp.id}>
+                          {rp.numeroRegistroPatronal} {rp.descripcion ? `- ${rp.descripcion}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  El registro patronal IMSS para estos empleados
+                </p>
+              </div>
+            )}
+
+            {selectedEmpresa && (
+              <Alert>
+                <Building2 className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Empresa seleccionada:</strong> {selectedEmpresa.nombreComercial || selectedEmpresa.razonSocial}
+                  {selectedRegistroPatronal && (
+                    <><br /><strong>Registro Patronal:</strong> {selectedRegistroPatronal.numeroRegistroPatronal}</>
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
           </div>
+        )}
 
-          {csvData.length === 0 && (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Formato del CSV:</strong> La plantilla incluye 79 campos. 10 son obligatorios (incluyendo "empresa" que es el nombre de la empresa, no ID).
-                <br />
-                <strong>Campos requeridos:</strong> empresa, numeroEmpleado, nombre, apellidoPaterno, email, telefono, departamento, puesto, salarioBrutoMensual, fechaIngreso.
-                <br />
-                <strong>Campos opcionales:</strong> Todos los demás campos son opcionales y pueden dejarse vacíos.
-              </AlertDescription>
-            </Alert>
-          )}
+        {/* Step 2: Upload CSV */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleFileSelect}
+                className="hidden"
+                data-testid="input-csv-file"
+              />
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                data-testid="button-select-csv"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Seleccionar archivo CSV
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={downloadTemplate}
+                data-testid="button-download-template"
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Descargar plantilla
+              </Button>
+              {fileName && (
+                <Badge variant="secondary">
+                  <FileText className="mr-1 h-3 w-3" />
+                  {fileName}
+                </Badge>
+              )}
+            </div>
 
-          {csvData.length > 0 && (
-            <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/50">
-              <div className="flex-1">
+            {csvData.length === 0 && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Campos requeridos (5):</strong> nombre, apellidoPaterno, apellidoMaterno, curp, fechaIngreso
+                  <br />
+                  <strong>Campos opcionales:</strong> numeroEmpleado (se autogenera), telefono, email, puesto, departamento, salarioNetoMensual, etc.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {errors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Se encontraron {errors.length} error(es) de validación. Corrige el archivo y vuelve a subirlo.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {csvData.length > 0 && (
+              <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   {errors.length === 0 ? (
-                    <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
                   ) : (
                     <AlertCircle className="h-5 w-5 text-destructive" />
                   )}
                   <span className="font-medium">
-                    {csvData.length} fila(s) detectadas
+                    {csvData.length} empleado(s) encontrados
                   </span>
                 </div>
-                {errors.length > 0 && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {errors.length} error(es) de validación encontrados
+
+                <ScrollArea className="h-[300px] border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">#</TableHead>
+                        <TableHead>Nombre</TableHead>
+                        <TableHead>Apellidos</TableHead>
+                        <TableHead>CURP</TableHead>
+                        <TableHead>Fecha Ingreso</TableHead>
+                        <TableHead>Estado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {csvData.slice(0, 50).map((row, index) => {
+                        const rowErrors = getErrorsForRow(index);
+                        return (
+                          <TableRow
+                            key={index}
+                            className={rowErrors.length > 0 ? "bg-destructive/10" : ""}
+                          >
+                            <TableCell>{index + 1}</TableCell>
+                            <TableCell>{row.nombre}</TableCell>
+                            <TableCell>{row.apellidoPaterno} {row.apellidoMaterno}</TableCell>
+                            <TableCell className="font-mono text-xs">{row.curp}</TableCell>
+                            <TableCell>{row.fechaIngreso}</TableCell>
+                            <TableCell>
+                              {rowErrors.length > 0 ? (
+                                <Badge variant="destructive">
+                                  {rowErrors.length} error(es)
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-green-600 border-green-600">
+                                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                                  OK
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+                {csvData.length > 50 && (
+                  <p className="text-sm text-muted-foreground">
+                    Mostrando 50 de {csvData.length} empleados
                   </p>
                 )}
               </div>
-              {errors.length === 0 && (
-                <Button
-                  onClick={handleImport}
-                  disabled={bulkCreateMutation.isPending}
-                  data-testid="button-import-csv"
-                >
-                  {bulkCreateMutation.isPending ? "Importando..." : "Importar Empleados"}
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
+        )}
 
-          {csvData.length > 0 && (
-            <div className="border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto max-h-96">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">#</TableHead>
-                      <TableHead>Num. Emp</TableHead>
-                      <TableHead>Nombre</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Departamento</TableHead>
-                      <TableHead>Puesto</TableHead>
-                      <TableHead>Salario</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {csvData.map((row, index) => {
-                      const rowErrors = getErrorsForRow(index);
-                      const hasErrors = rowErrors.length > 0;
-                      
-                      return (
-                        <TableRow
-                          key={index}
-                          className={hasErrors ? "bg-destructive/10" : ""}
-                          data-testid={`row-csv-${index}`}
+        {/* Step 3: Match Puestos */}
+        {step === 3 && (
+          <div className="space-y-4">
+            {hasPuestosToMatch ? (
+              <>
+                <Alert>
+                  <Search className="h-4 w-4" />
+                  <AlertDescription>
+                    Se encontraron {puestoMatches.length} puesto(s) en el CSV. Empareja cada uno con un puesto existente o crea uno nuevo.
+                  </AlertDescription>
+                </Alert>
+
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-4 pr-4">
+                    {puestoMatches.map((match) => (
+                      <div key={match.csvPuesto} className="flex items-center gap-4 p-4 border rounded-lg">
+                        <div className="flex-1">
+                          <Label className="text-sm text-muted-foreground">Puesto en CSV</Label>
+                          <p className="font-medium">{match.csvPuesto}</p>
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex-1 space-y-2">
+                          <Label className="text-sm text-muted-foreground">Emparejar con</Label>
+                          <Select
+                            value={match.matchedPuestoId || ""}
+                            onValueChange={(value) => handlePuestoMatch(match.csvPuesto, value || null)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecciona un puesto" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {existingPuestos.map((puesto) => (
+                                <SelectItem key={puesto.id} value={puesto.id}>
+                                  {puesto.nombre}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCreateNewPuesto(match.csvPuesto)}
+                          className={match.isNew ? "border-green-500 text-green-600" : ""}
                         >
-                          <TableCell>{index + 1}</TableCell>
-                          <TableCell>{row.numeroEmpleado}</TableCell>
-                          <TableCell>{row.nombre} {row.apellidoPaterno}</TableCell>
-                          <TableCell>{row.email}</TableCell>
-                          <TableCell>{row.departamento}</TableCell>
-                          <TableCell>{row.puesto}</TableCell>
-                          <TableCell>${row.salarioBrutoMensual}</TableCell>
-                          <TableCell>
-                            {hasErrors ? (
-                              <div className="flex items-center gap-2">
-                                <X className="h-4 w-4 text-destructive" />
-                                <span className="text-xs text-destructive">
-                                  {rowErrors.length} error(es)
-                                </span>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-                                <span className="text-xs text-muted-foreground">Válido</span>
-                              </div>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-          )}
+                          <Plus className="mr-1 h-3 w-3" />
+                          Crear nuevo
+                        </Button>
+                        {match.isNew && (
+                          <Badge variant="outline" className="text-green-600 border-green-600">
+                            Se creará
+                          </Badge>
+                        )}
+                        {match.matchedPuestoId && (
+                          <Badge variant="outline" className="text-blue-600 border-blue-600">
+                            Emparejado
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </>
+            ) : (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4 text-green-500" />
+                <AlertDescription>
+                  No se encontraron puestos en el CSV. Los empleados se importarán sin puesto asignado.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
 
-          {errors.length > 0 && (
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Detalles de errores:</h4>
-              <div className="space-y-1 max-h-48 overflow-y-auto">
-                {errors.map((error, index) => (
-                  <Alert key={index} variant="destructive" className="py-2">
-                    <AlertDescription className="text-xs">
-                      <strong>Fila {error.row}</strong> - {error.field}: {error.message}
-                    </AlertDescription>
-                  </Alert>
-                ))}
-              </div>
-            </div>
+        {/* Step 4: Preview and Import */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <Alert>
+              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <AlertDescription>
+                <strong>Resumen de importación:</strong>
+                <br />
+                <strong>Empresa:</strong> {selectedEmpresa?.nombreComercial || selectedEmpresa?.razonSocial}
+                {selectedRegistroPatronal && (
+                  <><br /><strong>Registro Patronal:</strong> {selectedRegistroPatronal.numeroRegistroPatronal}</>
+                )}
+                <br />
+                <strong>Empleados a importar:</strong> {csvData.length}
+                {puestoMatches.filter(m => m.isNew).length > 0 && (
+                  <><br /><strong>Nuevos puestos a crear:</strong> {puestoMatches.filter(m => m.isNew).length}</>
+                )}
+              </AlertDescription>
+            </Alert>
+
+            <ScrollArea className="h-[300px] border rounded-md">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead>Nombre Completo</TableHead>
+                    <TableHead>CURP</TableHead>
+                    <TableHead>Puesto</TableHead>
+                    <TableHead>Fecha Ingreso</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {csvData.slice(0, 100).map((row, index) => (
+                    <TableRow key={index}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell>{row.nombre} {row.apellidoPaterno} {row.apellidoMaterno}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.curp}</TableCell>
+                      <TableCell>{row.puesto || "-"}</TableCell>
+                      <TableCell>{row.fechaIngreso}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+            {csvData.length > 100 && (
+              <p className="text-sm text-muted-foreground">
+                Mostrando 100 de {csvData.length} empleados
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Navigation buttons */}
+        <div className="flex justify-between pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={() => step > 1 ? setStep((step - 1) as WizardStep) : handleClose()}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            {step === 1 ? "Cancelar" : "Anterior"}
+          </Button>
+
+          {step < 4 ? (
+            <Button
+              onClick={() => setStep((step + 1) as WizardStep)}
+              disabled={
+                (step === 1 && !canProceedToStep2) ||
+                (step === 2 && !canProceedToStep3) ||
+                (step === 3 && !canProceedToStep4)
+              }
+              data-testid="button-next-step"
+            >
+              Siguiente
+              <ChevronRight className="ml-2 h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              onClick={handleImport}
+              disabled={bulkCreateMutation.isPending}
+              data-testid="button-import"
+            >
+              {bulkCreateMutation.isPending ? "Importando..." : "Importar empleados"}
+            </Button>
           )}
         </div>
       </DialogContent>

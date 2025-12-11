@@ -2917,6 +2917,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk create puestos
+  app.post("/api/puestos/bulk", async (req, res) => {
+    try {
+      const { puestos, clienteId, empresaId } = req.body;
+      if (!Array.isArray(puestos) || puestos.length === 0) {
+        return res.status(400).json({ message: "Se requiere un array de puestos" });
+      }
+      
+      const createdPuestos = [];
+      const existing = await storage.getPuestos();
+      
+      for (const puestoData of puestos) {
+        // Check if puesto already exists
+        const exists = existing.find(p => 
+          p.nombrePuesto.toLowerCase() === puestoData.nombre.toLowerCase()
+        );
+        
+        if (!exists) {
+          const clave = `${puestoData.nombre.substring(0, 10).toUpperCase().replace(/\s+/g, '_')}_${Date.now()}`;
+          const validated = insertPuestoSchema.parse({
+            nombrePuesto: puestoData.nombre,
+            clavePuesto: clave,
+            clienteId,
+            empresaId,
+            estatus: "activo",
+          });
+          const created = await storage.createPuesto(validated);
+          createdPuestos.push(created);
+        }
+      }
+      
+      res.status(201).json({ created: createdPuestos.length, puestos: createdPuestos });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.get("/api/puestos", async (req, res) => {
     try {
       const puestos = await storage.getPuestos();
