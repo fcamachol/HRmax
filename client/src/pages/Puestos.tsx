@@ -264,7 +264,6 @@ export default function Puestos() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Clave</TableHead>
                 <TableHead>Nombre del Puesto</TableHead>
                 <TableHead>Área / Departamento</TableHead>
                 <TableHead>Nivel Jerárquico</TableHead>
@@ -279,9 +278,6 @@ export default function Puestos() {
                 const compensacion = puesto.compensacionYPrestaciones as any;
                 return (
                   <TableRow key={puesto.id} data-testid={`row-puesto-${puesto.id}`}>
-                    <TableCell className="font-medium">
-                      {puesto.clavePuesto}
-                    </TableCell>
                     <TableCell>{puesto.nombrePuesto}</TableCell>
                     <TableCell>
                       {puesto.area || "No especificado"}
