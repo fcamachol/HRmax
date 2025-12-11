@@ -249,7 +249,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create all employees (database triggers auto-create kardex entries)
       const created = await storage.createBulkEmployees(validatedEmployees);
       
-      res.json({ created: created.length, employees: created });
+      // Serialize BigInt values before returning
+      const serialized = created.map((emp: any) => ({
+        ...emp,
+        sbcBp: emp.sbcBp?.toString() ?? null,
+        sdiBp: emp.sdiBp?.toString() ?? null,
+        salarioMensualNetoBp: emp.salarioMensualNetoBp?.toString() ?? null,
+      }));
+      
+      res.json({ created: created.length, employees: serialized });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
