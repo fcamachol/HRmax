@@ -35,10 +35,12 @@ interface CSVRow {
   departamento: string;
   salarioBrutoMensual: string;
   fechaIngreso: string;
+  empresa: string; // Nombre de la empresa (se resuelve a empresaId en el backend)
   
   // Campos opcionales - Información personal
   apellidoMaterno?: string;
   genero?: string;
+  fechaNacimiento?: string;
   curp?: string;
   rfc?: string;
   nss?: string;
@@ -111,7 +113,6 @@ interface CSVRow {
   observacionesInternas?: string;
   timezone?: string;
   jefeDirectoId?: string;
-  empresaId?: string;
   registroPatronalId?: string;
   documentoContratoId?: string;
   puestoId?: string;
@@ -185,6 +186,9 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.fechaIngreso)) {
       rowErrors.push({ row: rowNum, field: "fechaIngreso", message: "Fecha debe estar en formato YYYY-MM-DD" });
     }
+    if (!row.empresa?.trim()) {
+      rowErrors.push({ row: rowNum, field: "empresa", message: "Empresa requerida (nombre comercial o razón social)" });
+    }
 
     return rowErrors;
   };
@@ -212,11 +216,21 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'salario': 'salarioBrutoMensual',
           'fecha_ingreso': 'fechaIngreso',
           'fecha de ingreso': 'fechaIngreso',
+          'fecha_nacimiento': 'fechaNacimiento',
+          'fecha nacimiento': 'fechaNacimiento',
+          'fecha de nacimiento': 'fechaNacimiento',
           'telefono': 'telefono',
           'teléfono': 'telefono',
           'correo': 'email',
           'estado_civil': 'estadoCivil',
           'estado civil': 'estadoCivil',
+          
+          // Empresa (nombre, no ID)
+          'nombre_empresa': 'empresa',
+          'nombre empresa': 'empresa',
+          'razon_social': 'empresa',
+          'razón social': 'empresa',
+          'razon social': 'empresa',
           
           // Dirección
           'numero_exterior': 'numeroExterior',
@@ -318,8 +332,6 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'observaciones internas': 'observacionesInternas',
           'jefe_directo_id': 'jefeDirectoId',
           'jefe directo id': 'jefeDirectoId',
-          'empresa_id': 'empresaId',
-          'empresa id': 'empresaId',
           'registro_patronal_id': 'registroPatronalId',
           'registro patronal id': 'registroPatronalId',
           'documento_contrato_id': 'documentoContratoId',
@@ -408,6 +420,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         // Agregar todos los campos opcionales si están presentes
         if (emp.apellidoMaterno) employeeData.apellidoMaterno = emp.apellidoMaterno.trim();
         if (emp.genero) employeeData.genero = emp.genero.trim();
+        if (emp.fechaNacimiento) employeeData.fechaNacimiento = emp.fechaNacimiento.trim();
         if (emp.curp) employeeData.curp = emp.curp.trim();
         if (emp.rfc) employeeData.rfc = emp.rfc.trim();
         if (emp.nss) employeeData.nss = emp.nss.trim();
@@ -480,10 +493,12 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         if (emp.observacionesInternas) employeeData.observacionesInternas = emp.observacionesInternas.trim();
         if (emp.timezone) employeeData.timezone = emp.timezone.trim();
         if (emp.jefeDirectoId) employeeData.jefeDirectoId = emp.jefeDirectoId.trim();
-        if (emp.empresaId) employeeData.empresaId = emp.empresaId.trim();
         if (emp.registroPatronalId) employeeData.registroPatronalId = parseInt(emp.registroPatronalId);
         if (emp.documentoContratoId) employeeData.documentoContratoId = emp.documentoContratoId.trim();
         if (emp.puestoId) employeeData.puestoId = emp.puestoId.trim();
+        
+        // Empresa (se resuelve a empresaId en el backend)
+        if (emp.empresa) employeeData.empresa = emp.empresa.trim();
         
         // Otros
         if (emp.esquemaContratacion) employeeData.esquemaContratacion = emp.esquemaContratacion.trim();
@@ -555,12 +570,12 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
   const downloadTemplate = () => {
     console.log("📥 Iniciando descarga de plantilla CSV...");
     
-    // Encabezados de todas las columnas - total 78 campos (excluye id, createdAt, updatedAt, otrosCreditos, preferencias)
+    // Encabezados de todas las columnas - campos esenciales para importación
     const headers = [
-      // Campos requeridos (9)
-      "numeroEmpleado", "nombre", "apellidoPaterno", "telefono", "email", "puesto", "departamento", "salarioBrutoMensual", "fechaIngreso",
-      // Información personal (6)
-      "apellidoMaterno", "genero", "curp", "rfc", "nss", "estadoCivil",
+      // Campos requeridos (10) - OBLIGATORIOS
+      "numeroEmpleado", "nombre", "apellidoPaterno", "telefono", "email", "puesto", "departamento", "salarioBrutoMensual", "fechaIngreso", "empresa",
+      // Información personal (7)
+      "apellidoMaterno", "genero", "fechaNacimiento", "curp", "rfc", "nss", "estadoCivil",
       // Dirección (7)
       "calle", "numeroExterior", "numeroInterior", "colonia", "municipio", "estado", "codigoPostal",
       // Contacto adicional (4)
@@ -577,8 +592,8 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
       "diasVacacionesAnuales", "diasVacacionesDisponibles", "diasVacacionesUsados", "diasAguinaldoAdicionales", "diasVacacionesAdicionales",
       // Créditos (2)
       "creditoInfonavit", "numeroFonacot",
-      // Estado y organización (9)
-      "estatus", "clienteProyecto", "observacionesInternas", "timezone", "jefeDirectoId", "empresaId", "registroPatronalId", "documentoContratoId", "puestoId",
+      // Estado y organización (8)
+      "estatus", "clienteProyecto", "observacionesInternas", "timezone", "jefeDirectoId", "registroPatronalId", "documentoContratoId", "puestoId",
       // Otros (9)
       "esquemaContratacion", "lugarNacimiento", "entidadNacimiento", "nacionalidad", "escolaridad", "periodoPrueba", "duracionPrueba", "diaPago", "driveId"
     ];
@@ -587,32 +602,56 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
 
     // Dos filas de ejemplo con datos completos
     const row1 = [
-      "EMP001", "Juan", "Pérez", "5512345678", "juan.perez@example.com", "Gerente", "Ventas", "25000", "2024-01-15",
-      "Martínez", "M", "PEXJ900215HDFRNS01", "PEXJ900215AB1", "12345678901", "casado",
+      // Campos requeridos
+      "EMP001", "Juan", "Pérez", "5512345678", "juan.perez@example.com", "Gerente", "Ventas", "25000", "2024-01-15", "Mi Empresa SA de CV",
+      // Información personal
+      "Martínez", "M", "1990-02-15", "PEXJ900215HDFRNS01", "PEXJ900215AB1", "12345678901", "casado",
+      // Dirección
       "Insurgentes Sur", "1234", "5A", "Del Valle", "Benito Juárez", "Ciudad de México", "03100",
+      // Contacto adicional
       "", "María García", "esposa", "5598765432",
-      "Banamex", "012180001234567890", "001", "0123456789", "transferencia", "quincenal",
+      // Información bancaria
+      "Banamex", "012180001234567890", "001", "transferencia", "quincenal", "0123456789",
+      // Contrato
       "diario", "indeterminado", "2024-01-15", "", "false", "",
+      // Trabajo
       "presencial", "Oficina Central", "Gestión de ventas y equipo", "lunes_viernes", "09:00-18:00", "diurna", "30_minutos", "sabado_domingo",
+      // Salario y prestaciones
       "tradicional", "833.33", "833.33", "", "833.33", "833.33", "fija",
+      // Vacaciones
       "12", "12", "0", "0", "0",
+      // Créditos
       "", "",
-      "activo", "", "", "America/Mexico_City", "", "", "", "", "",
+      // Estado y organización
+      "activo", "", "", "America/Mexico_City", "", "", "", "",
+      // Otros
       "", "Ciudad de México", "Ciudad de México", "mexicana", "licenciatura", "false", "", "", ""
     ];
 
     const row2 = [
-      "EMP002", "María", "García", "5598765432", "maria.garcia@example.com", "Desarrollador", "IT", "30000", "2024-02-01",
-      "López", "F", "GACM850101MDFRNS02", "GACM850101CD2", "98765432109", "soltera",
+      // Campos requeridos
+      "EMP002", "María", "García", "5598765432", "maria.garcia@example.com", "Desarrollador", "IT", "30000", "2024-02-01", "Mi Empresa SA de CV",
+      // Información personal
+      "López", "F", "1985-01-01", "GACM850101MDFRNS02", "GACM850101CD2", "98765432109", "soltera",
+      // Dirección
       "Reforma", "567", "", "Juárez", "Cuauhtémoc", "Ciudad de México", "06600",
+      // Contacto adicional
       "", "Pedro López", "padre", "5587654321",
-      "BBVA", "012180009876543210", "002", "9876543210", "transferencia", "quincenal",
+      // Información bancaria
+      "BBVA", "012180009876543210", "002", "transferencia", "quincenal", "9876543210",
+      // Contrato
       "diario", "indeterminado", "2024-02-01", "", "false", "",
+      // Trabajo
       "hibrido", "Oficina Central", "Desarrollo de software", "lunes_viernes", "10:00-19:00", "diurna", "30_minutos", "sabado_domingo",
+      // Salario y prestaciones
       "tradicional", "1000", "1000", "", "1000", "1000", "fija",
+      // Vacaciones
       "12", "12", "0", "0", "0",
+      // Créditos
       "", "",
-      "activo", "", "", "America/Mexico_City", "", "", "", "", "",
+      // Estado y organización
+      "activo", "", "", "America/Mexico_City", "", "", "", "",
+      // Otros
       "", "Guadalajara", "Jalisco", "mexicana", "maestria", "false", "", "", ""
     ];
 
