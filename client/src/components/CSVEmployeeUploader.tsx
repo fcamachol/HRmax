@@ -92,6 +92,7 @@ interface CSVRow {
   // Trabajo
   modalidadTrabajo?: string;
   lugarTrabajo?: string;
+  centroTrabajo?: string; // Centro de trabajo (se resuelve a centroTrabajoId)
   funciones?: string;
   diasLaborales?: string;
   horario?: string;

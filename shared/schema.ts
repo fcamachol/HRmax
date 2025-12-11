@@ -43,6 +43,7 @@ export const employees = pgTable("employees", {
   fechaAntiguedad: date("fecha_antiguedad"),
   modalidadTrabajo: varchar("modalidad_trabajo").default("presencial"),
   lugarTrabajo: varchar("lugar_trabajo"),
+  centroTrabajoId: varchar("centro_trabajo_id"), // FK a centros_trabajo
   puesto: varchar("puesto"),
   departamento: varchar("departamento"),
   funciones: text("funciones"),

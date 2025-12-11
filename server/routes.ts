@@ -166,11 +166,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const clienteEmpresas = empresas.filter(e => e.clienteId === clienteId);
       const bancos = await storage.getCatBancos();
       const allRegistrosPatronales = await storage.getRegistrosPatronales();
+      const allCentrosTrabajo = await storage.getCentrosTrabajo();
       
       // Filter registros patronales by empresas in this cliente
       const clienteEmpresaIds = new Set(clienteEmpresas.map(e => e.id));
       const clienteRegistros = allRegistrosPatronales.filter((rp: any) => 
         clienteEmpresaIds.has(rp.empresaId)
+      );
+      
+      // Filter centros de trabajo by empresas in this cliente
+      const clienteCentros = allCentrosTrabajo.filter((ct: any) => 
+        clienteEmpresaIds.has(ct.empresaId)
       );
       
       // Resolve references and set defaults for required fields
@@ -220,9 +226,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
         
+        // Resolve centroTrabajoId by nombre (lugarTrabajo or centroTrabajo field)
+        const centroNombre = emp.centroTrabajo || emp.lugarTrabajo;
+        if (centroNombre && typeof centroNombre === 'string' && !emp.centroTrabajoId) {
+          // If empresaId is resolved, filter by that empresa first
+          const centrosToSearch = resolved.empresaId 
+            ? clienteCentros.filter((ct: any) => ct.empresaId === resolved.empresaId)
+            : clienteCentros;
+          
+          const centro = centrosToSearch.find((ct: any) => 
+            ct.nombre?.toLowerCase() === centroNombre.toLowerCase() ||
+            ct.codigo?.toLowerCase() === centroNombre.toLowerCase()
+          );
+          if (centro) {
+            resolved.centroTrabajoId = centro.id;
+            resolved.lugarTrabajo = centro.nombre; // Also set lugarTrabajo for display
+          }
+        }
+        
         // Remove helper fields not in schema
         delete resolved.empresa;
         delete resolved.registroPatronal;
+        delete resolved.centroTrabajo; // Remove helper field (use centroTrabajoId)
         
         return resolved;
       });
