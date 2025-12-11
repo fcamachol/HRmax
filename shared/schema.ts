@@ -1020,6 +1020,7 @@ export const updateUserSchema = z.object({
   email: z.string().email().optional(),
   tipoUsuario: z.enum(["maxtalent", "cliente"]).optional(),
   clienteId: z.string().nullable().optional(),
+  role: z.enum(["user", "cliente_admin"]).optional(),
   activo: z.boolean().optional(),
   isSuperAdmin: z.boolean().optional(),
 });

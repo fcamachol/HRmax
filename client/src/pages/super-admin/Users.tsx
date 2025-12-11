@@ -51,6 +51,8 @@ type User = {
   email: string | null;
   tipoUsuario: string;
   clienteId: string | null;
+  role: string;
+  isSuperAdmin: boolean;
   activo: boolean;
 };
 
@@ -241,7 +243,7 @@ export default function SuperAdmin() {
                   <TableHead>Usuario</TableHead>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Tipo</TableHead>
+                  <TableHead>Rol</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Estado</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
@@ -254,9 +256,13 @@ export default function SuperAdmin() {
                     <TableCell>{user.nombre || "—"}</TableCell>
                     <TableCell>{user.email || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={user.tipoUsuario === "maxtalent" ? "default" : "secondary"}>
-                        {user.tipoUsuario === "maxtalent" ? "MaxTalent" : "Cliente"}
-                      </Badge>
+                      {user.isSuperAdmin ? (
+                        <Badge variant="destructive">Super Admin</Badge>
+                      ) : user.role === "cliente_admin" ? (
+                        <Badge variant="default">Admin Cliente</Badge>
+                      ) : (
+                        <Badge variant="secondary">Usuario</Badge>
+                      )}
                     </TableCell>
                     <TableCell>{getClienteName(user.clienteId)}</TableCell>
                     <TableCell>
@@ -466,7 +472,35 @@ function UserPermissionsDialog({
   const [selectedModulo, setSelectedModulo] = useState("");
   const [selectedScope, setSelectedScope] = useState<string>("global");
   const [selectedScopeId, setSelectedScopeId] = useState("");
+  const [currentRole, setCurrentRole] = useState(user.role || "user");
   const { toast } = useToast();
+
+  const updateRoleMutation = useMutation({
+    mutationFn: (newRole: string) => 
+      apiRequest("PATCH", `/api/admin/users/${user.id}`, { role: newRole }),
+    onSuccess: (_data, newRole) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({
+        title: "Rol actualizado",
+        description: newRole === "cliente_admin" 
+          ? "El usuario ahora es Admin de Cliente con acceso total a su cliente"
+          : "El usuario ahora es Usuario normal con permisos granulares",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "No se pudo actualizar el rol",
+        variant: "destructive",
+      });
+      setCurrentRole(user.role || "user");
+    },
+  });
+
+  const handleRoleChange = (newRole: string) => {
+    setCurrentRole(newRole);
+    updateRoleMutation.mutate(newRole);
+  };
 
   const { data: userPermissions = [], isLoading } = useQuery<UsuarioPermiso[]>({
     queryKey: ["/api/usuarios-permisos", user.id],
@@ -572,10 +606,45 @@ function UserPermissionsDialog({
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* Asignar nuevo permiso */}
+          {/* Rol del usuario */}
+          {!user.isSuperAdmin && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Rol del Usuario</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  <Select value={currentRole} onValueChange={handleRoleChange}>
+                    <SelectTrigger className="w-64" data-testid="select-role">
+                      <SelectValue placeholder="Selecciona un rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">Usuario (permisos granulares)</SelectItem>
+                      <SelectItem value="cliente_admin">Admin de Cliente (acceso total)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {currentRole === "cliente_admin" && (
+                    <p className="text-sm text-muted-foreground">
+                      Tiene acceso total a: <strong>{clientes.find(c => c.id === user.clienteId)?.nombreComercial || "Sin cliente asignado"}</strong>
+                    </p>
+                  )}
+                </div>
+                {currentRole === "cliente_admin" && (
+                  <p className="text-sm text-amber-600 mt-2">
+                    Los permisos granulares no aplican para Admins de Cliente. Tienen acceso completo a todos los módulos de su cliente.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Asignar nuevo permiso - solo para usuarios normales */}
+          {(user.isSuperAdmin || currentRole !== "cliente_admin") && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Asignar Nuevo Permiso</CardTitle>
+              <CardTitle className="text-base">
+                {user.isSuperAdmin ? "Super Admin - Acceso Global" : "Asignar Nuevo Permiso"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -676,8 +745,10 @@ function UserPermissionsDialog({
               </Button>
             </CardContent>
           </Card>
+          )}
 
-          {/* Permisos actuales */}
+          {/* Permisos actuales - solo mostrar si es usuario normal */}
+          {currentRole !== "cliente_admin" && (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Permisos Actuales</CardTitle>
@@ -715,6 +786,7 @@ function UserPermissionsDialog({
               )}
             </CardContent>
           </Card>
+          )}
         </div>
       </DialogContent>
     </Dialog>

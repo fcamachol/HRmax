@@ -4391,6 +4391,7 @@ export class DatabaseStorage implements IStorage {
       email: users.email,
       tipoUsuario: users.tipoUsuario,
       clienteId: users.clienteId,
+      role: users.role,
       activo: users.activo,
       isSuperAdmin: users.isSuperAdmin,
       createdAt: users.createdAt,
