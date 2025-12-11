@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import type { Puesto, InsertPuesto } from "@shared/schema";
+import type { Puesto, InsertPuesto, Departamento } from "@shared/schema";
 import { PuestoQuickView } from "@/components/PuestoQuickView";
 import { PuestoDetailView } from "@/components/PuestoDetailView";
 import { PuestoForm } from "@/components/PuestoForm";
@@ -45,6 +45,15 @@ export default function Puestos() {
   const { data: employeeCounts = {} } = useQuery<Record<string, number>>({
     queryKey: ["/api/puestos/employees/counts"],
   });
+
+  const { data: departamentos = [] } = useQuery<Departamento[]>({
+    queryKey: ["/api/departamentos"],
+  });
+
+  const getDepartamentoNombre = (departamentoId: string | null) => {
+    if (!departamentoId) return null;
+    return departamentos.find((d) => d.id === departamentoId)?.nombre || null;
+  };
 
   const createPuestoMutation = useMutation({
     mutationFn: async (data: InsertPuesto) => {
@@ -94,13 +103,15 @@ export default function Puestos() {
     },
   });
 
-  const filteredPuestos = puestos.filter((puesto) =>
-    search === ""
-      ? true
-      : puesto.nombrePuesto.toLowerCase().includes(search.toLowerCase()) ||
-        puesto.clavePuesto.toLowerCase().includes(search.toLowerCase()) ||
-        puesto.area?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredPuestos = puestos.filter((puesto) => {
+    if (search === "") return true;
+    const searchLower = search.toLowerCase();
+    const deptNombre = getDepartamentoNombre(puesto.departamentoId)?.toLowerCase() || "";
+    return puesto.nombrePuesto.toLowerCase().includes(searchLower) ||
+      puesto.clavePuesto.toLowerCase().includes(searchLower) ||
+      puesto.area?.toLowerCase().includes(searchLower) ||
+      deptNombre.includes(searchLower);
+  });
 
   const selectedPuesto = puestos.find((p) => p.id === selectedPuestoId);
 
@@ -233,7 +244,7 @@ export default function Puestos() {
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar por nombre, clave, área o departamento..."
+              placeholder="Buscar por nombre o departamento..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -265,7 +276,7 @@ export default function Puestos() {
             <TableHeader>
               <TableRow>
                 <TableHead>Nombre del Puesto</TableHead>
-                <TableHead>Área / Departamento</TableHead>
+                <TableHead>Departamento</TableHead>
                 <TableHead>Nivel Jerárquico</TableHead>
                 <TableHead># Empleados</TableHead>
                 <TableHead>Rango Salarial</TableHead>
@@ -280,7 +291,7 @@ export default function Puestos() {
                   <TableRow key={puesto.id} data-testid={`row-puesto-${puesto.id}`}>
                     <TableCell>{puesto.nombrePuesto}</TableCell>
                     <TableCell>
-                      {puesto.area || "No especificado"}
+                      {getDepartamentoNombre(puesto.departamentoId) || puesto.area || "No especificado"}
                     </TableCell>
                     <TableCell>
                       {puesto.nivelJerarquico || "No especificado"}
