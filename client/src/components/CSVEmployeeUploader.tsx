@@ -818,11 +818,17 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                   <SelectValue placeholder="Selecciona una empresa" />
                 </SelectTrigger>
                 <SelectContent>
-                  {empresas.map((empresa) => (
-                    <SelectItem key={empresa.id} value={empresa.id}>
-                      {empresa.nombreComercial || empresa.razonSocial}
-                    </SelectItem>
-                  ))}
+                  {empresas.length === 0 ? (
+                    <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                      No hay empresas disponibles para el cliente seleccionado
+                    </div>
+                  ) : (
+                    empresas.map((empresa) => (
+                      <SelectItem key={empresa.id} value={empresa.id}>
+                        {empresa.nombreComercial || empresa.razonSocial}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">
@@ -839,7 +845,9 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                   </SelectTrigger>
                   <SelectContent>
                     {registrosPatronales.length === 0 ? (
-                      <SelectItem value="" disabled>No hay registros patronales</SelectItem>
+                      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                        No hay registros patronales para esta empresa
+                      </div>
                     ) : (
                       registrosPatronales.map((rp) => (
                         <SelectItem key={rp.id} value={rp.id}>
