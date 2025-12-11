@@ -1,0 +1,77 @@
+-- OPERACIONES / NOC
+('puesto-001', 'ANALISTA DE SOPORTE REMOTO', 'Monitoreo y soporte remoto de dispositivos GPS y telemetría', 'dept-001', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-002', 'ANALISTA DE SOPORTE REMOTO 2DO NIVEL', 'Soporte especializado y escalamiento de incidentes', 'dept-001', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-003', 'ANALISTA DE SOPORTE REMOTO NOC', 'Monitoreo en Centro de Operaciones de Red', 'dept-001', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-004', 'AGENTE DE GESTIÓN DE CONTINGENCIAS', 'Atención y seguimiento de contingencias operativas', 'dept-001', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-005', 'ANALISTA DE OPERACIONES', 'Análisis y mejora de procesos operativos', 'dept-001', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-006', 'SUPERVISOR DE SOPORTE REMOTO', 'Supervisión de equipo de analistas de soporte', 'dept-001', 'supervisor', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-007', 'GERENTE NOC', 'Dirección del Centro de Operaciones de Red', 'dept-001', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-008', 'GERENTE DE OPERACIONES', 'Dirección general de operaciones', 'dept-001', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-009', 'DIRECTOR DE OPERACIONES', 'Dirección estratégica de operaciones', 'dept-001', 'direccion', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-010', 'RESPONSABLE TORRE DE CONTROL', 'Responsable de torre de control por cliente', 'dept-001', 'supervisor', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- TECNOLOGÍA / DESARROLLO
+('puesto-011', 'DESARROLLADOR JR', 'Desarrollo de software nivel junior', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-012', 'DESARROLLADOR', 'Desarrollo de software nivel medio', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-013', 'DESARROLLADOR SR', 'Desarrollo de software nivel senior', 'dept-002', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-014', 'ANALISTA DE SISTEMAS', 'Análisis y diseño de sistemas', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-015', 'ANALISTA FUNCIONAL', 'Análisis funcional y documentación', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-016', 'ANALISTA BI', 'Inteligencia de negocios y reportes', 'dept-002', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-017', 'ANALISTA DE ERP', 'Administración y desarrollo ERP', 'dept-002', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-018', 'TÉCNICO QA', 'Control de calidad de software', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-019', 'SOPORTE DE TI', 'Soporte técnico de infraestructura', 'dept-002', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-020', 'DIRECTOR DE TECNOLOGÍA', 'Dirección estratégica de tecnología', 'dept-002', 'direccion', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- ATENCIÓN A CLIENTES
+('puesto-021', 'EJECUTIVO DE CUENTA JR', 'Gestión de cuentas nivel junior', 'dept-003', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-022', 'EJECUTIVO DE CUENTA', 'Gestión de cuentas y atención al cliente', 'dept-003', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-023', 'EJECUTIVO DE CUENTA SR', 'Gestión de cuentas clave', 'dept-003', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-024', 'ANALISTA DE DATOS', 'Análisis de datos e indicadores de clientes', 'dept-003', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-025', 'SUPERVISOR DE ATENCIÓN A CLIENTES', 'Supervisión de equipo de atención', 'dept-003', 'supervisor', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-026', 'GERENTE DE ATENCIÓN AL CLIENTE', 'Dirección del área de atención', 'dept-003', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- COMERCIAL / VENTAS
+('puesto-027', 'AGENTE DE CALL CENTER COMERCIAL', 'Ventas y prospección telefónica', 'dept-004', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-028', 'EJECUTIVO COMERCIAL', 'Desarrollo de negocios y ventas', 'dept-004', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-029', 'SUPERVISOR DE CALL CENTER COMERCIAL', 'Supervisión de call center', 'dept-004', 'supervisor', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-030', 'DIRECTOR COMERCIAL', 'Dirección estratégica comercial', 'dept-004', 'direccion', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- AFILIACIONES / ESTACIONES
+('puesto-031', 'EJECUTIVO DE AFILIACIÓN DE ESTACIONES', 'Afiliación de nuevas estaciones', 'dept-005', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-032', 'ANALISTA DE AFILIACIONES', 'Análisis y seguimiento de afiliaciones', 'dept-005', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-033', 'ANALISTA DE POSTVENTA ESTACIONES', 'Seguimiento postventa de estaciones', 'dept-005', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-034', 'GERENTE DE AFILIACIÓN ESTACIONES', 'Dirección de área de afiliaciones', 'dept-005', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-035', 'GERENTE DE SALDOS Y MOVIMIENTOS', 'Gestión de saldos de estaciones', 'dept-005', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- SERVICIO TÉCNICO
+('puesto-036', 'TÉCNICO DE SEGURIDAD JR', 'Instalación y mantenimiento nivel junior', 'dept-006', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-037', 'SOPORTE TÉCNICO', 'Soporte técnico en campo', 'dept-006', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-038', 'RESPONSABLE DE LABORATORIO', 'Gestión de laboratorio y calidad', 'dept-006', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-039', 'SUPERVISOR DE SERVICIO TÉCNICO', 'Supervisión de equipo técnico', 'dept-006', 'supervisor', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-040', 'GERENTE DE SERVICIO TÉCNICO', 'Dirección de servicio técnico', 'dept-006', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- ADMINISTRACIÓN Y FINANZAS
+('puesto-041', 'AUXILIAR ADMINISTRATIVO', 'Apoyo administrativo general', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-042', 'ADMINISTRATIVO DE PLANEACIÓN', 'Planeación y control administrativo', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-043', 'CONTADOR', 'Contabilidad general', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-044', 'CONTADOR GENERAL', 'Contabilidad y reportes fiscales', 'dept-007', 'especialista', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-045', 'CUENTAS POR PAGAR', 'Gestión de cuentas por pagar', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-046', 'COBRANZA', 'Gestión de cobranza', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-047', 'LIQUIDACIONES', 'Liquidaciones y finiquitos', 'dept-007', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-048', 'GERENTE DE FINANZAS', 'Dirección financiera', 'dept-007', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- RECURSOS HUMANOS
+('puesto-049', 'ANALISTA DE RECURSOS HUMANOS', 'Gestión de RH y administración de personal', 'dept-008', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-050', 'ANALISTA DE PROCESOS Y RH', 'Procesos y mejora continua de RH', 'dept-008', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-051', 'GERENTE DE PROCESOS Y RH', 'Dirección de RH y procesos', 'dept-008', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- LOGÍSTICA Y ALMACÉN
+('puesto-052', 'ALMACENISTA', 'Control de inventarios y almacén', 'dept-009', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-053', 'GERENTE DE LOGÍSTICA Y ALMACÉN', 'Dirección de logística', 'dept-009', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- MARKETING
+('puesto-054', 'ANALISTA DE MARKETING', 'Marketing y comunicación', 'dept-010', 'operativo', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+('puesto-055', 'GERENTE DE MARKETING', 'Dirección de marketing', 'dept-010', 'gerencia', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW()),
+
+-- DIRECCIÓN GENERAL
+('puesto-056', 'CEO LATAM', 'Director General LATAM', 'dept-011', 'direccion', '83c1074a-04bb-4fac-8bbe-7ec321c1c106', '1a7b18bb-96d2-4a8f-8257-2b53a710d96d', true, NOW())
