@@ -10,13 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronDown, Search, RefreshCw, Pin, Building2 } from "lucide-react";
+import { ChevronDown, Search, LayoutGrid } from "lucide-react";
 
 export function ClienteSelector() {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { selectedCliente, setSelectedCliente, recentClientes, isAgencyView, setIsAgencyView } = useCliente();
+  const { selectedCliente, setSelectedCliente, isAgencyView, setIsAgencyView } = useCliente();
 
   const { data: clientes = [], isLoading } = useQuery<Cliente[]>({
     queryKey: ["/api/clientes/activos"],
@@ -27,15 +26,6 @@ export function ClienteSelector() {
     cliente.razonSocial.toLowerCase().includes(searchQuery.toLowerCase()) ||
     cliente.rfc?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((word) => word[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-  };
 
   const handleSelectCliente = (cliente: Cliente) => {
     setSelectedCliente(cliente);
@@ -56,25 +46,14 @@ export function ClienteSelector() {
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          className="w-full justify-between px-3 py-2 h-auto hover-elevate"
+          size="sm"
+          className="w-full justify-between px-2 h-8 hover-elevate"
           data-testid="button-cliente-selector"
         >
-          <div className="flex items-center gap-3 min-w-0">
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                {selectedCliente ? getInitials(selectedCliente.nombreComercial) : <Building2 className="h-4 w-4" />}
-              </AvatarFallback>
-            </Avatar>
-            <div className="text-left min-w-0">
-              <p className="font-medium truncate text-sm" data-testid="text-selected-cliente">
-                {selectedCliente ? selectedCliente.nombreComercial : "Vista Agencia"}
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {selectedCliente?.rfc || "Todos los clientes"}
-              </p>
-            </div>
-          </div>
-          <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+          <span className="font-medium truncate text-sm" data-testid="text-selected-cliente">
+            {selectedCliente ? selectedCliente.nombreComercial : "Centro de Control"}
+          </span>
+          <ChevronDown className="h-3 w-3 shrink-0 opacity-50 ml-1" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
@@ -94,33 +73,17 @@ export function ClienteSelector() {
         <div className="p-2 border-b">
           <Button
             variant="ghost"
+            size="sm"
             className="w-full justify-start gap-2 text-primary hover-elevate"
             onClick={handleAgencyView}
-            data-testid="button-agency-view"
+            data-testid="button-control-center"
           >
-            <RefreshCw className="h-4 w-4" />
-            Cambiar a Vista Agencia
+            <LayoutGrid className="h-4 w-4" />
+            Centro de Control
           </Button>
         </div>
 
         <ScrollArea className="max-h-[300px]">
-          {recentClientes.length > 0 && !searchQuery && (
-            <div className="p-2">
-              <p className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Recientes
-              </p>
-              {recentClientes.map((cliente) => (
-                <ClienteItem
-                  key={`recent-${cliente.id}`}
-                  cliente={cliente}
-                  isSelected={selectedCliente?.id === cliente.id}
-                  onSelect={handleSelectCliente}
-                  getInitials={getInitials}
-                />
-              ))}
-            </div>
-          )}
-
           <div className="p-2">
             <p className="px-2 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">
               {searchQuery ? "Resultados" : "Todos los Clientes"}
@@ -140,8 +103,6 @@ export function ClienteSelector() {
                   cliente={cliente}
                   isSelected={selectedCliente?.id === cliente.id}
                   onSelect={handleSelectCliente}
-                  getInitials={getInitials}
-                  showPin
                 />
               ))
             )}
@@ -156,31 +117,21 @@ interface ClienteItemProps {
   cliente: Cliente;
   isSelected: boolean;
   onSelect: (cliente: Cliente) => void;
-  getInitials: (name: string) => string;
-  showPin?: boolean;
 }
 
-function ClienteItem({ cliente, isSelected, onSelect, getInitials, showPin }: ClienteItemProps) {
+function ClienteItem({ cliente, isSelected, onSelect }: ClienteItemProps) {
   return (
     <button
-      className={`w-full flex items-center gap-3 px-2 py-2 rounded-md text-left hover-elevate ${
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover-elevate ${
         isSelected ? "bg-accent" : ""
       }`}
       onClick={() => onSelect(cliente)}
       data-testid={`button-select-cliente-${cliente.id}`}
     >
-      <Avatar className="h-8 w-8 shrink-0">
-        <AvatarFallback className="bg-muted text-muted-foreground text-xs">
-          {getInitials(cliente.nombreComercial)}
-        </AvatarFallback>
-      </Avatar>
       <div className="flex-1 min-w-0">
         <p className="font-medium text-sm truncate">{cliente.nombreComercial}</p>
         <p className="text-xs text-muted-foreground truncate">{cliente.razonSocial}</p>
       </div>
-      {showPin && (
-        <Pin className="h-4 w-4 text-muted-foreground/50 shrink-0" />
-      )}
     </button>
   );
 }
