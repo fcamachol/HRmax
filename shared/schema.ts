@@ -83,7 +83,7 @@ export const employees = pgTable("employees", {
   preferencias: jsonb("preferencias").default(sql`'{}'::jsonb`),
   jefeDirectoId: varchar("jefe_directo_id"),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
-  registroPatronalId: integer("registro_patronal_id"),
+  registroPatronalId: varchar("registro_patronal_id"),
   documentoContratoId: varchar("documento_contrato_id"),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
