@@ -22,6 +22,7 @@ import Papa from "papaparse";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useCliente } from "@/contexts/ClienteContext";
 
 interface CSVRow {
   // Campos requeridos
@@ -145,6 +146,7 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedCliente } = useCliente();
 
   const validateRow = (row: CSVRow, index: number): ValidationError[] => {
     const rowErrors: ValidationError[] = [];
@@ -497,7 +499,11 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         return employeeData;
       });
 
-      const response = await apiRequest("POST", "/api/employees/bulk", transformedEmployees);
+      const response = await apiRequest("POST", "/api/employees/bulk", {
+        employees: transformedEmployees,
+        clienteId: selectedCliente?.id,
+        resolveReferences: true
+      });
       return await response.json();
     },
     onSuccess: (data) => {
@@ -518,6 +524,15 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
   });
 
   const handleImport = () => {
+    if (!selectedCliente) {
+      toast({
+        title: "Selecciona un cliente",
+        description: "Debes seleccionar un cliente en el menú lateral antes de importar",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     if (errors.length > 0) {
       toast({
         title: "No se puede importar",

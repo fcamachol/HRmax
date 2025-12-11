@@ -138,22 +138,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/employees/bulk", async (req, res) => {
     try {
-      const employees = req.body;
+      const { employees: employeeList, clienteId, resolveReferences } = req.body;
       
-      if (!Array.isArray(employees)) {
-        return res.status(400).json({ message: "Expected array of employees" });
+      if (!Array.isArray(employeeList)) {
+        return res.status(400).json({ message: "Se esperaba un arreglo de empleados" });
+      }
+      
+      if (!clienteId) {
+        return res.status(400).json({ message: "Debes seleccionar un cliente primero" });
+      }
+
+      // If resolveReferences is true, look up empresa/departamento/puesto by name
+      let resolvedEmployees = employeeList;
+      if (resolveReferences) {
+        // Get lookup tables for this cliente
+        const empresas = await storage.getEmpresas();
+        const clienteEmpresas = empresas.filter(e => e.clienteId === clienteId);
+        const bancos = await storage.getCatBancos();
+        
+        resolvedEmployees = employeeList.map((emp: any) => {
+          const resolved = { ...emp, clienteId };
+          
+          // Resolve empresa by nombre comercial or razón social
+          if (emp.empresa && !emp.empresaId) {
+            const empresa = clienteEmpresas.find(e => 
+              e.nombreComercial?.toLowerCase() === emp.empresa.toLowerCase() ||
+              e.razonSocial?.toLowerCase() === emp.empresa.toLowerCase()
+            );
+            if (empresa) {
+              resolved.empresaId = empresa.id;
+            }
+          }
+          
+          // Resolve banco by nombre
+          if (emp.banco && typeof emp.banco === 'string') {
+            const banco = bancos.find((b: any) => 
+              b.nombre?.toLowerCase() === emp.banco.toLowerCase() ||
+              b.nombreCorto?.toLowerCase() === emp.banco.toLowerCase()
+            );
+            if (banco) {
+              resolved.banco = banco.nombre; // Keep banco as string field in schema
+            }
+          }
+          
+          // Remove helper fields not in schema
+          delete resolved.empresa;
+          
+          return resolved;
+        });
+      } else {
+        // Just add clienteId to each employee
+        resolvedEmployees = employeeList.map((emp: any) => ({
+          ...emp,
+          clienteId
+        }));
       }
 
       // Validate each employee
-      const validatedEmployees = employees.map((emp, index) => {
+      const validatedEmployees = resolvedEmployees.map((emp: any, index: number) => {
         try {
           return insertEmployeeSchema.parse(emp);
         } catch (error: any) {
-          throw new Error(`Employee at index ${index}: ${error.message}`);
+          throw new Error(`Fila ${index + 2}: ${error.message}`);
         }
       });
 
-      // Create all employees
+      // Create all employees (database triggers auto-create kardex entries)
       const created = await storage.createBulkEmployees(validatedEmployees);
       
       res.json({ created: created.length, employees: created });
