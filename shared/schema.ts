@@ -1237,6 +1237,7 @@ export type InsertCredencialSistema = z.infer<typeof insertCredencialSistemaSche
 // Centros de trabajo independientes de registros patronales
 export const centrosTrabajo = pgTable("centros_trabajo", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   registroPatronalId: varchar("registro_patronal_id").references(() => registrosPatronales.id, { onDelete: "set null" }), // Opcional
   nombre: text("nombre").notNull(),

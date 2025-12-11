@@ -1145,7 +1145,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Centros de Trabajo
   app.post("/api/centros-trabajo", async (req, res) => {
     try {
-      const validatedData = insertCentroTrabajoSchema.parse(req.body);
+      let dataWithClienteId = { ...req.body };
+      
+      // Auto-derive clienteId from empresa if not provided
+      if (!dataWithClienteId.clienteId && dataWithClienteId.empresaId) {
+        const empresa = await storage.getEmpresa(dataWithClienteId.empresaId);
+        if (empresa) {
+          dataWithClienteId.clienteId = empresa.clienteId;
+        }
+      }
+      
+      const validatedData = insertCentroTrabajoSchema.parse(dataWithClienteId);
       const centro = await storage.createCentroTrabajo(validatedData);
       res.json(centro);
     } catch (error: any) {
