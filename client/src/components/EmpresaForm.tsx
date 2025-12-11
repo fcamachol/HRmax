@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertEmpresaSchema, type Empresa, type InsertEmpresa } from "@shared/schema";
+import { useCliente } from "@/contexts/ClienteContext";
 
 interface EmpresaFormProps {
   empresa?: Empresa;
@@ -31,6 +32,7 @@ interface EmpresaFormProps {
 
 export default function EmpresaForm({ empresa, onSuccess, onCancel }: EmpresaFormProps) {
   const { toast } = useToast();
+  const { selectedCliente } = useCliente();
   const isEditing = !!empresa;
 
   const form = useForm<InsertEmpresa>({
@@ -64,7 +66,9 @@ export default function EmpresaForm({ empresa, onSuccess, onCancel }: EmpresaFor
     mutationFn: async (data: InsertEmpresa) => {
       const endpoint = isEditing ? `/api/empresas/${empresa.id}` : "/api/empresas";
       const method = isEditing ? "PATCH" : "POST";
-      return await apiRequest(method, endpoint, data);
+      // Automatically assign clienteId from context when creating new empresa
+      const payload = isEditing ? data : { ...data, clienteId: selectedCliente?.id };
+      return await apiRequest(method, endpoint, payload);
     },
     onSuccess: () => {
       toast({
