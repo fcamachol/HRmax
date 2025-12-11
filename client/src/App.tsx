@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ClienteProvider } from "@/contexts/ClienteContext";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
 import Altas from "@/pages/employees/Altas";
@@ -124,20 +125,22 @@ export default function App() {
             </Route>
             <Route>
               {() => (
-                <SidebarProvider style={style as React.CSSProperties}>
-                  <div className="flex h-screen w-full">
-                    <AppSidebar />
-                    <div className="flex flex-col flex-1 overflow-hidden">
-                      <header className="flex items-center justify-between p-4 border-b bg-background">
-                        <SidebarTrigger data-testid="button-sidebar-toggle" />
-                        <ThemeToggle />
-                      </header>
-                      <main className="flex-1 overflow-auto p-6 md:p-8">
-                        <Router />
-                      </main>
+                <ClienteProvider>
+                  <SidebarProvider style={style as React.CSSProperties}>
+                    <div className="flex h-screen w-full">
+                      <AppSidebar />
+                      <div className="flex flex-col flex-1 overflow-hidden">
+                        <header className="flex items-center justify-between p-4 border-b bg-background">
+                          <SidebarTrigger data-testid="button-sidebar-toggle" />
+                          <ThemeToggle />
+                        </header>
+                        <main className="flex-1 overflow-auto p-6 md:p-8">
+                          <Router />
+                        </main>
+                      </div>
                     </div>
-                  </div>
-                </SidebarProvider>
+                  </SidebarProvider>
+                </ClienteProvider>
               )}
             </Route>
           </Switch>

@@ -52,6 +52,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { ClienteSelector } from "@/components/ClienteSelector";
+import { Separator } from "@/components/ui/separator";
 
 const employeeSubItems = [
   {
@@ -249,14 +251,15 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-6">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-8 w-8 text-primary" />
+      <SidebarHeader className="p-4">
+        <div className="flex items-center gap-2 px-2 mb-2">
+          <Building2 className="h-6 w-6 text-primary" />
           <div>
-            <h1 className="text-lg font-semibold">PeopleOps</h1>
-            <p className="text-xs text-muted-foreground">Sistema RH México</p>
+            <h1 className="text-base font-semibold">PeopleOps</h1>
           </div>
         </div>
+        <ClienteSelector />
+        <Separator className="mt-2" />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
