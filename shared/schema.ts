@@ -1265,6 +1265,8 @@ export const insertCentroTrabajoSchema = createInsertSchema(centrosTrabajo).omit
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  clienteId: z.string().optional(), // Backend auto-derives from empresaId
 });
 
 export const updateCentroTrabajoSchema = insertCentroTrabajoSchema.partial();
