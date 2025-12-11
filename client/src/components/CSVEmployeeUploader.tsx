@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, AlertCircle, CheckCircle2, X, Building2, ChevronRight, ChevronLeft, Plus, Search } from "lucide-react";
+import { Upload, FileText, AlertCircle, CheckCircle2, X, Building2, ChevronRight, ChevronLeft, Plus, Search, RefreshCw } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -144,6 +144,7 @@ interface ValidationError {
   row: number;
   field: string;
   message: string;
+  currentValue?: string;
 }
 
 interface PuestoMatch {
@@ -772,6 +773,40 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
     }));
   };
 
+  // Function to update a specific field in a row and re-validate
+  const handleFieldUpdate = (rowIndex: number, field: keyof CSVRow, value: string) => {
+    setCsvData(prev => {
+      const updated = [...prev];
+      updated[rowIndex] = { ...updated[rowIndex], [field]: value };
+      return updated;
+    });
+  };
+
+  // Re-validate data when csvData changes
+  const revalidateData = () => {
+    const allErrors: ValidationError[] = [];
+    csvData.forEach((row, index) => {
+      const rowErrors = validateRow(row, index);
+      allErrors.push(...rowErrors);
+    });
+    setErrors(allErrors);
+  };
+
+  // Get field label in Spanish
+  const getFieldLabel = (field: string): string => {
+    const labels: Record<string, string> = {
+      nombre: "Nombre",
+      apellidoPaterno: "Apellido Paterno",
+      apellidoMaterno: "Apellido Materno",
+      curp: "CURP",
+      fechaIngreso: "Fecha de Ingreso",
+      rfc: "RFC",
+      nss: "NSS",
+      email: "Email",
+    };
+    return labels[field] || field;
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -946,47 +981,72 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
                   </span>
                 </div>
 
-                {/* Show errors summary first if there are any */}
+                {/* Show errors with editable fields */}
                 {errors.length > 0 && (
                   <div className="space-y-3 mb-4">
-                    <div className="flex items-center gap-2 text-destructive">
-                      <AlertCircle className="h-5 w-5" />
-                      <span className="font-medium">
-                        Se encontraron {errors.length} error(es) en {new Set(errors.map(e => e.row)).size} fila(s)
-                      </span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-destructive">
+                        <AlertCircle className="h-5 w-5" />
+                        <span className="font-medium">
+                          Se encontraron {errors.length} error(es) en {new Set(errors.map(e => e.row)).size} fila(s)
+                        </span>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={revalidateData}
+                        data-testid="button-revalidate"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Validar cambios
+                      </Button>
                     </div>
-                    <ScrollArea className="h-[200px] border border-destructive/30 rounded-md bg-destructive/5 p-4">
-                      <div className="space-y-3">
+                    <ScrollArea className="h-[250px] border border-destructive/30 rounded-md bg-destructive/5 p-4">
+                      <div className="space-y-4">
                         {Array.from(new Set(errors.map(e => e.row))).sort((a, b) => a - b).map(rowNum => {
                           const rowErrors = errors.filter(e => e.row === rowNum);
-                          const rowData = csvData[rowNum - 2];
+                          const rowIndex = rowNum - 2;
+                          const rowData = csvData[rowIndex];
                           return (
-                            <div key={rowNum} className="border-b border-destructive/20 pb-3 last:border-0">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Badge variant="destructive" className="text-xs">
+                            <div key={rowNum} className="border border-destructive/30 rounded-lg p-4 bg-background">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Badge variant="destructive">
                                   Fila {rowNum}
                                 </Badge>
                                 {rowData && (
                                   <span className="text-sm text-muted-foreground">
-                                    {rowData.nombre} {rowData.apellidoPaterno}
+                                    {rowData.nombre || "Sin nombre"} {rowData.apellidoPaterno || ""}
                                   </span>
                                 )}
                               </div>
-                              <ul className="space-y-1 ml-4">
+                              <div className="grid gap-3">
                                 {rowErrors.map((error, idx) => (
-                                  <li key={idx} className="text-sm text-destructive flex items-start gap-2">
-                                    <span className="font-medium min-w-[100px]">{error.field}:</span>
-                                    <span>{error.message}</span>
-                                  </li>
+                                  <div key={idx} className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <Label className="text-sm font-medium text-destructive">
+                                        {getFieldLabel(error.field)}
+                                      </Label>
+                                      <span className="text-xs text-muted-foreground">
+                                        — {error.message}
+                                      </span>
+                                    </div>
+                                    <Input
+                                      value={rowData?.[error.field as keyof CSVRow] || ""}
+                                      onChange={(e) => handleFieldUpdate(rowIndex, error.field as keyof CSVRow, e.target.value)}
+                                      placeholder={`Ingresa ${getFieldLabel(error.field).toLowerCase()}`}
+                                      className="border-destructive/50 focus:border-destructive"
+                                      data-testid={`input-fix-${error.field}-${rowNum}`}
+                                    />
+                                  </div>
                                 ))}
-                              </ul>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     </ScrollArea>
                     <p className="text-sm text-muted-foreground">
-                      Corrige los errores en tu archivo CSV y vuelve a cargarlo.
+                      Edita los campos con error arriba y haz clic en "Validar cambios" para continuar.
                     </p>
                   </div>
                 )}
