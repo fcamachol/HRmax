@@ -245,7 +245,7 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
                     value={employee.salarioBrutoMensual} 
                     type="currency" 
                   />
-                  <FieldDisplay label="Tipo de Esquema" value={employee.tipoEsquema === 'BRUTO' ? 'Bruto' : 'Neto'} />
+                  <FieldDisplay label="Base de Cálculo" value={employee.tipoEsquema === 'BRUTO' ? 'Bruto' : 'Neto'} />
                   <FieldDisplay label="Salario Diario Real" value={employee.salarioDiarioReal} type="currency" />
                   <FieldDisplay label="Salario Diario Nominal" value={employee.salarioDiarioNominal} type="currency" />
                   <FieldDisplay label="Salario Diario Exento" value={employee.salarioDiarioExento} type="currency" />
