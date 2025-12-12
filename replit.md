@@ -50,6 +50,16 @@ The frontend is built with React 18, TypeScript, and Vite, featuring a modern Sa
   - `hiringProcess.empleadoId`: Links completed hiring process to materialized employee
   - `/api/hiring/processes/:id/completar-alta` endpoint: Creates employee from hiring process data, updates status to "completado"
   - Supports mapping all personal data, address, bank accounts, and organizational assignments
+**Dual Compensation System (BRUTO/NETO)**: Complete compensation architecture supporting both gross and net salary schemes:
+  - `compensacion_trabajador`: Anchor table with vigencia dates. Stores `esquema_tipo` (BRUTO/NETO), `neto_deseado_bp`/`bruto_bp` as anchor, and package distribution percentages (% salario nominal, % exento, % bonos).
+  - `compensacion_calculada`: Derived values per calculation with full breakdown of ISR, IMSS, Net Real, subsidies. Links to compensation package with `fechaCalculo` for audit.
+  - All 119 existing employees migrated to NETO scheme with neto_deseado = salarioDiarioReal × 30.
+**Cascading Exempt Payment System**: Three-layer ledger with per-employee cap overrides:
+  - `exento_cap_configs`: Default caps per medio/concepto per empresa. Supports MXN or UMA units with monthly AND annual limits. `prioridadCascada` for allocation order.
+  - `employee_exento_caps`: Per-employee overrides inheriting from defaults. If null, uses company default.
+  - `payroll_exento_ledger`: Every peso paid tracked with concepto/subconcepto detail, cap consumption (monthly/annual), UMA snapshot for ISR compliance.
+  - Effective cap = min(monthlyRemaining, annualRemaining) during cascade allocation.
+**UMA Helper Functions**: `shared/umaHelper.ts` provides real-time UMA-to-MXN conversions querying `cat_valores_uma_smg` with vigencia date filtering.
 
 ### Feature Specifications
 *   **Bajas (Terminations)**: Multi-step wizard for severance calculation, letter generation, and Kanban workflow. Includes comprehensive finiquito/liquidación calculations with LISR exento/gravado splits.

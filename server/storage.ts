@@ -132,6 +132,16 @@ import {
   type InsertImssMovimiento,
   type SuaBimestre,
   type InsertSuaBimestre,
+  type CompensacionTrabajador,
+  type InsertCompensacionTrabajador,
+  type CompensacionCalculada,
+  type InsertCompensacionCalculada,
+  type ExentoCapConfig,
+  type InsertExentoCapConfig,
+  type EmployeeExentoCap,
+  type InsertEmployeeExentoCap,
+  type PayrollExentoLedger,
+  type InsertPayrollExentoLedger,
   type NominaMovimiento,
   type InsertNominaMovimiento,
   type NominaResumen,
@@ -219,6 +229,11 @@ import {
   cfdiNomina,
   imssMovimientos,
   suaBimestres,
+  compensacionTrabajador,
+  compensacionCalculada,
+  exentoCapConfigs,
+  employeeExentoCaps,
+  payrollExentoLedger,
   type EmployeeBankAccount,
   type InsertEmployeeBankAccount,
   employeeBankAccounts,
@@ -891,6 +906,42 @@ export interface IStorage {
   getCatCodigoPostal(id: string): Promise<CatCodigoPostal | undefined>;
   getCatCodigoPostalByCodigo(codigoPostal: string): Promise<CatCodigoPostal | undefined>;
   getCatCodigosPostalesByMunicipio(codigoPais: string, codigoEstado: string, codigoMunicipio: string): Promise<CatCodigoPostal[]>;
+  
+  // Compensación Trabajador (Package with vigencias - anchor data)
+  createCompensacionTrabajador(compensacion: InsertCompensacionTrabajador): Promise<CompensacionTrabajador>;
+  getCompensacionTrabajador(id: string): Promise<CompensacionTrabajador | undefined>;
+  getCompensacionTrabajadorByEmpleado(empleadoId: string): Promise<CompensacionTrabajador[]>;
+  getCompensacionTrabajadorVigente(empleadoId: string, fecha?: Date): Promise<CompensacionTrabajador | undefined>;
+  updateCompensacionTrabajador(id: string, updates: Partial<InsertCompensacionTrabajador>): Promise<CompensacionTrabajador>;
+  
+  // Compensación Calculada (Derived values per calculation)
+  createCompensacionCalculada(calculada: InsertCompensacionCalculada): Promise<CompensacionCalculada>;
+  getCompensacionCalculadaByEmpleado(empleadoId: string): Promise<CompensacionCalculada[]>;
+  getCompensacionCalculadaLatest(empleadoId: string): Promise<CompensacionCalculada | undefined>;
+  
+  // Exento Cap Configs (Default caps per medio/concepto)
+  createExentoCapConfig(config: InsertExentoCapConfig): Promise<ExentoCapConfig>;
+  getExentoCapConfig(id: string): Promise<ExentoCapConfig | undefined>;
+  getExentoCapConfigsByEmpresa(empresaId: string): Promise<ExentoCapConfig[]>;
+  getExentoCapConfigsByMedioPago(medioPagoId: string): Promise<ExentoCapConfig[]>;
+  updateExentoCapConfig(id: string, updates: Partial<InsertExentoCapConfig>): Promise<ExentoCapConfig>;
+  deleteExentoCapConfig(id: string): Promise<void>;
+  
+  // Employee Exento Caps (Per-employee cap overrides)
+  createEmployeeExentoCap(cap: InsertEmployeeExentoCap): Promise<EmployeeExentoCap>;
+  getEmployeeExentoCapsByEmpleado(empleadoId: string): Promise<EmployeeExentoCap[]>;
+  getEmployeeExentoCapsEfectivos(empleadoId: string): Promise<(ExentoCapConfig & { override?: EmployeeExentoCap })[]>;
+  updateEmployeeExentoCap(id: string, updates: Partial<InsertEmployeeExentoCap>): Promise<EmployeeExentoCap>;
+  deleteEmployeeExentoCap(id: string): Promise<void>;
+  
+  // Payroll Exento Ledger (Every peso paid tracking)
+  createPayrollExentoLedger(ledger: InsertPayrollExentoLedger): Promise<PayrollExentoLedger>;
+  getPayrollExentoLedgerByEmpleado(empleadoId: string, ejercicio?: number): Promise<PayrollExentoLedger[]>;
+  getPayrollExentoLedgerByPeriodo(periodoNominaId: string): Promise<PayrollExentoLedger[]>;
+  getConsumoAcumulado(empleadoId: string, exentoCapConfigId: string, ejercicio: number, mes?: number): Promise<{ consumoMensualBp: bigint; consumoAnualBp: bigint }>;
+  
+  // UMA Helper
+  getUmaVigente(fecha?: Date): Promise<CatValorUmaSmg | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5477,6 +5528,235 @@ export class DatabaseStorage implements IStorage {
         eq(catCodigosPostales.codigoMunicipio, codigoMunicipio)
       ))
       .orderBy(catCodigosPostales.codigoPostal);
+  }
+  
+  // ============================================================================
+  // Compensación Trabajador (Package with vigencias - anchor data)
+  // ============================================================================
+  
+  async createCompensacionTrabajador(compensacion: InsertCompensacionTrabajador): Promise<CompensacionTrabajador> {
+    const [created] = await db.insert(compensacionTrabajador).values(compensacion).returning();
+    return created;
+  }
+  
+  async getCompensacionTrabajador(id: string): Promise<CompensacionTrabajador | undefined> {
+    const [comp] = await db.select().from(compensacionTrabajador).where(eq(compensacionTrabajador.id, id));
+    return comp || undefined;
+  }
+  
+  async getCompensacionTrabajadorByEmpleado(empleadoId: string): Promise<CompensacionTrabajador[]> {
+    return db.select().from(compensacionTrabajador)
+      .where(eq(compensacionTrabajador.empleadoId, empleadoId))
+      .orderBy(desc(compensacionTrabajador.vigenciaDesde));
+  }
+  
+  async getCompensacionTrabajadorVigente(empleadoId: string, fecha?: Date): Promise<CompensacionTrabajador | undefined> {
+    const targetDate = fecha || new Date();
+    const dateStr = targetDate.toISOString().split('T')[0];
+    
+    const [comp] = await db.select().from(compensacionTrabajador)
+      .where(and(
+        eq(compensacionTrabajador.empleadoId, empleadoId),
+        lte(compensacionTrabajador.vigenciaDesde, dateStr),
+        isNull(compensacionTrabajador.vigenciaHasta)
+      ))
+      .orderBy(desc(compensacionTrabajador.vigenciaDesde))
+      .limit(1);
+    
+    return comp || undefined;
+  }
+  
+  async updateCompensacionTrabajador(id: string, updates: Partial<InsertCompensacionTrabajador>): Promise<CompensacionTrabajador> {
+    const [updated] = await db.update(compensacionTrabajador)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(compensacionTrabajador.id, id))
+      .returning();
+    return updated;
+  }
+  
+  // ============================================================================
+  // Compensación Calculada (Derived values per calculation)
+  // ============================================================================
+  
+  async createCompensacionCalculada(calculada: InsertCompensacionCalculada): Promise<CompensacionCalculada> {
+    const [created] = await db.insert(compensacionCalculada).values(calculada).returning();
+    return created;
+  }
+  
+  async getCompensacionCalculadaByEmpleado(empleadoId: string): Promise<CompensacionCalculada[]> {
+    return db.select().from(compensacionCalculada)
+      .where(eq(compensacionCalculada.empleadoId, empleadoId))
+      .orderBy(desc(compensacionCalculada.fechaCalculo));
+  }
+  
+  async getCompensacionCalculadaLatest(empleadoId: string): Promise<CompensacionCalculada | undefined> {
+    const [calc] = await db.select().from(compensacionCalculada)
+      .where(eq(compensacionCalculada.empleadoId, empleadoId))
+      .orderBy(desc(compensacionCalculada.fechaCalculo))
+      .limit(1);
+    return calc || undefined;
+  }
+  
+  // ============================================================================
+  // Exento Cap Configs (Default caps per medio/concepto)
+  // ============================================================================
+  
+  async createExentoCapConfig(config: InsertExentoCapConfig): Promise<ExentoCapConfig> {
+    const [created] = await db.insert(exentoCapConfigs).values(config).returning();
+    return created;
+  }
+  
+  async getExentoCapConfig(id: string): Promise<ExentoCapConfig | undefined> {
+    const [config] = await db.select().from(exentoCapConfigs).where(eq(exentoCapConfigs.id, id));
+    return config || undefined;
+  }
+  
+  async getExentoCapConfigsByEmpresa(empresaId: string): Promise<ExentoCapConfig[]> {
+    return db.select().from(exentoCapConfigs)
+      .where(and(
+        eq(exentoCapConfigs.empresaId, empresaId),
+        eq(exentoCapConfigs.activo, true)
+      ))
+      .orderBy(exentoCapConfigs.prioridadCascada);
+  }
+  
+  async getExentoCapConfigsByMedioPago(medioPagoId: string): Promise<ExentoCapConfig[]> {
+    return db.select().from(exentoCapConfigs)
+      .where(and(
+        eq(exentoCapConfigs.medioPagoId, medioPagoId),
+        eq(exentoCapConfigs.activo, true)
+      ))
+      .orderBy(exentoCapConfigs.prioridadCascada);
+  }
+  
+  async updateExentoCapConfig(id: string, updates: Partial<InsertExentoCapConfig>): Promise<ExentoCapConfig> {
+    const [updated] = await db.update(exentoCapConfigs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(exentoCapConfigs.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteExentoCapConfig(id: string): Promise<void> {
+    await db.delete(exentoCapConfigs).where(eq(exentoCapConfigs.id, id));
+  }
+  
+  // ============================================================================
+  // Employee Exento Caps (Per-employee cap overrides)
+  // ============================================================================
+  
+  async createEmployeeExentoCap(cap: InsertEmployeeExentoCap): Promise<EmployeeExentoCap> {
+    const [created] = await db.insert(employeeExentoCaps).values(cap).returning();
+    return created;
+  }
+  
+  async getEmployeeExentoCapsByEmpleado(empleadoId: string): Promise<EmployeeExentoCap[]> {
+    return db.select().from(employeeExentoCaps)
+      .where(eq(employeeExentoCaps.empleadoId, empleadoId));
+  }
+  
+  async getEmployeeExentoCapsEfectivos(empleadoId: string): Promise<(ExentoCapConfig & { override?: EmployeeExentoCap })[]> {
+    const configs = await db.select().from(exentoCapConfigs)
+      .where(eq(exentoCapConfigs.activo, true))
+      .orderBy(exentoCapConfigs.prioridadCascada);
+    
+    const overrides = await db.select().from(employeeExentoCaps)
+      .where(eq(employeeExentoCaps.empleadoId, empleadoId));
+    
+    const overrideMap = new Map(overrides.map(o => [o.exentoCapConfigId, o]));
+    
+    return configs.map(config => ({
+      ...config,
+      override: overrideMap.get(config.id)
+    }));
+  }
+  
+  async updateEmployeeExentoCap(id: string, updates: Partial<InsertEmployeeExentoCap>): Promise<EmployeeExentoCap> {
+    const [updated] = await db.update(employeeExentoCaps)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(employeeExentoCaps.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteEmployeeExentoCap(id: string): Promise<void> {
+    await db.delete(employeeExentoCaps).where(eq(employeeExentoCaps.id, id));
+  }
+  
+  // ============================================================================
+  // Payroll Exento Ledger (Every peso paid tracking)
+  // ============================================================================
+  
+  async createPayrollExentoLedger(ledger: InsertPayrollExentoLedger): Promise<PayrollExentoLedger> {
+    const [created] = await db.insert(payrollExentoLedger).values(ledger).returning();
+    return created;
+  }
+  
+  async getPayrollExentoLedgerByEmpleado(empleadoId: string, ejercicio?: number): Promise<PayrollExentoLedger[]> {
+    const conditions = [eq(payrollExentoLedger.empleadoId, empleadoId)];
+    if (ejercicio) {
+      conditions.push(eq(payrollExentoLedger.ejercicio, ejercicio));
+    }
+    return db.select().from(payrollExentoLedger)
+      .where(and(...conditions))
+      .orderBy(desc(payrollExentoLedger.fechaRegistro));
+  }
+  
+  async getPayrollExentoLedgerByPeriodo(periodoNominaId: string): Promise<PayrollExentoLedger[]> {
+    return db.select().from(payrollExentoLedger)
+      .where(eq(payrollExentoLedger.periodoNominaId, periodoNominaId))
+      .orderBy(payrollExentoLedger.empleadoId, payrollExentoLedger.conceptoId);
+  }
+  
+  async getConsumoAcumulado(
+    empleadoId: string, 
+    exentoCapConfigId: string, 
+    ejercicio: number, 
+    mes?: number
+  ): Promise<{ consumoMensualBp: bigint; consumoAnualBp: bigint }> {
+    const annualConditions = [
+      eq(payrollExentoLedger.empleadoId, empleadoId),
+      eq(payrollExentoLedger.exentoCapConfigId, exentoCapConfigId),
+      eq(payrollExentoLedger.ejercicio, ejercicio)
+    ];
+    
+    const annualEntries = await db.select().from(payrollExentoLedger)
+      .where(and(...annualConditions));
+    
+    const consumoAnualBp = annualEntries.reduce(
+      (sum, entry) => sum + (entry.montoExentoBp || BigInt(0)),
+      BigInt(0)
+    );
+    
+    let consumoMensualBp = BigInt(0);
+    if (mes) {
+      const monthlyEntries = annualEntries.filter(e => e.mes === mes);
+      consumoMensualBp = monthlyEntries.reduce(
+        (sum, entry) => sum + (entry.montoExentoBp || BigInt(0)),
+        BigInt(0)
+      );
+    }
+    
+    return { consumoMensualBp, consumoAnualBp };
+  }
+  
+  // ============================================================================
+  // UMA Helper
+  // ============================================================================
+  
+  async getUmaVigente(fecha?: Date): Promise<CatValorUmaSmg | undefined> {
+    const targetDate = fecha || new Date();
+    const dateStr = targetDate.toISOString().split('T')[0];
+    
+    const [uma] = await db.select().from(catValoresUmaSmg)
+      .where(and(
+        eq(catValoresUmaSmg.tipo, 'UMA'),
+        lte(catValoresUmaSmg.vigenciaDesde, dateStr)
+      ))
+      .orderBy(desc(catValoresUmaSmg.vigenciaDesde))
+      .limit(1);
+    
+    return uma || undefined;
   }
 }
 

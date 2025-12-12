@@ -54,6 +54,7 @@ export const employees = pgTable("employees", {
   diasDescanso: varchar("dias_descanso").default("sabado_domingo"),
   salarioBrutoMensual: numeric("salario_bruto_mensual").notNull(),
   esquemaPago: varchar("esquema_pago").default("tradicional"),
+  tipoEsquema: varchar("tipo_esquema").default("NETO"), // 'BRUTO' | 'NETO' - Define si el dato ancla es bruto o neto
   salarioDiarioReal: numeric("salario_diario_real"),
   salarioDiarioNominal: numeric("salario_diario_nominal"),
   salarioDiarioExento: numeric("salario_diario_exento"),
@@ -4354,3 +4355,272 @@ export const insertSuaBimestreSchema = createInsertSchema(suaBimestres).omit({
   importePagadoDecimal: z.coerce.number().optional().nullable(),
 });
 export type InsertSuaBimestre = z.infer<typeof insertSuaBimestreSchema>;
+
+// ============================================================================
+// COMPENSACIÓN TRABAJADOR - Paquete de compensación con vigencias (Dato ancla)
+// Soporta esquemas BRUTO y NETO
+// ============================================================================
+
+export const tiposEsquemaCompensacion = ["BRUTO", "NETO"] as const;
+export type TipoEsquemaCompensacion = typeof tiposEsquemaCompensacion[number];
+
+export const compensacionTrabajador = pgTable("compensacion_trabajador", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  
+  // Vigencia del paquete de compensación
+  vigenciaDesde: date("vigencia_desde").notNull(),
+  vigenciaHasta: date("vigencia_hasta"), // NULL = vigente actualmente
+  
+  // Dato ancla según tipo_esquema del empleado
+  netoDeseadoBp: bigint("neto_deseado_bp", { mode: "bigint" }), // Neto mensual en basis points (ancla para NETO)
+  salarioDiarioBp: bigint("salario_diario_bp", { mode: "bigint" }), // Salario diario en basis points (ancla para BRUTO)
+  
+  // Distribución del paquete (montos fijos mensuales en basis points)
+  previsionSocialBp: bigint("prevision_social_bp", { mode: "bigint" }),
+  premioPuntualidadBp: bigint("premio_puntualidad_bp", { mode: "bigint" }),
+  premioAsistenciaBp: bigint("premio_asistencia_bp", { mode: "bigint" }),
+  fondoAhorroBp: bigint("fondo_ahorro_bp", { mode: "bigint" }),
+  valesDespensaBp: bigint("vales_despensa_bp", { mode: "bigint" }),
+  
+  // Campos adicionales de distribución
+  otrosConceptosBp: bigint("otros_conceptos_bp", { mode: "bigint" }),
+  distribucionDetalle: jsonb("distribucion_detalle").default(sql`'{}'::jsonb`), // Para conceptos personalizados
+  
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  createdBy: varchar("created_by"),
+}, (table) => ({
+  empleadoIdx: index("compensacion_trabajador_empleado_idx").on(table.empleadoId),
+  vigenciaIdx: index("compensacion_trabajador_vigencia_idx").on(table.vigenciaDesde, table.vigenciaHasta),
+  clienteEmpresaIdx: index("compensacion_trabajador_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type CompensacionTrabajador = typeof compensacionTrabajador.$inferSelect;
+export const insertCompensacionTrabajadorSchema = createInsertSchema(compensacionTrabajador).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCompensacionTrabajador = z.infer<typeof insertCompensacionTrabajadorSchema>;
+
+// ============================================================================
+// COMPENSACIÓN CALCULADA - Valores derivados por periodo (recalculables)
+// Se recalcula cuando cambian tablas ISR, UMA, IMSS
+// ============================================================================
+
+export const compensacionCalculada = pgTable("compensacion_calculada", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  compensacionTrabajadorId: varchar("compensacion_trabajador_id").notNull().references(() => compensacionTrabajador.id, { onDelete: "cascade" }),
+  
+  fechaCalculo: timestamp("fecha_calculo").notNull().default(sql`now()`),
+  
+  // Valores derivados en basis points
+  salarioDiarioBp: bigint("salario_diario_bp", { mode: "bigint" }), // Calculado si esquema NETO
+  salarioBaseMensualBp: bigint("salario_base_mensual_bp", { mode: "bigint" }),
+  brutoTotalBp: bigint("bruto_total_bp", { mode: "bigint" }),
+  netoCalculadoBp: bigint("neto_calculado_bp", { mode: "bigint" }), // Para verificar vs neto_deseado
+  
+  // SBC y factor de integración
+  sbcBp: bigint("sbc_bp", { mode: "bigint" }),
+  factorIntegracionBp: bigint("factor_integracion_bp", { mode: "bigint" }), // Ejemplo: 10452 = 1.0452
+  
+  // Valores UMA utilizados en el cálculo
+  umaUtilizadaBp: bigint("uma_utilizada_bp", { mode: "bigint" }),
+  fechaUma: date("fecha_uma"),
+  
+  // Desglose ISR/IMSS calculado
+  isrMensualBp: bigint("isr_mensual_bp", { mode: "bigint" }),
+  imssObreroMensualBp: bigint("imss_obrero_mensual_bp", { mode: "bigint" }),
+  subsidioEmpleoBp: bigint("subsidio_empleo_bp", { mode: "bigint" }),
+  
+  // Varianza entre neto deseado y neto calculado
+  varianzaBp: bigint("varianza_bp", { mode: "bigint" }), // neto_calculado - neto_deseado
+  varianzaAlerta: boolean("varianza_alerta").default(false), // true si varianza excede umbral
+  
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("compensacion_calculada_empleado_idx").on(table.empleadoId),
+  fechaIdx: index("compensacion_calculada_fecha_idx").on(table.fechaCalculo),
+  compensacionIdx: index("compensacion_calculada_comp_idx").on(table.compensacionTrabajadorId),
+  clienteEmpresaIdx: index("compensacion_calculada_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type CompensacionCalculada = typeof compensacionCalculada.$inferSelect;
+export const insertCompensacionCalculadaSchema = createInsertSchema(compensacionCalculada).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCompensacionCalculada = z.infer<typeof insertCompensacionCalculadaSchema>;
+
+// ============================================================================
+// EXENTO CAP CONFIGS - Configuración de topes por medio/concepto (defaults)
+// ============================================================================
+
+export const unidadesTope = ["MXN", "UMA"] as const;
+export type UnidadTope = typeof unidadesTope[number];
+
+export const exentoCapConfigs = pgTable("exento_cap_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  
+  // Referencia al medio de pago o concepto
+  medioPagoId: varchar("medio_pago_id").references(() => mediosPago.id, { onDelete: "cascade" }),
+  conceptoId: varchar("concepto_id").references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
+  
+  nombre: varchar("nombre", { length: 100 }).notNull(), // Nombre descriptivo (ej: "Sindicato - Tope Mensual")
+  
+  // Topes (NULL = sin límite)
+  topeMensualBp: bigint("tope_mensual_bp", { mode: "bigint" }), // Tope mensual en basis points
+  topeAnualBp: bigint("tope_anual_bp", { mode: "bigint" }), // Tope anual en basis points
+  unidadTopeMensual: varchar("unidad_tope_mensual", { length: 10 }).default("MXN"), // 'MXN' | 'UMA'
+  unidadTopeAnual: varchar("unidad_tope_anual", { length: 10 }).default("MXN"), // 'MXN' | 'UMA'
+  
+  // Para topes en UMAs, cuántas UMAs
+  topeMensualUmas: numeric("tope_mensual_umas", { precision: 10, scale: 2 }),
+  topeAnualUmas: numeric("tope_anual_umas", { precision: 10, scale: 2 }),
+  
+  // Prioridad en la cascada (1 = primero, 2 = segundo, etc.)
+  prioridadCascada: integer("prioridad_cascada").notNull().default(1),
+  
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  medioPagoIdx: index("exento_cap_configs_medio_pago_idx").on(table.medioPagoId),
+  conceptoIdx: index("exento_cap_configs_concepto_idx").on(table.conceptoId),
+  prioridadIdx: index("exento_cap_configs_prioridad_idx").on(table.prioridadCascada),
+  clienteEmpresaIdx: index("exento_cap_configs_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type ExentoCapConfig = typeof exentoCapConfigs.$inferSelect;
+export const insertExentoCapConfigSchema = createInsertSchema(exentoCapConfigs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  topeMensualUmas: z.coerce.number().optional().nullable(),
+  topeAnualUmas: z.coerce.number().optional().nullable(),
+});
+export type InsertExentoCapConfig = z.infer<typeof insertExentoCapConfigSchema>;
+
+// ============================================================================
+// EMPLOYEE EXENTO CAPS - Overrides de topes por empleado
+// Si el empleado no tiene override, usa el default de exento_cap_configs
+// ============================================================================
+
+export const employeeExentoCaps = pgTable("employee_exento_caps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  exentoCapConfigId: varchar("exento_cap_config_id").notNull().references(() => exentoCapConfigs.id, { onDelete: "cascade" }),
+  
+  // Overrides (NULL = usa el default)
+  topeMensualOverrideBp: bigint("tope_mensual_override_bp", { mode: "bigint" }),
+  topeAnualOverrideBp: bigint("tope_anual_override_bp", { mode: "bigint" }),
+  topeMensualUmasOverride: numeric("tope_mensual_umas_override", { precision: 10, scale: 2 }),
+  topeAnualUmasOverride: numeric("tope_anual_umas_override", { precision: 10, scale: 2 }),
+  
+  // Puede deshabilitar un config para este empleado
+  deshabilitado: boolean("deshabilitado").notNull().default(false),
+  
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoConfigUnique: unique().on(table.empleadoId, table.exentoCapConfigId),
+  empleadoIdx: index("employee_exento_caps_empleado_idx").on(table.empleadoId),
+  configIdx: index("employee_exento_caps_config_idx").on(table.exentoCapConfigId),
+  clienteEmpresaIdx: index("employee_exento_caps_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+}));
+
+export type EmployeeExentoCap = typeof employeeExentoCaps.$inferSelect;
+export const insertEmployeeExentoCapSchema = createInsertSchema(employeeExentoCaps).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  topeMensualUmasOverride: z.coerce.number().optional().nullable(),
+  topeAnualUmasOverride: z.coerce.number().optional().nullable(),
+});
+export type InsertEmployeeExentoCap = z.infer<typeof insertEmployeeExentoCapSchema>;
+
+// ============================================================================
+// PAYROLL EXENTO LEDGER - Registro de cada peso pagado por concepto/subconcepto
+// Track completo de pagos exentos con consumo de topes
+// ============================================================================
+
+export const payrollExentoLedger = pgTable("payroll_exento_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  periodoNominaId: varchar("periodo_nomina_id").references(() => payrollPeriods.id, { onDelete: "set null" }),
+  
+  // Referencia al config de tope utilizado
+  exentoCapConfigId: varchar("exento_cap_config_id").references(() => exentoCapConfigs.id, { onDelete: "set null" }),
+  employeeExentoCapId: varchar("employee_exento_cap_id").references(() => employeeExentoCaps.id, { onDelete: "set null" }),
+  
+  // Medio de pago y concepto
+  medioPagoId: varchar("medio_pago_id").references(() => mediosPago.id, { onDelete: "set null" }),
+  conceptoId: varchar("concepto_id").references(() => conceptosMedioPago.id, { onDelete: "set null" }),
+  subconceptoNombre: varchar("subconcepto_nombre", { length: 100 }), // Nombre libre para subconceptos
+  
+  // Fecha del registro
+  fechaRegistro: date("fecha_registro").notNull(),
+  ejercicio: integer("ejercicio").notNull(), // Año para tracking anual
+  mes: integer("mes").notNull(), // Mes para tracking mensual (1-12)
+  
+  // Montos pagados en basis points
+  montoExentoBp: bigint("monto_exento_bp", { mode: "bigint" }).notNull(),
+  montoGravadoBp: bigint("monto_gravado_bp", { mode: "bigint" }),
+  
+  // Tracking de consumo de topes
+  consumoMensualPrevioBp: bigint("consumo_mensual_previo_bp", { mode: "bigint" }), // Acumulado antes de este registro
+  consumoMensualPosteriorBp: bigint("consumo_mensual_posterior_bp", { mode: "bigint" }), // Acumulado después
+  consumoAnualPrevioBp: bigint("consumo_anual_previo_bp", { mode: "bigint" }),
+  consumoAnualPosteriorBp: bigint("consumo_anual_posterior_bp", { mode: "bigint" }),
+  
+  // Topes efectivos aplicados (snapshot al momento del cálculo)
+  topeMensualEfectivoBp: bigint("tope_mensual_efectivo_bp", { mode: "bigint" }),
+  topeAnualEfectivoBp: bigint("tope_anual_efectivo_bp", { mode: "bigint" }),
+  
+  // UMA utilizada para conversión (si aplica)
+  umaUtilizadaBp: bigint("uma_utilizada_bp", { mode: "bigint" }),
+  
+  // Flags de estado
+  capMensualAgotado: boolean("cap_mensual_agotado").default(false),
+  capAnualAgotado: boolean("cap_anual_agotado").default(false),
+  fuenteCap: varchar("fuente_cap", { length: 20 }).default("default"), // 'default' | 'override'
+  
+  // ISR impact
+  esGravableIsr: boolean("es_gravable_isr").default(false),
+  integraSbc: boolean("integra_sbc").default(false),
+  
+  notas: text("notas"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("payroll_exento_ledger_empleado_idx").on(table.empleadoId),
+  periodoIdx: index("payroll_exento_ledger_periodo_idx").on(table.periodoNominaId),
+  ejercicioMesIdx: index("payroll_exento_ledger_ejercicio_mes_idx").on(table.ejercicio, table.mes),
+  medioPagoIdx: index("payroll_exento_ledger_medio_pago_idx").on(table.medioPagoId),
+  conceptoIdx: index("payroll_exento_ledger_concepto_idx").on(table.conceptoId),
+  clienteEmpresaIdx: index("payroll_exento_ledger_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoEjercicioIdx: index("payroll_exento_ledger_empleado_ejercicio_idx").on(table.empleadoId, table.ejercicio),
+}));
+
+export type PayrollExentoLedger = typeof payrollExentoLedger.$inferSelect;
+export const insertPayrollExentoLedgerSchema = createInsertSchema(payrollExentoLedger).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPayrollExentoLedger = z.infer<typeof insertPayrollExentoLedgerSchema>;
