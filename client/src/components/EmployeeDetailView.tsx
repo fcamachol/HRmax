@@ -248,7 +248,7 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
                   <FieldDisplay label="Base de Cálculo" value={employee.tipoEsquema === 'BRUTO' ? 'Bruto' : 'Neto'} />
                   <FieldDisplay label="Percepción Total Diaria" value={employee.salarioDiarioReal} type="currency" />
                   <FieldDisplay label="Salario Diario Nominal" value={employee.salarioDiarioNominal} type="currency" />
-                  <FieldDisplay label="PAD (Percepción Adicional Diaria)" value={employee.salarioDiarioExento} type="currency" />
+                  <FieldDisplay label="Percepción Adicional Diaria" value={employee.salarioDiarioExento} type="currency" />
                   <FieldDisplay label="Salario Base de Cotización (SBC)" value={employee.sbc} type="currency" />
                   <FieldDisplay label="Salario Diario Integrado (SDI)" value={employee.sdi} type="currency" />
                   <FieldDisplay label="Tabla IMSS" value={employee.tablaImss} />
