@@ -85,7 +85,12 @@ import {
   insertConceptoNominaSchema,
   insertNominaMovimientoSchema,
   insertImssMovimientoSchema,
-  insertSuaBimestreSchema
+  insertSuaBimestreSchema,
+  insertCompensacionTrabajadorSchema,
+  insertCompensacionCalculadaSchema,
+  insertExentoCapConfigSchema,
+  insertEmployeeExentoCapSchema,
+  insertPayrollExentoLedgerSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
@@ -5882,6 +5887,289 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(400).json({ message: "Se requiere al menos codigoPais y codigoEstado" });
       }
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // Compensación Trabajador API (BRUTO/NETO System)
+  // ============================================================================
+  
+  app.get("/api/compensaciones/empleado/:empleadoId", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const compensaciones = await storage.getCompensacionTrabajadorByEmpleado(empleadoId);
+      res.json(compensaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/compensaciones/empleado/:empleadoId/vigente", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const { fecha } = req.query;
+      const compensacion = await storage.getCompensacionTrabajadorVigente(
+        empleadoId, 
+        fecha ? new Date(fecha as string) : undefined
+      );
+      res.json(compensacion || null);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/compensaciones", async (req, res) => {
+    try {
+      const validatedData = insertCompensacionTrabajadorSchema.parse(req.body);
+      const compensacion = await storage.createCompensacionTrabajador(validatedData);
+      res.status(201).json(compensacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.patch("/api/compensaciones/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertCompensacionTrabajadorSchema.partial().parse(req.body);
+      const compensacion = await storage.updateCompensacionTrabajador(id, validatedData);
+      res.json(compensacion);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // Compensación Calculada API (Derived values)
+  // ============================================================================
+  
+  app.get("/api/compensaciones-calculadas/empleado/:empleadoId", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const calculadas = await storage.getCompensacionCalculadaByEmpleado(empleadoId);
+      res.json(calculadas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/compensaciones-calculadas/empleado/:empleadoId/ultima", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const calculada = await storage.getCompensacionCalculadaLatest(empleadoId);
+      res.json(calculada || null);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/compensaciones-calculadas", async (req, res) => {
+    try {
+      const validatedData = insertCompensacionCalculadaSchema.parse(req.body);
+      const calculada = await storage.createCompensacionCalculada(validatedData);
+      res.status(201).json(calculada);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // Exento Cap Configs API (Default caps per empresa)
+  // ============================================================================
+  
+  app.get("/api/exento-caps/empresa/:empresaId", async (req, res) => {
+    try {
+      const { empresaId } = req.params;
+      const configs = await storage.getExentoCapConfigsByEmpresa(empresaId);
+      res.json(configs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/exento-caps/medio-pago/:medioPagoId", async (req, res) => {
+    try {
+      const { medioPagoId } = req.params;
+      const configs = await storage.getExentoCapConfigsByMedioPago(medioPagoId);
+      res.json(configs);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/exento-caps/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const config = await storage.getExentoCapConfig(id);
+      if (!config) {
+        return res.status(404).json({ message: "Config not found" });
+      }
+      res.json(config);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/exento-caps", async (req, res) => {
+    try {
+      const validatedData = insertExentoCapConfigSchema.parse(req.body);
+      const config = await storage.createExentoCapConfig(validatedData);
+      res.status(201).json(config);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.patch("/api/exento-caps/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertExentoCapConfigSchema.partial().parse(req.body);
+      const config = await storage.updateExentoCapConfig(id, validatedData);
+      res.json(config);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.delete("/api/exento-caps/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteExentoCapConfig(id);
+      res.status(204).end();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // Employee Exento Caps API (Per-employee overrides)
+  // ============================================================================
+  
+  app.get("/api/employee-exento-caps/empleado/:empleadoId", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const caps = await storage.getEmployeeExentoCapsByEmpleado(empleadoId);
+      res.json(caps);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/employee-exento-caps/empleado/:empleadoId/efectivos", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const capsEfectivos = await storage.getEmployeeExentoCapsEfectivos(empleadoId);
+      res.json(capsEfectivos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/employee-exento-caps", async (req, res) => {
+    try {
+      const validatedData = insertEmployeeExentoCapSchema.parse(req.body);
+      const cap = await storage.createEmployeeExentoCap(validatedData);
+      res.status(201).json(cap);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.patch("/api/employee-exento-caps/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const validatedData = insertEmployeeExentoCapSchema.partial().parse(req.body);
+      const cap = await storage.updateEmployeeExentoCap(id, validatedData);
+      res.json(cap);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  app.delete("/api/employee-exento-caps/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteEmployeeExentoCap(id);
+      res.status(204).end();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // Payroll Exento Ledger API (Cap consumption tracking)
+  // ============================================================================
+  
+  app.get("/api/payroll-exento-ledger/empleado/:empleadoId", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const { ejercicio } = req.query;
+      const ledger = await storage.getPayrollExentoLedgerByEmpleado(
+        empleadoId, 
+        ejercicio ? parseInt(ejercicio as string) : undefined
+      );
+      res.json(ledger);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/payroll-exento-ledger/periodo/:periodoNominaId", async (req, res) => {
+    try {
+      const { periodoNominaId } = req.params;
+      const ledger = await storage.getPayrollExentoLedgerByPeriodo(periodoNominaId);
+      res.json(ledger);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/payroll-exento-ledger/consumo/:empleadoId/:exentoCapConfigId", async (req, res) => {
+    try {
+      const { empleadoId, exentoCapConfigId } = req.params;
+      const { ejercicio, mes } = req.query;
+      
+      if (!ejercicio) {
+        return res.status(400).json({ message: "Se requiere ejercicio" });
+      }
+      
+      const consumo = await storage.getConsumoAcumulado(
+        empleadoId,
+        exentoCapConfigId,
+        parseInt(ejercicio as string),
+        mes ? parseInt(mes as string) : undefined
+      );
+      
+      res.json({
+        consumoMensualBp: consumo.consumoMensualBp.toString(),
+        consumoAnualBp: consumo.consumoAnualBp.toString()
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/payroll-exento-ledger", async (req, res) => {
+    try {
+      const validatedData = insertPayrollExentoLedgerSchema.parse(req.body);
+      const ledger = await storage.createPayrollExentoLedger(validatedData);
+      res.status(201).json(ledger);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // UMA Vigente API
+  // ============================================================================
+  
+  app.get("/api/uma/vigente", async (req, res) => {
+    try {
+      const { fecha } = req.query;
+      const uma = await storage.getUmaVigente(fecha ? new Date(fecha as string) : undefined);
+      res.json(uma || null);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
