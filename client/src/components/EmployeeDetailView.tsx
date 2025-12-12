@@ -241,7 +241,7 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
                 <h3 className="text-lg font-semibold mb-4">Salarios</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <FieldDisplay 
-                    label={employee.tipoEsquema === 'BRUTO' ? "Salario Bruto Mensual" : "Salario Neto Mensual"} 
+                    label="Salario Mensual" 
                     value={employee.salarioBrutoMensual} 
                     type="currency" 
                   />
