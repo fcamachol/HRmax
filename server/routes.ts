@@ -6162,6 +6162,168 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // ============================================================================
+  // Compensation Service API (Compatibility Layer)
+  // ============================================================================
+  
+  app.get("/api/empleados/:id/salario-nomina", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fecha } = req.query;
+      const { getSalarioParaNomina } = await import('./services/compensationService');
+      
+      const fechaRef = fecha ? new Date(fecha as string) : new Date();
+      const salario = await getSalarioParaNomina(id, fechaRef);
+      
+      if (!salario) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+      
+      res.json({
+        ...salario,
+        salarioDiarioBp: salario.salarioDiarioBp.toString(),
+        salarioDiarioNominalBp: salario.salarioDiarioNominalBp?.toString() || null,
+        netoDeseadoBp: salario.netoDeseadoBp?.toString() || null,
+        brutoTotalBp: salario.brutoTotalBp?.toString() || null,
+        sbcBp: salario.sbcBp?.toString() || null,
+        factorIntegracionBp: salario.factorIntegracionBp?.toString() || null,
+        distribucion: salario.distribucion ? {
+          previsionSocialBp: salario.distribucion.previsionSocialBp?.toString() || null,
+          premioPuntualidadBp: salario.distribucion.premioPuntualidadBp?.toString() || null,
+          premioAsistenciaBp: salario.distribucion.premioAsistenciaBp?.toString() || null,
+          fondoAhorroBp: salario.distribucion.fondoAhorroBp?.toString() || null,
+          valesDespensaBp: salario.distribucion.valesDespensaBp?.toString() || null,
+          otrosConceptosBp: salario.distribucion.otrosConceptosBp?.toString() || null,
+        } : null,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/empleados/:id/tiene-compensacion", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { tieneCompensacionConfigurada } = await import('./services/compensationService');
+      
+      const tiene = await tieneCompensacionConfigurada(id);
+      res.json({ tieneCompensacion: tiene });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.get("/api/empleados/:id/historial-compensaciones", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { getHistorialCompensaciones } = await import('./services/compensationService');
+      
+      const historial = await getHistorialCompensaciones(id);
+      res.json(historial);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
+  // Inverse Payroll Calculator API
+  // ============================================================================
+  
+  app.post("/api/calculo-inverso/bruto-desde-neto", async (req, res) => {
+    try {
+      const { netoDeseadoBp, diasPeriodo, periodo } = req.body;
+      const { calcularBrutoDesdeNeto } = await import('./services/inversePayrollCalculator');
+      
+      if (!netoDeseadoBp) {
+        return res.status(400).json({ message: "netoDeseadoBp es requerido" });
+      }
+      
+      const resultado = calcularBrutoDesdeNeto({
+        netoDeseadoBp: BigInt(netoDeseadoBp),
+        diasPeriodo,
+        periodo,
+      });
+      
+      res.json({
+        brutoMensualBp: resultado.brutoMensualBp.toString(),
+        salarioDiarioBp: resultado.salarioDiarioBp.toString(),
+        netoCalculadoBp: resultado.netoCalculadoBp.toString(),
+        isrMensualBp: resultado.isrMensualBp.toString(),
+        imssObreroMensualBp: resultado.imssObreroMensualBp.toString(),
+        subsidioEmpleoBp: resultado.subsidioEmpleoBp.toString(),
+        varianzaBp: resultado.varianzaBp.toString(),
+        iteraciones: resultado.iteraciones,
+        convergencia: resultado.convergencia,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/calculo-inverso/neto-desde-bruto", async (req, res) => {
+    try {
+      const { brutoMensualBp, diasPeriodo, periodo } = req.body;
+      const { calcularNetoDesdebruto } = await import('./services/inversePayrollCalculator');
+      
+      if (!brutoMensualBp) {
+        return res.status(400).json({ message: "brutoMensualBp es requerido" });
+      }
+      
+      const resultado = calcularNetoDesdebruto(
+        BigInt(brutoMensualBp),
+        diasPeriodo,
+        periodo
+      );
+      
+      res.json({
+        brutoMensualBp: resultado.brutoMensualBp.toString(),
+        salarioDiarioBp: resultado.salarioDiarioBp.toString(),
+        netoCalculadoBp: resultado.netoCalculadoBp.toString(),
+        isrMensualBp: resultado.isrMensualBp.toString(),
+        imssObreroMensualBp: resultado.imssObreroMensualBp.toString(),
+        subsidioEmpleoBp: resultado.subsidioEmpleoBp.toString(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.post("/api/calculo-inverso/recalcular-compensacion", async (req, res) => {
+    try {
+      const { esquemaTipo, valorAnclaBp, diasPeriodo, periodo } = req.body;
+      const { recalcularCompensacion } = await import('./services/inversePayrollCalculator');
+      
+      if (!esquemaTipo || !valorAnclaBp) {
+        return res.status(400).json({ message: "esquemaTipo y valorAnclaBp son requeridos" });
+      }
+      
+      if (esquemaTipo !== 'BRUTO' && esquemaTipo !== 'NETO') {
+        return res.status(400).json({ message: "esquemaTipo debe ser 'BRUTO' o 'NETO'" });
+      }
+      
+      const resultado = recalcularCompensacion(
+        esquemaTipo,
+        BigInt(valorAnclaBp),
+        diasPeriodo,
+        periodo
+      );
+      
+      res.json({
+        brutoMensualBp: resultado.brutoMensualBp.toString(),
+        salarioDiarioBp: resultado.salarioDiarioBp.toString(),
+        netoCalculadoBp: resultado.netoCalculadoBp.toString(),
+        isrMensualBp: resultado.isrMensualBp.toString(),
+        imssObreroMensualBp: resultado.imssObreroMensualBp.toString(),
+        subsidioEmpleoBp: resultado.subsidioEmpleoBp.toString(),
+        varianzaBp: resultado.varianzaBp.toString(),
+        iteraciones: resultado.iteraciones,
+        convergencia: resultado.convergencia,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  // ============================================================================
   // UMA Vigente API
   // ============================================================================
   

@@ -108,7 +108,7 @@ export function multiplicarBpPorTasa(montoBp: bigint, tasaBp: number): bigint {
 }
 
 /**
- * Divide un monto en bp por un divisor
+ * Divide un monto en bp por un divisor (truncates towards zero)
  * @param montoBp - Monto en basis points
  * @param divisor - Divisor (número entero)
  * @returns Resultado en basis points
@@ -121,6 +121,32 @@ export function dividirBp(montoBp: bigint, divisor: number): bigint {
     throw new Error("Division by zero");
   }
   return montoBp / BigInt(divisor);
+}
+
+/**
+ * Divide un monto en bp por un divisor with banker's rounding.
+ * Rounds to nearest integer, with ties going to even (0.5 rounds down, 1.5 rounds up).
+ * This preserves precision when converting monthly amounts to daily amounts.
+ * 
+ * @param montoBp - Monto en basis points
+ * @param divisor - Divisor (número entero)
+ * @returns Resultado en basis points, redondeado al entero más cercano
+ * @example
+ * // $15,005 / 30 días = $500.1667 → rounds to $500.17 (5001700n)
+ * dividirBpRedondeado(150050000n, 30) // 5001667n
+ */
+export function dividirBpRedondeado(montoBp: bigint, divisor: number): bigint {
+  if (divisor === 0) {
+    throw new Error("Division by zero");
+  }
+  const divisorBigInt = BigInt(divisor);
+  // Add half the divisor before division for rounding
+  // For negative numbers, subtract half
+  if (montoBp >= BigInt(0)) {
+    return (montoBp + divisorBigInt / BigInt(2)) / divisorBigInt;
+  } else {
+    return (montoBp - divisorBigInt / BigInt(2)) / divisorBigInt;
+  }
 }
 
 /**

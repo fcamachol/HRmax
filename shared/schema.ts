@@ -4370,11 +4370,14 @@ export const compensacionTrabajador = pgTable("compensacion_trabajador", {
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
+  // Tipo de esquema - canonical source for this compensation package
+  esquemaTipo: varchar("esquema_tipo").default("NETO"), // 'BRUTO' | 'NETO'
+  
   // Vigencia del paquete de compensación
   vigenciaDesde: date("vigencia_desde").notNull(),
   vigenciaHasta: date("vigencia_hasta"), // NULL = vigente actualmente
   
-  // Dato ancla según tipo_esquema del empleado
+  // Dato ancla según esquema_tipo
   netoDeseadoBp: bigint("neto_deseado_bp", { mode: "bigint" }), // Neto mensual en basis points (ancla para NETO)
   salarioDiarioBp: bigint("salario_diario_bp", { mode: "bigint" }), // Salario diario en basis points (ancla para BRUTO)
   
