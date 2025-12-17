@@ -8,24 +8,24 @@ export function Section7() {
   const { audit, updateSection } = useOnboarding();
 
   const section7 = (audit?.section7 || {}) as any;
-  const reglamento = section7.reglamento || {};
-  const politicas = section7.politicas || {};
+  const imss = section7.imss || {};
+  const infonavit = section7.infonavit || {};
 
-  const updateReglamento = (field: string, value: string | boolean) => {
+  const updateImss = (field: string, value: string | boolean) => {
     updateSection("section7", {
       ...section7,
-      reglamento: {
-        ...reglamento,
+      imss: {
+        ...imss,
         [field]: value,
       },
     });
   };
 
-  const updatePoliticas = (field: string, value: string | boolean) => {
+  const updateInfonavit = (field: string, value: string | boolean) => {
     updateSection("section7", {
       ...section7,
-      politicas: {
-        ...politicas,
+      infonavit: {
+        ...infonavit,
         [field]: value,
       },
     });
@@ -35,62 +35,82 @@ export function Section7() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={7}
-        title="Políticas y Reglamentos"
-        subtitle="Reglamento interior y políticas internas"
+        title="Seguridad Social"
+        subtitle="IMSS, Infonavit y obligaciones"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Reglamento Interior de Trabajo</CardTitle>
+              <CardTitle className="text-lg">Información IMSS</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Reglamento Registrado ante STPS"
-                  value={reglamento.registradoStps || ""}
-                  onChange={(v) => updateReglamento("registradoStps", v)}
-                  validated={reglamento.registradoStpsValidated}
-                  onValidatedChange={(v) => updateReglamento("registradoStpsValidated", v)}
-                  testId="input-registrado-stps"
+                  label="Registro Patronal Principal"
+                  value={imss.registroPatronal || ""}
+                  onChange={(v) => updateImss("registroPatronal", v)}
+                  validated={imss.registroPatronalValidated}
+                  onValidatedChange={(v) => updateImss("registroPatronalValidated", v)}
+                  testId="input-registro-patronal"
+                  required
                 />
                 <TextField
-                  label="Número de Registro STPS"
-                  value={reglamento.numeroRegistro || ""}
-                  onChange={(v) => updateReglamento("numeroRegistro", v)}
-                  validated={reglamento.numeroRegistroValidated}
-                  onValidatedChange={(v) => updateReglamento("numeroRegistroValidated", v)}
-                  testId="input-numero-registro"
+                  label="Clase de Riesgo"
+                  value={imss.claseRiesgo || ""}
+                  onChange={(v) => updateImss("claseRiesgo", v)}
+                  validated={imss.claseRiesgoValidated}
+                  onValidatedChange={(v) => updateImss("claseRiesgoValidated", v)}
+                  testId="input-clase-riesgo"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Fecha de Registro"
-                  value={reglamento.fechaRegistro || ""}
-                  onChange={(v) => updateReglamento("fechaRegistro", v)}
-                  validated={reglamento.fechaRegistroValidated}
-                  onValidatedChange={(v) => updateReglamento("fechaRegistroValidated", v)}
-                  testId="input-fecha-registro-rit"
-                  type="date"
+                  label="Prima de Riesgo (%)"
+                  value={imss.primaRiesgo || ""}
+                  onChange={(v) => updateImss("primaRiesgo", v)}
+                  validated={imss.primaRiesgoValidated}
+                  onValidatedChange={(v) => updateImss("primaRiesgoValidated", v)}
+                  testId="input-prima-riesgo"
                 />
                 <TextField
-                  label="Última Actualización"
-                  value={reglamento.ultimaActualizacion || ""}
-                  onChange={(v) => updateReglamento("ultimaActualizacion", v)}
-                  validated={reglamento.ultimaActualizacionValidated}
-                  onValidatedChange={(v) => updateReglamento("ultimaActualizacionValidated", v)}
-                  testId="input-ultima-actualizacion"
+                  label="Fecha Última Determinación de Prima"
+                  value={imss.fechaDeterminacionPrima || ""}
+                  onChange={(v) => updateImss("fechaDeterminacionPrima", v)}
+                  validated={imss.fechaDeterminacionPrimaValidated}
+                  onValidatedChange={(v) => updateImss("fechaDeterminacionPrimaValidated", v)}
+                  testId="input-fecha-determinacion"
                   type="date"
                 />
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Número de Registros Patronales"
+                  value={imss.numRegistrosPatronales || ""}
+                  onChange={(v) => updateImss("numRegistrosPatronales", v)}
+                  validated={imss.numRegistrosPatronalesValidated}
+                  onValidatedChange={(v) => updateImss("numRegistrosPatronalesValidated", v)}
+                  testId="input-num-registros"
+                  type="number"
+                />
+                <TextField
+                  label="Sistema SUA/IDSE"
+                  value={imss.sistemaSuaIdse || ""}
+                  onChange={(v) => updateImss("sistemaSuaIdse", v)}
+                  validated={imss.sistemaSuaIdseValidated}
+                  onValidatedChange={(v) => updateImss("sistemaSuaIdseValidated", v)}
+                  testId="input-sistema-sua"
+                />
+              </div>
+
               <TextAreaField
-                label="Observaciones sobre Reglamento"
-                value={reglamento.observaciones || ""}
-                onChange={(v) => updateReglamento("observaciones", v)}
-                testId="input-observaciones-reglamento"
+                label="Observaciones IMSS"
+                value={imss.observaciones || ""}
+                onChange={(v) => updateImss("observaciones", v)}
+                testId="input-observaciones-imss"
                 rows={3}
               />
             </CardContent>
@@ -98,50 +118,43 @@ export function Section7() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Políticas Internas</CardTitle>
+              <CardTitle className="text-lg">Información Infonavit</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <TextAreaField
-                label="Políticas Documentadas"
-                value={politicas.politicasDocumentadas || ""}
-                onChange={(v) => updatePoliticas("politicasDocumentadas", v)}
-                testId="input-politicas-documentadas"
-                rows={4}
-              />
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Política de Vacaciones"
-                  value={politicas.politicaVacaciones || ""}
-                  onChange={(v) => updatePoliticas("politicaVacaciones", v)}
-                  validated={politicas.politicaVacacionesValidated}
-                  onValidatedChange={(v) => updatePoliticas("politicaVacacionesValidated", v)}
-                  testId="input-politica-vacaciones"
+                  label="Trabajadores con Crédito"
+                  value={infonavit.trabajadoresConCredito || ""}
+                  onChange={(v) => updateInfonavit("trabajadoresConCredito", v)}
+                  validated={infonavit.trabajadoresConCreditoValidated}
+                  onValidatedChange={(v) => updateInfonavit("trabajadoresConCreditoValidated", v)}
+                  testId="input-trab-con-credito"
+                  type="number"
                 />
                 <TextField
-                  label="Política de Tiempo Extra"
-                  value={politicas.politicaTiempoExtra || ""}
-                  onChange={(v) => updatePoliticas("politicaTiempoExtra", v)}
-                  validated={politicas.politicaTiempoExtraValidated}
-                  onValidatedChange={(v) => updatePoliticas("politicaTiempoExtraValidated", v)}
-                  testId="input-politica-tiempo-extra"
+                  label="Monto Mensual Retenciones"
+                  value={infonavit.montoMensualRetenciones || ""}
+                  onChange={(v) => updateInfonavit("montoMensualRetenciones", v)}
+                  validated={infonavit.montoMensualRetencionesValidated}
+                  onValidatedChange={(v) => updateInfonavit("montoMensualRetencionesValidated", v)}
+                  testId="input-monto-retenciones"
                 />
               </div>
 
               <TextField
-                label="Protocolo contra Hostigamiento"
-                value={politicas.protocoloHostigamiento || ""}
-                onChange={(v) => updatePoliticas("protocoloHostigamiento", v)}
-                validated={politicas.protocoloHostigamientoValidated}
-                onValidatedChange={(v) => updatePoliticas("protocoloHostigamientoValidated", v)}
-                testId="input-protocolo-hostigamiento"
+                label="Aportaciones Patronales al Corriente"
+                value={infonavit.aportacionesAlCorriente || ""}
+                onChange={(v) => updateInfonavit("aportacionesAlCorriente", v)}
+                validated={infonavit.aportacionesAlCorrienteValidated}
+                onValidatedChange={(v) => updateInfonavit("aportacionesAlCorrienteValidated", v)}
+                testId="input-aportaciones-corriente"
               />
 
               <TextAreaField
-                label="Observaciones sobre Políticas"
-                value={politicas.observaciones || ""}
-                onChange={(v) => updatePoliticas("observaciones", v)}
-                testId="input-observaciones-politicas"
+                label="Observaciones Infonavit"
+                value={infonavit.observaciones || ""}
+                onChange={(v) => updateInfonavit("observaciones", v)}
+                testId="input-observaciones-infonavit"
                 rows={3}
               />
             </CardContent>

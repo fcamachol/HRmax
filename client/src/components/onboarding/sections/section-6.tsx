@@ -8,24 +8,24 @@ export function Section6() {
   const { audit, updateSection } = useOnboarding();
 
   const section6 = (audit?.section6 || {}) as any;
-  const contratos = section6.contratos || {};
-  const expedientes = section6.expedientes || {};
+  const nomina = section6.nomina || {};
+  const compensacion = section6.compensacion || {};
 
-  const updateContratos = (field: string, value: string | boolean) => {
+  const updateNomina = (field: string, value: string | boolean) => {
     updateSection("section6", {
       ...section6,
-      contratos: {
-        ...contratos,
+      nomina: {
+        ...nomina,
         [field]: value,
       },
     });
   };
 
-  const updateExpedientes = (field: string, value: string | boolean) => {
+  const updateCompensacion = (field: string, value: string | boolean) => {
     updateSection("section6", {
       ...section6,
-      expedientes: {
-        ...expedientes,
+      compensacion: {
+        ...compensacion,
         [field]: value,
       },
     });
@@ -35,114 +35,133 @@ export function Section6() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={6}
-        title="Documentación Laboral"
-        subtitle="Contratos, expedientes y documentación legal"
+        title="Nómina y Compensaciones"
+        subtitle="Estructura de nómina y prestaciones"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Contratos de Trabajo</CardTitle>
+              <CardTitle className="text-lg">Información de Nómina</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Tipo de Contrato Principal"
-                  value={contratos.tipoContratoPrincipal || ""}
-                  onChange={(v) => updateContratos("tipoContratoPrincipal", v)}
-                  validated={contratos.tipoContratoPrincipalValidated}
-                  onValidatedChange={(v) => updateContratos("tipoContratoPrincipalValidated", v)}
-                  testId="input-tipo-contrato"
+                  label="Sistema de Nómina Actual"
+                  value={nomina.sistemaActual || ""}
+                  onChange={(v) => updateNomina("sistemaActual", v)}
+                  validated={nomina.sistemaActualValidated}
+                  onValidatedChange={(v) => updateNomina("sistemaActualValidated", v)}
+                  testId="input-sistema-nomina"
                 />
                 <TextField
-                  label="Contratos Firmados (%)"
-                  value={contratos.contratosFirmados || ""}
-                  onChange={(v) => updateContratos("contratosFirmados", v)}
-                  validated={contratos.contratosFirmadosValidated}
-                  onValidatedChange={(v) => updateContratos("contratosFirmadosValidated", v)}
-                  testId="input-contratos-firmados"
+                  label="Periodicidad de Pago"
+                  value={nomina.periodicidadPago || ""}
+                  onChange={(v) => updateNomina("periodicidadPago", v)}
+                  validated={nomina.periodicidadPagoValidated}
+                  onValidatedChange={(v) => updateNomina("periodicidadPagoValidated", v)}
+                  testId="input-periodicidad-pago"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Contratos por Tiempo Indeterminado"
-                  value={contratos.contratosIndeterminado || ""}
-                  onChange={(v) => updateContratos("contratosIndeterminado", v)}
-                  validated={contratos.contratosIndeterminadoValidated}
-                  onValidatedChange={(v) => updateContratos("contratosIndeterminadoValidated", v)}
-                  testId="input-contratos-indet"
-                  type="number"
+                  label="Monto Nómina Mensual Aproximado"
+                  value={nomina.montoMensual || ""}
+                  onChange={(v) => updateNomina("montoMensual", v)}
+                  validated={nomina.montoMensualValidated}
+                  onValidatedChange={(v) => updateNomina("montoMensualValidated", v)}
+                  testId="input-monto-mensual"
                 />
                 <TextField
-                  label="Contratos por Tiempo Determinado"
-                  value={contratos.contratosDeterminado || ""}
-                  onChange={(v) => updateContratos("contratosDeterminado", v)}
-                  validated={contratos.contratosDeterminadoValidated}
-                  onValidatedChange={(v) => updateContratos("contratosDeterminadoValidated", v)}
-                  testId="input-contratos-det"
-                  type="number"
+                  label="Fecha de Corte de Nómina"
+                  value={nomina.fechaCorte || ""}
+                  onChange={(v) => updateNomina("fechaCorte", v)}
+                  validated={nomina.fechaCorteValidated}
+                  onValidatedChange={(v) => updateNomina("fechaCorteValidated", v)}
+                  testId="input-fecha-corte"
                 />
               </div>
 
-              <TextField
-                label="Fecha Última Actualización de Contrato Modelo"
-                value={contratos.fechaActualizacionModelo || ""}
-                onChange={(v) => updateContratos("fechaActualizacionModelo", v)}
-                validated={contratos.fechaActualizacionModeloValidated}
-                onValidatedChange={(v) => updateContratos("fechaActualizacionModeloValidated", v)}
-                testId="input-fecha-actualizacion"
-                type="date"
-              />
-
-              <TextAreaField
-                label="Observaciones sobre Contratos"
-                value={contratos.observaciones || ""}
-                onChange={(v) => updateContratos("observaciones", v)}
-                testId="input-observaciones-contratos"
-                rows={3}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Banco Principal para Dispersión"
+                  value={nomina.bancoDispersion || ""}
+                  onChange={(v) => updateNomina("bancoDispersion", v)}
+                  validated={nomina.bancoDispersionValidated}
+                  onValidatedChange={(v) => updateNomina("bancoDispersionValidated", v)}
+                  testId="input-banco-dispersion"
+                />
+                <TextField
+                  label="PAC para Timbrado CFDI"
+                  value={nomina.pacTimbrado || ""}
+                  onChange={(v) => updateNomina("pacTimbrado", v)}
+                  validated={nomina.pacTimbradoValidated}
+                  onValidatedChange={(v) => updateNomina("pacTimbradoValidated", v)}
+                  testId="input-pac-timbrado"
+                />
+              </div>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Expedientes de Personal</CardTitle>
+              <CardTitle className="text-lg">Estructura de Compensación</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Expedientes Completos (%)"
-                  value={expedientes.expedientesCompletos || ""}
-                  onChange={(v) => updateExpedientes("expedientesCompletos", v)}
-                  validated={expedientes.expedientesCompletosValidated}
-                  onValidatedChange={(v) => updateExpedientes("expedientesCompletosValidated", v)}
-                  testId="input-expedientes-completos"
+                  label="Esquema de Pago (Bruto/Neto)"
+                  value={compensacion.esquemaPago || ""}
+                  onChange={(v) => updateCompensacion("esquemaPago", v)}
+                  validated={compensacion.esquemaPagoValidated}
+                  onValidatedChange={(v) => updateCompensacion("esquemaPagoValidated", v)}
+                  testId="input-esquema-pago"
                 />
                 <TextField
-                  label="Formato de Almacenamiento"
-                  value={expedientes.formatoAlmacenamiento || ""}
-                  onChange={(v) => updateExpedientes("formatoAlmacenamiento", v)}
-                  validated={expedientes.formatoAlmacenamientoValidated}
-                  onValidatedChange={(v) => updateExpedientes("formatoAlmacenamientoValidated", v)}
-                  testId="input-formato-almacenamiento"
+                  label="Salario Mínimo Aplicable"
+                  value={compensacion.salarioMinimo || ""}
+                  onChange={(v) => updateCompensacion("salarioMinimo", v)}
+                  validated={compensacion.salarioMinimoValidated}
+                  onValidatedChange={(v) => updateCompensacion("salarioMinimoValidated", v)}
+                  testId="input-salario-minimo"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Aguinaldo (días)"
+                  value={compensacion.aguinaldoDias || ""}
+                  onChange={(v) => updateCompensacion("aguinaldoDias", v)}
+                  validated={compensacion.aguinaldoDiasValidated}
+                  onValidatedChange={(v) => updateCompensacion("aguinaldoDiasValidated", v)}
+                  testId="input-aguinaldo-dias"
+                  type="number"
+                />
+                <TextField
+                  label="Prima Vacacional (%)"
+                  value={compensacion.primaVacacional || ""}
+                  onChange={(v) => updateCompensacion("primaVacacional", v)}
+                  validated={compensacion.primaVacacionalValidated}
+                  onValidatedChange={(v) => updateCompensacion("primaVacacionalValidated", v)}
+                  testId="input-prima-vacacional"
                 />
               </div>
 
               <TextAreaField
-                label="Documentos Incluidos en Expedientes"
-                value={expedientes.documentosIncluidos || ""}
-                onChange={(v) => updateExpedientes("documentosIncluidos", v)}
-                testId="input-documentos-incluidos"
-                rows={4}
+                label="Conceptos de Nómina Principales"
+                value={compensacion.conceptosPrincipales || ""}
+                onChange={(v) => updateCompensacion("conceptosPrincipales", v)}
+                testId="input-conceptos-principales"
+                rows={3}
               />
 
               <TextAreaField
-                label="Observaciones sobre Expedientes"
-                value={expedientes.observaciones || ""}
-                onChange={(v) => updateExpedientes("observaciones", v)}
-                testId="input-observaciones-expedientes"
+                label="Observaciones sobre Compensación"
+                value={compensacion.observaciones || ""}
+                onChange={(v) => updateCompensacion("observaciones", v)}
+                testId="input-observaciones-compensacion"
                 rows={3}
               />
             </CardContent>

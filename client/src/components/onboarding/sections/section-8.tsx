@@ -8,24 +8,24 @@ export function Section8() {
   const { audit, updateSection } = useOnboarding();
 
   const section8 = (audit?.section8 || {}) as any;
-  const prestaciones = section8.prestaciones || {};
-  const beneficios = section8.beneficios || {};
+  const seguridad = section8.seguridad || {};
+  const comisiones = section8.comisiones || {};
 
-  const updatePrestaciones = (field: string, value: string | boolean) => {
+  const updateSeguridad = (field: string, value: string | boolean) => {
     updateSection("section8", {
       ...section8,
-      prestaciones: {
-        ...prestaciones,
+      seguridad: {
+        ...seguridad,
         [field]: value,
       },
     });
   };
 
-  const updateBeneficios = (field: string, value: string | boolean) => {
+  const updateComisiones = (field: string, value: string | boolean) => {
     updateSection("section8", {
       ...section8,
-      beneficios: {
-        ...beneficios,
+      comisiones: {
+        ...comisiones,
         [field]: value,
       },
     });
@@ -35,62 +35,70 @@ export function Section8() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={8}
-        title="Prestaciones y Beneficios"
-        subtitle="Prestaciones de ley y superiores"
+        title="Seguridad e Higiene"
+        subtitle="Normas de seguridad y comisiones"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Prestaciones de Ley</CardTitle>
+              <CardTitle className="text-lg">Normas de Seguridad</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Aguinaldo (días)"
-                  value={prestaciones.aguinaldoDias || ""}
-                  onChange={(v) => updatePrestaciones("aguinaldoDias", v)}
-                  validated={prestaciones.aguinaldoDiasValidated}
-                  onValidatedChange={(v) => updatePrestaciones("aguinaldoDiasValidated", v)}
-                  testId="input-aguinaldo-dias"
-                  type="number"
+                  label="Reglamento de Seguridad Documentado"
+                  value={seguridad.reglamentoDocumentado || ""}
+                  onChange={(v) => updateSeguridad("reglamentoDocumentado", v)}
+                  validated={seguridad.reglamentoDocumentadoValidated}
+                  onValidatedChange={(v) => updateSeguridad("reglamentoDocumentadoValidated", v)}
+                  testId="input-reglamento-seguridad"
                 />
                 <TextField
-                  label="Prima Vacacional (%)"
-                  value={prestaciones.primaVacacional || ""}
-                  onChange={(v) => updatePrestaciones("primaVacacional", v)}
-                  validated={prestaciones.primaVacacionalValidated}
-                  onValidatedChange={(v) => updatePrestaciones("primaVacacionalValidated", v)}
-                  testId="input-prima-vacacional"
+                  label="NOM-001 a NOM-030 Aplicables"
+                  value={seguridad.nomsAplicables || ""}
+                  onChange={(v) => updateSeguridad("nomsAplicables", v)}
+                  validated={seguridad.nomsAplicablesValidated}
+                  onValidatedChange={(v) => updateSeguridad("nomsAplicablesValidated", v)}
+                  testId="input-noms-aplicables"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Días de Vacaciones (primer año)"
-                  value={prestaciones.vacacionesPrimerAnio || ""}
-                  onChange={(v) => updatePrestaciones("vacacionesPrimerAnio", v)}
-                  validated={prestaciones.vacacionesPrimerAnioValidated}
-                  onValidatedChange={(v) => updatePrestaciones("vacacionesPrimerAnioValidated", v)}
-                  testId="input-vacaciones-primer-anio"
-                  type="number"
+                  label="Equipo de Protección Personal"
+                  value={seguridad.epp || ""}
+                  onChange={(v) => updateSeguridad("epp", v)}
+                  validated={seguridad.eppValidated}
+                  onValidatedChange={(v) => updateSeguridad("eppValidated", v)}
+                  testId="input-epp"
                 />
                 <TextField
-                  label="PTU Pagado Último Año"
-                  value={prestaciones.ptuUltimoAnio || ""}
-                  onChange={(v) => updatePrestaciones("ptuUltimoAnio", v)}
-                  validated={prestaciones.ptuUltimoAnioValidated}
-                  onValidatedChange={(v) => updatePrestaciones("ptuUltimoAnioValidated", v)}
-                  testId="input-ptu-ultimo-anio"
+                  label="Accidentes Último Año"
+                  value={seguridad.accidentesUltimoAnio || ""}
+                  onChange={(v) => updateSeguridad("accidentesUltimoAnio", v)}
+                  validated={seguridad.accidentesUltimoAnioValidated}
+                  onValidatedChange={(v) => updateSeguridad("accidentesUltimoAnioValidated", v)}
+                  testId="input-accidentes"
+                  type="number"
                 />
               </div>
 
+              <TextField
+                label="Plan de Emergencia Documentado"
+                value={seguridad.planEmergencia || ""}
+                onChange={(v) => updateSeguridad("planEmergencia", v)}
+                validated={seguridad.planEmergenciaValidated}
+                onValidatedChange={(v) => updateSeguridad("planEmergenciaValidated", v)}
+                testId="input-plan-emergencia"
+              />
+
               <TextAreaField
-                label="Observaciones Prestaciones de Ley"
-                value={prestaciones.observaciones || ""}
-                onChange={(v) => updatePrestaciones("observaciones", v)}
-                testId="input-observaciones-prestaciones"
+                label="Observaciones de Seguridad"
+                value={seguridad.observaciones || ""}
+                onChange={(v) => updateSeguridad("observaciones", v)}
+                testId="input-observaciones-seguridad"
                 rows={3}
               />
             </CardContent>
@@ -98,60 +106,53 @@ export function Section8() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Beneficios Superiores a Ley</CardTitle>
+              <CardTitle className="text-lg">Comisiones Mixtas</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Vales de Despensa"
-                  value={beneficios.valesDespensa || ""}
-                  onChange={(v) => updateBeneficios("valesDespensa", v)}
-                  validated={beneficios.valesDespensaValidated}
-                  onValidatedChange={(v) => updateBeneficios("valesDespensaValidated", v)}
-                  testId="input-vales-despensa"
+                  label="Comisión Mixta de Seguridad e Higiene"
+                  value={comisiones.comisionSeguridad || ""}
+                  onChange={(v) => updateComisiones("comisionSeguridad", v)}
+                  validated={comisiones.comisionSeguridadValidated}
+                  onValidatedChange={(v) => updateComisiones("comisionSeguridadValidated", v)}
+                  testId="input-comision-seguridad"
                 />
                 <TextField
-                  label="Seguro de Gastos Médicos"
-                  value={beneficios.seguroGastosMedicos || ""}
-                  onChange={(v) => updateBeneficios("seguroGastosMedicos", v)}
-                  validated={beneficios.seguroGastosMedicosValidated}
-                  onValidatedChange={(v) => updateBeneficios("seguroGastosMedicosValidated", v)}
-                  testId="input-seguro-gastos-medicos"
+                  label="Última Acta de Comisión"
+                  value={comisiones.ultimaActa || ""}
+                  onChange={(v) => updateComisiones("ultimaActa", v)}
+                  validated={comisiones.ultimaActaValidated}
+                  onValidatedChange={(v) => updateComisiones("ultimaActaValidated", v)}
+                  testId="input-ultima-acta"
+                  type="date"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Fondo de Ahorro"
-                  value={beneficios.fondoAhorro || ""}
-                  onChange={(v) => updateBeneficios("fondoAhorro", v)}
-                  validated={beneficios.fondoAhorroValidated}
-                  onValidatedChange={(v) => updateBeneficios("fondoAhorroValidated", v)}
-                  testId="input-fondo-ahorro"
+                  label="Comisión de Capacitación y Adiestramiento"
+                  value={comisiones.comisionCapacitacion || ""}
+                  onChange={(v) => updateComisiones("comisionCapacitacion", v)}
+                  validated={comisiones.comisionCapacitacionValidated}
+                  onValidatedChange={(v) => updateComisiones("comisionCapacitacionValidated", v)}
+                  testId="input-comision-capacitacion"
                 />
                 <TextField
-                  label="Seguro de Vida"
-                  value={beneficios.seguroVida || ""}
-                  onChange={(v) => updateBeneficios("seguroVida", v)}
-                  validated={beneficios.seguroVidaValidated}
-                  onValidatedChange={(v) => updateBeneficios("seguroVidaValidated", v)}
-                  testId="input-seguro-vida"
+                  label="Recorridos de Verificación"
+                  value={comisiones.recorridosVerificacion || ""}
+                  onChange={(v) => updateComisiones("recorridosVerificacion", v)}
+                  validated={comisiones.recorridosVerificacionValidated}
+                  onValidatedChange={(v) => updateComisiones("recorridosVerificacionValidated", v)}
+                  testId="input-recorridos"
                 />
               </div>
 
               <TextAreaField
-                label="Otros Beneficios"
-                value={beneficios.otrosBeneficios || ""}
-                onChange={(v) => updateBeneficios("otrosBeneficios", v)}
-                testId="input-otros-beneficios"
-                rows={4}
-              />
-
-              <TextAreaField
-                label="Observaciones sobre Beneficios"
-                value={beneficios.observaciones || ""}
-                onChange={(v) => updateBeneficios("observaciones", v)}
-                testId="input-observaciones-beneficios"
+                label="Observaciones sobre Comisiones"
+                value={comisiones.observaciones || ""}
+                onChange={(v) => updateComisiones("observaciones", v)}
+                testId="input-observaciones-comisiones"
                 rows={3}
               />
             </CardContent>

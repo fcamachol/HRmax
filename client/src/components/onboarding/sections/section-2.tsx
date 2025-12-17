@@ -8,24 +8,24 @@ export function Section2() {
   const { audit, updateSection } = useOnboarding();
 
   const section2 = (audit?.section2 || {}) as any;
-  const orgStructure = section2.orgStructure || {};
-  const departments = section2.departments || {};
+  const obligaciones = section2.obligaciones || {};
+  const normatividad = section2.normatividad || {};
 
-  const updateOrgStructure = (field: string, value: string | boolean) => {
+  const updateObligaciones = (field: string, value: string | boolean) => {
     updateSection("section2", {
       ...section2,
-      orgStructure: {
-        ...orgStructure,
+      obligaciones: {
+        ...obligaciones,
         [field]: value,
       },
     });
   };
 
-  const updateDepartments = (field: string, value: string | boolean) => {
+  const updateNormatividad = (field: string, value: string | boolean) => {
     updateSection("section2", {
       ...section2,
-      departments: {
-        ...departments,
+      normatividad: {
+        ...normatividad,
         [field]: value,
       },
     });
@@ -35,64 +35,61 @@ export function Section2() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={2}
-        title="Estructura Organizacional"
-        subtitle="Organización interna y estructura departamental"
+        title="Cumplimiento Laboral"
+        subtitle="Obligaciones laborales y cumplimiento normativo"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Estructura Organizacional</CardTitle>
+              <CardTitle className="text-lg">Obligaciones Laborales</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Número Total de Empleados"
-                  value={orgStructure.totalEmpleados || ""}
-                  onChange={(v) => updateOrgStructure("totalEmpleados", v)}
-                  validated={orgStructure.totalEmpleadosValidated}
-                  onValidatedChange={(v) => updateOrgStructure("totalEmpleadosValidated", v)}
-                  testId="input-total-empleados"
-                  type="number"
+                  label="Ley Federal del Trabajo Aplicada"
+                  value={obligaciones.lftAplicada || ""}
+                  onChange={(v) => updateObligaciones("lftAplicada", v)}
+                  validated={obligaciones.lftAplicadaValidated}
+                  onValidatedChange={(v) => updateObligaciones("lftAplicadaValidated", v)}
+                  testId="input-lft-aplicada"
                 />
                 <TextField
-                  label="Número de Sucursales/Plantas"
-                  value={orgStructure.numSucursales || ""}
-                  onChange={(v) => updateOrgStructure("numSucursales", v)}
-                  validated={orgStructure.numSucursalesValidated}
-                  onValidatedChange={(v) => updateOrgStructure("numSucursalesValidated", v)}
-                  testId="input-num-sucursales"
-                  type="number"
+                  label="Contrato Colectivo de Trabajo"
+                  value={obligaciones.contratoColectivo || ""}
+                  onChange={(v) => updateObligaciones("contratoColectivo", v)}
+                  validated={obligaciones.contratoColectivoValidated}
+                  onValidatedChange={(v) => updateObligaciones("contratoColectivoValidated", v)}
+                  testId="input-contrato-colectivo"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Empleados Sindicalizados"
-                  value={orgStructure.empleadosSindicalizados || ""}
-                  onChange={(v) => updateOrgStructure("empleadosSindicalizados", v)}
-                  validated={orgStructure.empleadosSindicalizadosValidated}
-                  onValidatedChange={(v) => updateOrgStructure("empleadosSindicalizadosValidated", v)}
-                  testId="input-empleados-sindicalizados"
-                  type="number"
+                  label="Sindicato (si aplica)"
+                  value={obligaciones.sindicato || ""}
+                  onChange={(v) => updateObligaciones("sindicato", v)}
+                  validated={obligaciones.sindicatoValidated}
+                  onValidatedChange={(v) => updateObligaciones("sindicatoValidated", v)}
+                  testId="input-sindicato"
                 />
                 <TextField
-                  label="Empleados de Confianza"
-                  value={orgStructure.empleadosConfianza || ""}
-                  onChange={(v) => updateOrgStructure("empleadosConfianza", v)}
-                  validated={orgStructure.empleadosConfianzaValidated}
-                  onValidatedChange={(v) => updateOrgStructure("empleadosConfianzaValidated", v)}
-                  testId="input-empleados-confianza"
-                  type="number"
+                  label="Fecha Último Acuerdo Sindical"
+                  value={obligaciones.fechaAcuerdoSindical || ""}
+                  onChange={(v) => updateObligaciones("fechaAcuerdoSindical", v)}
+                  validated={obligaciones.fechaAcuerdoSindicalValidated}
+                  onValidatedChange={(v) => updateObligaciones("fechaAcuerdoSindicalValidated", v)}
+                  testId="input-fecha-acuerdo"
+                  type="date"
                 />
               </div>
 
               <TextAreaField
-                label="Niveles Jerárquicos"
-                value={orgStructure.nivelesJerarquicos || ""}
-                onChange={(v) => updateOrgStructure("nivelesJerarquicos", v)}
-                testId="input-niveles-jerarquicos"
+                label="Obligaciones Pendientes Identificadas"
+                value={obligaciones.obligacionesPendientes || ""}
+                onChange={(v) => updateObligaciones("obligacionesPendientes", v)}
+                testId="input-obligaciones-pendientes"
                 rows={3}
               />
             </CardContent>
@@ -100,31 +97,53 @@ export function Section2() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Departamentos Principales</CardTitle>
+              <CardTitle className="text-lg">Cumplimiento Normativo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <TextAreaField
-                label="Lista de Departamentos"
-                value={departments.listaDepartamentos || ""}
-                onChange={(v) => updateDepartments("listaDepartamentos", v)}
-                testId="input-lista-departamentos"
-                rows={4}
-              />
-              
-              <TextField
-                label="Departamento con Más Personal"
-                value={departments.deptoMasPersonal || ""}
-                onChange={(v) => updateDepartments("deptoMasPersonal", v)}
-                validated={departments.deptoMasPersonalValidated}
-                onValidatedChange={(v) => updateDepartments("deptoMasPersonalValidated", v)}
-                testId="input-depto-mas-personal"
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="NOM-035 Implementada"
+                  value={normatividad.nom035 || ""}
+                  onChange={(v) => updateNormatividad("nom035", v)}
+                  validated={normatividad.nom035Validated}
+                  onValidatedChange={(v) => updateNormatividad("nom035Validated", v)}
+                  testId="input-nom035"
+                />
+                <TextField
+                  label="Fecha Última Evaluación NOM-035"
+                  value={normatividad.fechaNom035 || ""}
+                  onChange={(v) => updateNormatividad("fechaNom035", v)}
+                  validated={normatividad.fechaNom035Validated}
+                  onValidatedChange={(v) => updateNormatividad("fechaNom035Validated", v)}
+                  testId="input-fecha-nom035"
+                  type="date"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Igualdad Laboral y No Discriminación"
+                  value={normatividad.igualdadLaboral || ""}
+                  onChange={(v) => updateNormatividad("igualdadLaboral", v)}
+                  validated={normatividad.igualdadLaboralValidated}
+                  onValidatedChange={(v) => updateNormatividad("igualdadLaboralValidated", v)}
+                  testId="input-igualdad-laboral"
+                />
+                <TextField
+                  label="Protocolo Hostigamiento/Acoso"
+                  value={normatividad.protocoloHostigamiento || ""}
+                  onChange={(v) => updateNormatividad("protocoloHostigamiento", v)}
+                  validated={normatividad.protocoloHostigamientoValidated}
+                  onValidatedChange={(v) => updateNormatividad("protocoloHostigamientoValidated", v)}
+                  testId="input-protocolo-hostigamiento"
+                />
+              </div>
 
               <TextAreaField
-                label="Observaciones sobre Estructura"
-                value={departments.observaciones || ""}
-                onChange={(v) => updateDepartments("observaciones", v)}
-                testId="input-observaciones-estructura"
+                label="Observaciones sobre Cumplimiento"
+                value={normatividad.observaciones || ""}
+                onChange={(v) => updateNormatividad("observaciones", v)}
+                testId="input-observaciones-cumplimiento"
                 rows={3}
               />
             </CardContent>

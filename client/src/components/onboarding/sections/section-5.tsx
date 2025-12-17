@@ -8,24 +8,24 @@ export function Section5() {
   const { audit, updateSection } = useOnboarding();
 
   const section5 = (audit?.section5 || {}) as any;
-  const sat = section5.sat || {};
-  const obligaciones = section5.obligaciones || {};
+  const asistencia = section5.asistencia || {};
+  const jornada = section5.jornada || {};
 
-  const updateSat = (field: string, value: string | boolean) => {
+  const updateAsistencia = (field: string, value: string | boolean) => {
     updateSection("section5", {
       ...section5,
-      sat: {
-        ...sat,
+      asistencia: {
+        ...asistencia,
         [field]: value,
       },
     });
   };
 
-  const updateObligaciones = (field: string, value: string | boolean) => {
+  const updateJornada = (field: string, value: string | boolean) => {
     updateSection("section5", {
       ...section5,
-      obligaciones: {
-        ...obligaciones,
+      jornada: {
+        ...jornada,
         [field]: value,
       },
     });
@@ -35,116 +35,121 @@ export function Section5() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={5}
-        title="Obligaciones Fiscales"
-        subtitle="SAT, retenciones y cumplimiento fiscal"
+        title="Tiempo y Asistencia"
+        subtitle="Control de asistencia y jornada laboral"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Información SAT</CardTitle>
+              <CardTitle className="text-lg">Control de Asistencia</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Régimen Fiscal"
-                  value={sat.regimenFiscal || ""}
-                  onChange={(v) => updateSat("regimenFiscal", v)}
-                  validated={sat.regimenFiscalValidated}
-                  onValidatedChange={(v) => updateSat("regimenFiscalValidated", v)}
-                  testId="input-regimen-sat"
+                  label="Sistema de Control de Asistencia"
+                  value={asistencia.sistemaControl || ""}
+                  onChange={(v) => updateAsistencia("sistemaControl", v)}
+                  validated={asistencia.sistemaControlValidated}
+                  onValidatedChange={(v) => updateAsistencia("sistemaControlValidated", v)}
+                  testId="input-sistema-control"
                 />
                 <TextField
-                  label="e.firma Vigente Hasta"
-                  value={sat.efirmaVigencia || ""}
-                  onChange={(v) => updateSat("efirmaVigencia", v)}
-                  validated={sat.efirmaVigenciaValidated}
-                  onValidatedChange={(v) => updateSat("efirmaVigenciaValidated", v)}
-                  testId="input-efirma-vigencia"
-                  type="date"
+                  label="Tipo de Registro (Biométrico, Tarjeta, etc.)"
+                  value={asistencia.tipoRegistro || ""}
+                  onChange={(v) => updateAsistencia("tipoRegistro", v)}
+                  validated={asistencia.tipoRegistroValidated}
+                  onValidatedChange={(v) => updateAsistencia("tipoRegistroValidated", v)}
+                  testId="input-tipo-registro"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="CSD Vigente Hasta"
-                  value={sat.csdVigencia || ""}
-                  onChange={(v) => updateSat("csdVigencia", v)}
-                  validated={sat.csdVigenciaValidated}
-                  onValidatedChange={(v) => updateSat("csdVigenciaValidated", v)}
-                  testId="input-csd-vigencia"
-                  type="date"
+                  label="Ausentismo Promedio (%)"
+                  value={asistencia.ausentismoPromedio || ""}
+                  onChange={(v) => updateAsistencia("ausentismoPromedio", v)}
+                  validated={asistencia.ausentismoPromedioValidated}
+                  onValidatedChange={(v) => updateAsistencia("ausentismoPromedioValidated", v)}
+                  testId="input-ausentismo"
                 />
                 <TextField
-                  label="PAC para Timbrado"
-                  value={sat.pacTimbrado || ""}
-                  onChange={(v) => updateSat("pacTimbrado", v)}
-                  validated={sat.pacTimbradoValidated}
-                  onValidatedChange={(v) => updateSat("pacTimbradoValidated", v)}
-                  testId="input-pac-timbrado"
+                  label="Retardos Promedio Mensual"
+                  value={asistencia.retardosPromedio || ""}
+                  onChange={(v) => updateAsistencia("retardosPromedio", v)}
+                  validated={asistencia.retardosPromedioValidated}
+                  onValidatedChange={(v) => updateAsistencia("retardosPromedioValidated", v)}
+                  testId="input-retardos"
                 />
               </div>
 
-              <TextField
-                label="Buzón Tributario Activo"
-                value={sat.buzonTributario || ""}
-                onChange={(v) => updateSat("buzonTributario", v)}
-                validated={sat.buzonTributarioValidated}
-                onValidatedChange={(v) => updateSat("buzonTributarioValidated", v)}
-                testId="input-buzon-tributario"
+              <TextAreaField
+                label="Política de Faltas y Retardos"
+                value={asistencia.politicaFaltas || ""}
+                onChange={(v) => updateAsistencia("politicaFaltas", v)}
+                testId="input-politica-faltas"
+                rows={3}
               />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Obligaciones Fiscales Laborales</CardTitle>
+              <CardTitle className="text-lg">Jornada Laboral</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Declaración Anual ISR (Último Ejercicio)"
-                  value={obligaciones.declaracionAnualIsr || ""}
-                  onChange={(v) => updateObligaciones("declaracionAnualIsr", v)}
-                  validated={obligaciones.declaracionAnualIsrValidated}
-                  onValidatedChange={(v) => updateObligaciones("declaracionAnualIsrValidated", v)}
-                  testId="input-declaracion-isr"
+                  label="Jornada Diurna (horas)"
+                  value={jornada.jornadaDiurna || ""}
+                  onChange={(v) => updateJornada("jornadaDiurna", v)}
+                  validated={jornada.jornadaDiurnaValidated}
+                  onValidatedChange={(v) => updateJornada("jornadaDiurnaValidated", v)}
+                  testId="input-jornada-diurna"
                 />
                 <TextField
-                  label="Declaraciones Provisionales al Día"
-                  value={obligaciones.declaracionesProvisionales || ""}
-                  onChange={(v) => updateObligaciones("declaracionesProvisionales", v)}
-                  validated={obligaciones.declaracionesProvisonalesValidated}
-                  onValidatedChange={(v) => updateObligaciones("declaracionesProvisonalesValidated", v)}
-                  testId="input-declaraciones-prov"
+                  label="Jornada Nocturna (horas)"
+                  value={jornada.jornadaNocturna || ""}
+                  onChange={(v) => updateJornada("jornadaNocturna", v)}
+                  validated={jornada.jornadaNocturnaValidated}
+                  onValidatedChange={(v) => updateJornada("jornadaNocturnaValidated", v)}
+                  testId="input-jornada-nocturna"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Constancias de Retención Emitidas"
-                  value={obligaciones.constanciasRetencion || ""}
-                  onChange={(v) => updateObligaciones("constanciasRetencion", v)}
-                  validated={obligaciones.constanciasRetencionValidated}
-                  onValidatedChange={(v) => updateObligaciones("constanciasRetencionValidated", v)}
-                  testId="input-constancias"
+                  label="Horas Extra Promedio Mensual"
+                  value={jornada.horasExtraPromedio || ""}
+                  onChange={(v) => updateJornada("horasExtraPromedio", v)}
+                  validated={jornada.horasExtraPromedioValidated}
+                  onValidatedChange={(v) => updateJornada("horasExtraPromedioValidated", v)}
+                  testId="input-horas-extra"
                 />
                 <TextField
-                  label="Subsidio al Empleo Aplicado"
-                  value={obligaciones.subsidioEmpleo || ""}
-                  onChange={(v) => updateObligaciones("subsidioEmpleo", v)}
-                  validated={obligaciones.subsidioEmpleoValidated}
-                  onValidatedChange={(v) => updateObligaciones("subsidioEmpleoValidated", v)}
-                  testId="input-subsidio"
+                  label="Días de Descanso Semanal"
+                  value={jornada.diasDescanso || ""}
+                  onChange={(v) => updateJornada("diasDescanso", v)}
+                  validated={jornada.diasDescansoValidated}
+                  onValidatedChange={(v) => updateJornada("diasDescansoValidated", v)}
+                  testId="input-dias-descanso"
                 />
               </div>
 
               <TextAreaField
-                label="Observaciones Fiscales"
-                value={obligaciones.observaciones || ""}
-                onChange={(v) => updateObligaciones("observaciones", v)}
-                testId="input-observaciones-fiscales"
+                label="Turnos de Trabajo Existentes"
+                value={jornada.turnosTrabajo || ""}
+                onChange={(v) => updateJornada("turnosTrabajo", v)}
+                testId="input-turnos-trabajo"
+                rows={3}
+              />
+
+              <TextAreaField
+                label="Observaciones sobre Jornada"
+                value={jornada.observaciones || ""}
+                onChange={(v) => updateJornada("observaciones", v)}
+                testId="input-observaciones-jornada"
                 rows={3}
               />
             </CardContent>

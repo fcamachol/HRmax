@@ -8,24 +8,24 @@ export function Section11() {
   const { audit, updateSection } = useOnboarding();
 
   const section11 = (audit?.section11 || {}) as any;
-  const observaciones = section11.observaciones || {};
-  const recomendaciones = section11.recomendaciones || {};
+  const hallazgos = section11.hallazgos || {};
+  const remediacion = section11.remediacion || {};
 
-  const updateObservaciones = (field: string, value: string | boolean) => {
+  const updateHallazgos = (field: string, value: string | boolean) => {
     updateSection("section11", {
       ...section11,
-      observaciones: {
-        ...observaciones,
+      hallazgos: {
+        ...hallazgos,
         [field]: value,
       },
     });
   };
 
-  const updateRecomendaciones = (field: string, value: string | boolean) => {
+  const updateRemediacion = (field: string, value: string | boolean) => {
     updateSection("section11", {
       ...section11,
-      recomendaciones: {
-        ...recomendaciones,
+      remediacion: {
+        ...remediacion,
         [field]: value,
       },
     });
@@ -35,8 +35,8 @@ export function Section11() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={11}
-        title="Observaciones Generales"
-        subtitle="Hallazgos y áreas de mejora identificadas"
+        title="Hallazgos y Remediación"
+        subtitle="Observaciones y plan de acción"
       />
 
       <ScrollArea className="flex-1 p-6">
@@ -47,76 +47,87 @@ export function Section11() {
             </CardHeader>
             <CardContent className="space-y-4">
               <TextAreaField
+                label="Hallazgos Críticos"
+                value={hallazgos.criticos || ""}
+                onChange={(v) => updateHallazgos("criticos", v)}
+                testId="input-hallazgos-criticos"
+                rows={4}
+              />
+
+              <TextAreaField
+                label="Hallazgos de Riesgo Medio"
+                value={hallazgos.riesgoMedio || ""}
+                onChange={(v) => updateHallazgos("riesgoMedio", v)}
+                testId="input-hallazgos-medio"
+                rows={4}
+              />
+
+              <TextAreaField
+                label="Hallazgos de Bajo Riesgo / Mejoras"
+                value={hallazgos.bajoRiesgo || ""}
+                onChange={(v) => updateHallazgos("bajoRiesgo", v)}
+                testId="input-hallazgos-bajo"
+                rows={4}
+              />
+
+              <TextAreaField
                 label="Fortalezas Identificadas"
-                value={observaciones.fortalezas || ""}
-                onChange={(v) => updateObservaciones("fortalezas", v)}
+                value={hallazgos.fortalezas || ""}
+                onChange={(v) => updateHallazgos("fortalezas", v)}
                 testId="input-fortalezas"
-                rows={4}
-              />
-
-              <TextAreaField
-                label="Áreas de Oportunidad"
-                value={observaciones.areasOportunidad || ""}
-                onChange={(v) => updateObservaciones("areasOportunidad", v)}
-                testId="input-areas-oportunidad"
-                rows={4}
-              />
-
-              <TextAreaField
-                label="Riesgos Identificados"
-                value={observaciones.riesgosIdentificados || ""}
-                onChange={(v) => updateObservaciones("riesgosIdentificados", v)}
-                testId="input-riesgos-identificados"
-                rows={4}
-              />
-
-              <TextAreaField
-                label="Incumplimientos Detectados"
-                value={observaciones.incumplimientos || ""}
-                onChange={(v) => updateObservaciones("incumplimientos", v)}
-                testId="input-incumplimientos"
-                rows={4}
+                rows={3}
               />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Recomendaciones</CardTitle>
+              <CardTitle className="text-lg">Plan de Remediación</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <TextAreaField
-                label="Acciones Inmediatas (Urgentes)"
-                value={recomendaciones.accionesInmediatas || ""}
-                onChange={(v) => updateRecomendaciones("accionesInmediatas", v)}
+                label="Acciones Inmediatas (0-30 días)"
+                value={remediacion.accionesInmediatas || ""}
+                onChange={(v) => updateRemediacion("accionesInmediatas", v)}
                 testId="input-acciones-inmediatas"
                 rows={4}
               />
 
               <TextAreaField
-                label="Acciones a Corto Plazo (30-60 días)"
-                value={recomendaciones.accionesCortoPlazo || ""}
-                onChange={(v) => updateRecomendaciones("accionesCortoPlazo", v)}
+                label="Acciones a Corto Plazo (30-90 días)"
+                value={remediacion.accionesCortoPlazo || ""}
+                onChange={(v) => updateRemediacion("accionesCortoPlazo", v)}
                 testId="input-acciones-corto-plazo"
                 rows={4}
               />
 
               <TextAreaField
                 label="Acciones a Mediano Plazo (90-180 días)"
-                value={recomendaciones.accionesMedianoPlazo || ""}
-                onChange={(v) => updateRecomendaciones("accionesMedianoPlazo", v)}
+                value={remediacion.accionesMedianoPlazo || ""}
+                onChange={(v) => updateRemediacion("accionesMedianoPlazo", v)}
                 testId="input-acciones-mediano-plazo"
                 rows={4}
               />
 
-              <TextField
-                label="Nivel de Urgencia General"
-                value={recomendaciones.nivelUrgencia || ""}
-                onChange={(v) => updateRecomendaciones("nivelUrgencia", v)}
-                validated={recomendaciones.nivelUrgenciaValidated}
-                onValidatedChange={(v) => updateRecomendaciones("nivelUrgenciaValidated", v)}
-                testId="input-nivel-urgencia"
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Responsable General del Plan"
+                  value={remediacion.responsableGeneral || ""}
+                  onChange={(v) => updateRemediacion("responsableGeneral", v)}
+                  validated={remediacion.responsableGeneralValidated}
+                  onValidatedChange={(v) => updateRemediacion("responsableGeneralValidated", v)}
+                  testId="input-responsable-plan"
+                />
+                <TextField
+                  label="Fecha de Seguimiento"
+                  value={remediacion.fechaSeguimiento || ""}
+                  onChange={(v) => updateRemediacion("fechaSeguimiento", v)}
+                  validated={remediacion.fechaSeguimientoValidated}
+                  onValidatedChange={(v) => updateRemediacion("fechaSeguimientoValidated", v)}
+                  testId="input-fecha-seguimiento"
+                  type="date"
+                />
+              </div>
             </CardContent>
           </Card>
         </div>

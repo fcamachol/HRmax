@@ -8,24 +8,24 @@ export function Section10() {
   const { audit, updateSection } = useOnboarding();
 
   const section10 = (audit?.section10 || {}) as any;
-  const outsourcing = section10.outsourcing || {};
-  const repse = section10.repse || {};
+  const sistemas = section10.sistemas || {};
+  const integracion = section10.integracion || {};
 
-  const updateOutsourcing = (field: string, value: string | boolean) => {
+  const updateSistemas = (field: string, value: string | boolean) => {
     updateSection("section10", {
       ...section10,
-      outsourcing: {
-        ...outsourcing,
+      sistemas: {
+        ...sistemas,
         [field]: value,
       },
     });
   };
 
-  const updateRepse = (field: string, value: string | boolean) => {
+  const updateIntegracion = (field: string, value: string | boolean) => {
     updateSection("section10", {
       ...section10,
-      repse: {
-        ...repse,
+      integracion: {
+        ...integracion,
         [field]: value,
       },
     });
@@ -35,59 +35,69 @@ export function Section10() {
     <div className="flex flex-col h-full">
       <SectionHeader
         sectionNumber={10}
-        title="Outsourcing y REPSE"
-        subtitle="Servicios especializados y cumplimiento REPSE"
+        title="Sistemas y Tecnología"
+        subtitle="Sistemas de gestión de nómina y RH"
       />
 
       <ScrollArea className="flex-1 p-6">
         <div className="max-w-4xl mx-auto space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Servicios Especializados Contratados</CardTitle>
+              <CardTitle className="text-lg">Sistemas Actuales</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Número de Proveedores con REPSE"
-                  value={outsourcing.proveedoresRepse || ""}
-                  onChange={(v) => updateOutsourcing("proveedoresRepse", v)}
-                  validated={outsourcing.proveedoresRepseValidated}
-                  onValidatedChange={(v) => updateOutsourcing("proveedoresRepseValidated", v)}
-                  testId="input-proveedores-repse"
-                  type="number"
+                  label="Sistema de Nómina"
+                  value={sistemas.sistemaNomina || ""}
+                  onChange={(v) => updateSistemas("sistemaNomina", v)}
+                  validated={sistemas.sistemaNominaValidated}
+                  onValidatedChange={(v) => updateSistemas("sistemaNominaValidated", v)}
+                  testId="input-sistema-nomina-actual"
                 />
                 <TextField
-                  label="Monto Mensual Servicios"
-                  value={outsourcing.montoMensualServicios || ""}
-                  onChange={(v) => updateOutsourcing("montoMensualServicios", v)}
-                  validated={outsourcing.montoMensualServiciosValidated}
-                  onValidatedChange={(v) => updateOutsourcing("montoMensualServiciosValidated", v)}
-                  testId="input-monto-servicios"
+                  label="Sistema de RH/Capital Humano"
+                  value={sistemas.sistemaRH || ""}
+                  onChange={(v) => updateSistemas("sistemaRH", v)}
+                  validated={sistemas.sistemaRHValidated}
+                  onValidatedChange={(v) => updateSistemas("sistemaRHValidated", v)}
+                  testId="input-sistema-rh"
                 />
               </div>
 
-              <TextAreaField
-                label="Servicios Contratados"
-                value={outsourcing.serviciosContratados || ""}
-                onChange={(v) => updateOutsourcing("serviciosContratados", v)}
-                testId="input-servicios-contratados"
-                rows={4}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <TextField
+                  label="Sistema de Control de Asistencia"
+                  value={sistemas.sistemaAsistencia || ""}
+                  onChange={(v) => updateSistemas("sistemaAsistencia", v)}
+                  validated={sistemas.sistemaAsistenciaValidated}
+                  onValidatedChange={(v) => updateSistemas("sistemaAsistenciaValidated", v)}
+                  testId="input-sistema-asistencia"
+                />
+                <TextField
+                  label="Sistema Contable"
+                  value={sistemas.sistemaContable || ""}
+                  onChange={(v) => updateSistemas("sistemaContable", v)}
+                  validated={sistemas.sistemaContableValidated}
+                  onValidatedChange={(v) => updateSistemas("sistemaContableValidated", v)}
+                  testId="input-sistema-contable"
+                />
+              </div>
 
               <TextField
-                label="Contratos Vigentes Verificados"
-                value={outsourcing.contratosVerificados || ""}
-                onChange={(v) => updateOutsourcing("contratosVerificados", v)}
-                validated={outsourcing.contratosVerificadosValidated}
-                onValidatedChange={(v) => updateOutsourcing("contratosVerificadosValidated", v)}
-                testId="input-contratos-verificados"
+                label="Proveedor de Timbrado CFDI"
+                value={sistemas.proveedorTimbrado || ""}
+                onChange={(v) => updateSistemas("proveedorTimbrado", v)}
+                validated={sistemas.proveedorTimbradoValidated}
+                onValidatedChange={(v) => updateSistemas("proveedorTimbradoValidated", v)}
+                testId="input-proveedor-timbrado"
               />
 
               <TextAreaField
-                label="Observaciones Outsourcing"
-                value={outsourcing.observaciones || ""}
-                onChange={(v) => updateOutsourcing("observaciones", v)}
-                testId="input-observaciones-outsourcing"
+                label="Otros Sistemas Utilizados"
+                value={sistemas.otrosSistemas || ""}
+                onChange={(v) => updateSistemas("otrosSistemas", v)}
+                testId="input-otros-sistemas"
                 rows={3}
               />
             </CardContent>
@@ -95,54 +105,52 @@ export function Section10() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Registro REPSE Propio (si aplica)</CardTitle>
+              <CardTitle className="text-lg">Integración y Datos</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Número de Registro REPSE"
-                  value={repse.numeroRegistro || ""}
-                  onChange={(v) => updateRepse("numeroRegistro", v)}
-                  validated={repse.numeroRegistroValidated}
-                  onValidatedChange={(v) => updateRepse("numeroRegistroValidated", v)}
-                  testId="input-numero-repse"
+                  label="Sistemas Integrados"
+                  value={integracion.sistemasIntegrados || ""}
+                  onChange={(v) => updateIntegracion("sistemasIntegrados", v)}
+                  validated={integracion.sistemasIntegradosValidated}
+                  onValidatedChange={(v) => updateIntegracion("sistemasIntegradosValidated", v)}
+                  testId="input-sistemas-integrados"
                 />
                 <TextField
-                  label="Fecha de Registro"
-                  value={repse.fechaRegistro || ""}
-                  onChange={(v) => updateRepse("fechaRegistro", v)}
-                  validated={repse.fechaRegistroValidated}
-                  onValidatedChange={(v) => updateRepse("fechaRegistroValidated", v)}
-                  testId="input-fecha-registro-repse"
-                  type="date"
+                  label="Respaldos de Información"
+                  value={integracion.respaldos || ""}
+                  onChange={(v) => updateIntegracion("respaldos", v)}
+                  validated={integracion.respaldosValidated}
+                  onValidatedChange={(v) => updateIntegracion("respaldosValidated", v)}
+                  testId="input-respaldos"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <TextField
-                  label="Vigencia Registro"
-                  value={repse.vigenciaRegistro || ""}
-                  onChange={(v) => updateRepse("vigenciaRegistro", v)}
-                  validated={repse.vigenciaRegistroValidated}
-                  onValidatedChange={(v) => updateRepse("vigenciaRegistroValidated", v)}
-                  testId="input-vigencia-repse"
-                  type="date"
+                  label="Calidad de Datos (%)"
+                  value={integracion.calidadDatos || ""}
+                  onChange={(v) => updateIntegracion("calidadDatos", v)}
+                  validated={integracion.calidadDatosValidated}
+                  onValidatedChange={(v) => updateIntegracion("calidadDatosValidated", v)}
+                  testId="input-calidad-datos"
                 />
                 <TextField
-                  label="Servicios Registrados"
-                  value={repse.serviciosRegistrados || ""}
-                  onChange={(v) => updateRepse("serviciosRegistrados", v)}
-                  validated={repse.serviciosRegistradosValidated}
-                  onValidatedChange={(v) => updateRepse("serviciosRegistradosValidated", v)}
-                  testId="input-servicios-registrados"
+                  label="Migración Necesaria"
+                  value={integracion.migracionNecesaria || ""}
+                  onChange={(v) => updateIntegracion("migracionNecesaria", v)}
+                  validated={integracion.migracionNecesariaValidated}
+                  onValidatedChange={(v) => updateIntegracion("migracionNecesariaValidated", v)}
+                  testId="input-migracion"
                 />
               </div>
 
               <TextAreaField
-                label="Observaciones REPSE"
-                value={repse.observaciones || ""}
-                onChange={(v) => updateRepse("observaciones", v)}
-                testId="input-observaciones-repse"
+                label="Observaciones sobre Sistemas"
+                value={integracion.observaciones || ""}
+                onChange={(v) => updateIntegracion("observaciones", v)}
+                testId="input-observaciones-sistemas"
                 rows={3}
               />
             </CardContent>
