@@ -1,4 +1,5 @@
 import { useOnboarding } from "@/lib/onboarding-context";
+import { DocumentUploadSection } from "../document-upload-section";
 import { Section1 } from "./section-1";
 import { Section2 } from "./section-2";
 import { Section3 } from "./section-3";
@@ -11,11 +12,10 @@ import { Section9 } from "./section-9";
 import { Section10 } from "./section-10";
 import { Section11 } from "./section-11";
 import { Section12 } from "./section-12";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-export function SectionRenderer() {
-  const { currentSection } = useOnboarding();
-
-  switch (currentSection) {
+function CurrentSection({ section }: { section: number }) {
+  switch (section) {
     case 1:
       return <Section1 />;
     case 2:
@@ -43,4 +43,17 @@ export function SectionRenderer() {
     default:
       return <Section1 />;
   }
+}
+
+export function SectionRenderer() {
+  const { currentSection } = useOnboarding();
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <DocumentUploadSection />
+      <div className="flex-1 overflow-hidden">
+        <CurrentSection section={currentSection} />
+      </div>
+    </div>
+  );
 }
