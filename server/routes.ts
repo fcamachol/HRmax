@@ -6337,6 +6337,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // Onboarding Audit API (HR Due Diligence Wizard)
+  // ============================================================================
+  
+  app.get("/api/onboarding/audit/:clienteId", async (req, res) => {
+    try {
+      const clienteId = req.params.clienteId;
+      let audit = await storage.getOnboardingAuditByCliente(clienteId);
+      
+      if (!audit) {
+        audit = await storage.createOnboardingAudit({
+          clienteId,
+          section1: {},
+          section2: {},
+          section3: {},
+          section4: {},
+          section5: {},
+          section6: {},
+          section7: {},
+          section8: {},
+          section9: {},
+          section10: {},
+          section11: {},
+          section12: {},
+          sectionStatus: {},
+        });
+      }
+      
+      res.json(audit);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+  
+  app.put("/api/onboarding/audit/:clienteId", async (req, res) => {
+    try {
+      const clienteId = req.params.clienteId;
+      const updates = req.body;
+      
+      let existing = await storage.getOnboardingAuditByCliente(clienteId);
+      
+      if (!existing) {
+        existing = await storage.createOnboardingAudit({
+          clienteId,
+          section1: {},
+          section2: {},
+          section3: {},
+          section4: {},
+          section5: {},
+          section6: {},
+          section7: {},
+          section8: {},
+          section9: {},
+          section10: {},
+          section11: {},
+          section12: {},
+          sectionStatus: {},
+        });
+      }
+      
+      const updated = await storage.updateOnboardingAudit(existing.id, {
+        section1: updates.section1,
+        section2: updates.section2,
+        section3: updates.section3,
+        section4: updates.section4,
+        section5: updates.section5,
+        section6: updates.section6,
+        section7: updates.section7,
+        section8: updates.section8,
+        section9: updates.section9,
+        section10: updates.section10,
+        section11: updates.section11,
+        section12: updates.section12,
+        sectionStatus: updates.sectionStatus,
+      });
+      
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

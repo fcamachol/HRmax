@@ -4627,3 +4627,129 @@ export const insertPayrollExentoLedgerSchema = createInsertSchema(payrollExentoL
   createdAt: true,
 });
 export type InsertPayrollExentoLedger = z.infer<typeof insertPayrollExentoLedgerSchema>;
+
+// ============================================================================
+// ONBOARDING AUDIT TABLE - HR Due Diligence Wizard (Database Persistence)
+// ============================================================================
+
+export const onboardingAudits = pgTable("onboarding_audits", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  section1: jsonb("section_1").default(sql`'{}'::jsonb`),
+  section2: jsonb("section_2").default(sql`'{}'::jsonb`),
+  section3: jsonb("section_3").default(sql`'{}'::jsonb`),
+  section4: jsonb("section_4").default(sql`'{}'::jsonb`),
+  section5: jsonb("section_5").default(sql`'{}'::jsonb`),
+  section6: jsonb("section_6").default(sql`'{}'::jsonb`),
+  section7: jsonb("section_7").default(sql`'{}'::jsonb`),
+  section8: jsonb("section_8").default(sql`'{}'::jsonb`),
+  section9: jsonb("section_9").default(sql`'{}'::jsonb`),
+  section10: jsonb("section_10").default(sql`'{}'::jsonb`),
+  section11: jsonb("section_11").default(sql`'{}'::jsonb`),
+  section12: jsonb("section_12").default(sql`'{}'::jsonb`),
+  sectionStatus: jsonb("section_status").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("onboarding_audits_cliente_idx").on(table.clienteId),
+}));
+
+export type OnboardingAuditRecord = typeof onboardingAudits.$inferSelect;
+export const insertOnboardingAuditSchema = createInsertSchema(onboardingAudits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertOnboardingAudit = z.infer<typeof insertOnboardingAuditSchema>;
+
+// ============================================================================
+// ONBOARDING AUDIT ZOD SCHEMAS - For form validation
+// ============================================================================
+
+export const sectionStatusSchema = z.enum(["pending", "in_progress", "completed"]);
+export type SectionStatus = z.infer<typeof sectionStatusSchema>;
+
+export const yesNoNaSchema = z.enum(["yes", "no", "na", ""]);
+export type YesNoNa = z.infer<typeof yesNoNaSchema>;
+
+export const documentStatusSchema = z.object({
+  received: z.boolean().default(false),
+  valid: z.boolean().default(false),
+  observations: z.string().default(""),
+  fileUrl: z.string().default(""),
+});
+export type DocumentStatus = z.infer<typeof documentStatusSchema>;
+
+// Section schemas - simplified versions for the onboarding wizard
+export const onboardingSection1Schema = z.object({
+  identification: z.object({
+    razonSocial: z.string().default(""),
+    razonSocialValidated: z.boolean().default(false),
+    nombreComercial: z.string().default(""),
+    nombreComercialValidated: z.boolean().default(false),
+    rfc: z.string().default(""),
+    rfcValidated: z.boolean().default(false),
+    regimenFiscal: z.string().default(""),
+    regimenFiscalValidated: z.boolean().default(false),
+    fechaConstitucion: z.string().default(""),
+    fechaConstitucionValidated: z.boolean().default(false),
+    objetoSocial: z.string().default(""),
+    objetoSocialValidated: z.boolean().default(false),
+    domicilioFiscal: z.string().default(""),
+    domicilioFiscalValidated: z.boolean().default(false),
+    telefonoPrincipal: z.string().default(""),
+    telefonoPrincipalValidated: z.boolean().default(false),
+    sitioWeb: z.string().default(""),
+    sitioWebValidated: z.boolean().default(false),
+    numeroEmpleados: z.number().default(0),
+  }).default({}),
+  legalRepresentative: z.object({
+    nombreCompleto: z.string().default(""),
+    nombreCompletoValidated: z.boolean().default(false),
+    cargo: z.string().default(""),
+    cargoValidated: z.boolean().default(false),
+    rfc: z.string().default(""),
+    rfcValidated: z.boolean().default(false),
+    curp: z.string().default(""),
+    curpValidated: z.boolean().default(false),
+    tipoPoder: z.string().default(""),
+    tipoPoderValidated: z.boolean().default(false),
+    vigenciaPoder: z.string().default(""),
+    vigenciaPoderValidated: z.boolean().default(false),
+    notariaEscritura: z.string().default(""),
+    notariaEscrituraValidated: z.boolean().default(false),
+  }).default({}),
+  corporateDocuments: z.record(z.string(), documentStatusSchema).default({}),
+  businessOperations: z.object({
+    actividadPrincipal: z.string().default(""),
+    sucursales: z.array(z.object({
+      nombre: z.string().default(""),
+      estado: z.string().default(""),
+      direccion: z.string().default(""),
+      empleados: z.number().default(0),
+    })).default([]),
+  }).default({}),
+}).default({});
+
+export const onboardingAuditSchema = z.object({
+  id: z.number().optional(),
+  clienteId: z.number(),
+  section1: onboardingSection1Schema.default({}),
+  section2: z.record(z.string(), z.any()).default({}),
+  section3: z.record(z.string(), z.any()).default({}),
+  section4: z.record(z.string(), z.any()).default({}),
+  section5: z.record(z.string(), z.any()).default({}),
+  section6: z.record(z.string(), z.any()).default({}),
+  section7: z.record(z.string(), z.any()).default({}),
+  section8: z.record(z.string(), z.any()).default({}),
+  section9: z.record(z.string(), z.any()).default({}),
+  section10: z.record(z.string(), z.any()).default({}),
+  section11: z.record(z.string(), z.any()).default({}),
+  section12: z.record(z.string(), z.any()).default({}),
+  sectionStatus: z.record(z.string(), sectionStatusSchema).default({}),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export type OnboardingAudit = z.infer<typeof onboardingAuditSchema>;
+export type Section1 = z.infer<typeof onboardingSection1Schema>;

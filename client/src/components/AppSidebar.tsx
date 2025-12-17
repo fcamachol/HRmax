@@ -218,6 +218,11 @@ const mainMenuItems = [
     icon: LayoutDashboard,
   },
   {
+    title: "Auditoría HR",
+    url: "/onboarding",
+    icon: ClipboardCheck,
+  },
+  {
     title: "Reportes",
     url: "/reports",
     icon: FileText,
@@ -230,7 +235,7 @@ const mainMenuItems = [
   {
     title: "REPSE",
     url: "/repse",
-    icon: ClipboardCheck,
+    icon: FileCheck,
   },
   {
     title: "Empresas",

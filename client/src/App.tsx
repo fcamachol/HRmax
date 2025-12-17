@@ -46,6 +46,7 @@ import SuperAdminLogin from "@/pages/SuperAdminLogin";
 import SuperAdminLayout from "@/pages/super-admin/Layout";
 import SuperAdminUsers from "@/pages/super-admin/Users";
 import SuperAdminClientes from "@/pages/super-admin/Clientes";
+import OnboardingWizard from "@/pages/onboarding-wizard";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -123,6 +124,7 @@ export default function App() {
                 </SuperAdminLayout>
               )}
             </Route>
+            <Route path="/onboarding" component={OnboardingWizard} />
             <Route>
               {() => (
                 <ClienteProvider>

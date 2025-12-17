@@ -234,6 +234,9 @@ import {
   exentoCapConfigs,
   employeeExentoCaps,
   payrollExentoLedger,
+  onboardingAudits,
+  type OnboardingAuditRecord,
+  type InsertOnboardingAudit,
   type EmployeeBankAccount,
   type InsertEmployeeBankAccount,
   employeeBankAccounts,
@@ -942,6 +945,11 @@ export interface IStorage {
   
   // UMA Helper
   getUmaVigente(fecha?: Date): Promise<CatValorUmaSmg | undefined>;
+  
+  // Onboarding Audits
+  getOnboardingAuditByCliente(clienteId: string): Promise<OnboardingAuditRecord | undefined>;
+  createOnboardingAudit(audit: InsertOnboardingAudit): Promise<OnboardingAuditRecord>;
+  updateOnboardingAudit(id: string, updates: Partial<InsertOnboardingAudit>): Promise<OnboardingAuditRecord>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5757,6 +5765,31 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     
     return uma || undefined;
+  }
+  
+  // ============================================================================
+  // Onboarding Audits
+  // ============================================================================
+  
+  async getOnboardingAuditByCliente(clienteId: string): Promise<OnboardingAuditRecord | undefined> {
+    const [audit] = await db.select().from(onboardingAudits)
+      .where(eq(onboardingAudits.clienteId, clienteId));
+    return audit || undefined;
+  }
+  
+  async createOnboardingAudit(audit: InsertOnboardingAudit): Promise<OnboardingAuditRecord> {
+    const [created] = await db.insert(onboardingAudits)
+      .values(audit)
+      .returning();
+    return created;
+  }
+  
+  async updateOnboardingAudit(id: string, updates: Partial<InsertOnboardingAudit>): Promise<OnboardingAuditRecord> {
+    const [updated] = await db.update(onboardingAudits)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(onboardingAudits.id, id))
+      .returning();
+    return updated;
   }
 }
 
