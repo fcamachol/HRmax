@@ -12,10 +12,11 @@ import { Section9 } from "./section-9";
 import { Section10 } from "./section-10";
 import { Section11 } from "./section-11";
 import { Section12 } from "./section-12";
-import { ScrollArea } from "@/components/ui/scroll-area";
 
 function CurrentSection({ section }: { section: number }) {
   switch (section) {
+    case 0:
+      return <DocumentUploadSection />;
     case 1:
       return <Section1 />;
     case 2:
@@ -50,10 +51,7 @@ export function SectionRenderer() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <DocumentUploadSection />
-      <div className="flex-1 overflow-hidden">
-        <CurrentSection section={currentSection} />
-      </div>
+      <CurrentSection section={currentSection} />
     </div>
   );
 }

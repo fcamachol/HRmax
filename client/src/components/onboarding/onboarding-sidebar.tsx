@@ -28,6 +28,7 @@ import {
   Check,
   Circle,
   Loader2,
+  Upload,
 } from "lucide-react";
 import type { SectionStatus } from "@shared/schema";
 
@@ -89,6 +90,26 @@ export function OnboardingSidebar() {
 
       <SidebarContent className="p-2">
         <SidebarMenu>
+          {/* Tab de Documentos */}
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => setCurrentSection(0)}
+              className={cn(
+                "w-full justify-start gap-3",
+                currentSection === 0 && "bg-sidebar-accent"
+              )}
+              data-testid="nav-section-documents"
+            >
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10">
+                <Upload className="h-4 w-4 text-primary" />
+              </div>
+              <Upload className="h-4 w-4 shrink-0 text-primary" />
+              <span className="flex-1 truncate text-sm font-medium">Carga de Documentos</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+
+          <div className="my-2 border-t border-border" />
+
           {sections.map((section) => {
             const status = getSectionStatus(section.number);
             const isActive = currentSection === section.number;

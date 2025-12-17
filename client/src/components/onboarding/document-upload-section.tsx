@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
 import {
   FileText,
   Upload,
@@ -136,7 +136,6 @@ const documentCategories: DocumentCategory[] = [
 
 export function DocumentUploadSection() {
   const { audit, updateSection } = useOnboarding();
-  const [isOpen, setIsOpen] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState<string[]>(["legal"]);
 
   const uploadedDocs = (audit?.section1 as any)?.documentosSubidos || {};
@@ -184,140 +183,152 @@ export function DocumentUploadSection() {
   };
 
   const stats = getUploadStats();
-  const progress = Math.round((stats.requiredUploaded / stats.requiredTotal) * 100);
+  const progressPercent = Math.round((stats.requiredUploaded / stats.requiredTotal) * 100);
 
   return (
-    <Card className="m-4 mb-0">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover-elevate py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                  <Upload className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-base">Carga de Documentos</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    {stats.requiredUploaded} de {stats.requiredTotal} documentos requeridos
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge
-                  variant={progress === 100 ? "default" : "secondary"}
-                  className={cn(progress === 100 && "bg-chart-2 text-white")}
+    <div className="flex flex-col h-full p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+            <Upload className="h-6 w-6 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-2xl font-semibold">Carga de Documentos</h1>
+            <p className="text-muted-foreground">
+              Sube los documentos requeridos para completar la auditoría
+            </p>
+          </div>
+          <Badge
+            variant={progressPercent === 100 ? "default" : "secondary"}
+            className={cn("text-sm px-3 py-1", progressPercent === 100 && "bg-chart-2 text-white")}
+          >
+            {progressPercent}% completo
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <Progress value={progressPercent} className="flex-1 h-2" />
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {stats.requiredUploaded} de {stats.requiredTotal} requeridos
+          </span>
+        </div>
+      </div>
+
+      {/* Document Categories */}
+      <ScrollArea className="flex-1">
+        <div className="space-y-4 pr-4">
+          {documentCategories.map((category) => {
+            const Icon = category.icon;
+            const categoryDocs = category.documents;
+            const uploadedInCategory = categoryDocs.filter(
+              (doc) => uploadedDocs[doc.id]?.uploaded
+            ).length;
+            const requiredInCategory = categoryDocs.filter((doc) => doc.required).length;
+            const requiredUploadedInCategory = categoryDocs.filter(
+              (doc) => doc.required && uploadedDocs[doc.id]?.uploaded
+            ).length;
+            const isExpanded = expandedCategories.includes(category.id);
+            const categoryComplete = requiredUploadedInCategory === requiredInCategory;
+
+            return (
+              <Card key={category.id} className="overflow-visible">
+                <button
+                  onClick={() => toggleCategory(category.id)}
+                  className="w-full flex items-center justify-between p-4 hover-elevate text-left rounded-md"
+                  data-testid={`toggle-category-${category.id}`}
                 >
-                  {progress}% completo
-                </Badge>
-                {isOpen ? (
-                  <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
-
-        <CollapsibleContent>
-          <CardContent className="pt-0">
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-3">
-                {documentCategories.map((category) => {
-                  const Icon = category.icon;
-                  const categoryDocs = category.documents;
-                  const uploadedInCategory = categoryDocs.filter(
-                    (doc) => uploadedDocs[doc.id]?.uploaded
-                  ).length;
-                  const isExpanded = expandedCategories.includes(category.id);
-
-                  return (
-                    <Card key={category.id} className="overflow-hidden">
-                      <button
-                        onClick={() => toggleCategory(category.id)}
-                        className="w-full flex items-center justify-between p-3 hover-elevate text-left"
-                        data-testid={`toggle-category-${category.id}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-medium text-sm">{category.name}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {uploadedInCategory}/{categoryDocs.length}
-                          </Badge>
-                        </div>
-                        {isExpanded ? (
-                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex h-10 w-10 items-center justify-center rounded-md",
+                      categoryComplete ? "bg-chart-2/10" : "bg-muted"
+                    )}>
+                      <Icon className={cn(
+                        "h-5 w-5",
+                        categoryComplete ? "text-chart-2" : "text-muted-foreground"
+                      )} />
+                    </div>
+                    <div>
+                      <span className="font-medium">{category.name}</span>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <Badge variant="outline" className="text-xs">
+                          {uploadedInCategory}/{categoryDocs.length} cargados
+                        </Badge>
+                        {categoryComplete && (
+                          <CheckCircle2 className="h-4 w-4 text-chart-2" />
                         )}
-                      </button>
+                      </div>
+                    </div>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </button>
 
-                      {isExpanded && (
-                        <div className="border-t border-border">
-                          {categoryDocs.map((doc) => {
-                            const isUploaded = uploadedDocs[doc.id]?.uploaded;
+                {isExpanded && (
+                  <div className="border-t border-border mx-4 mb-4">
+                    {categoryDocs.map((doc) => {
+                      const isUploaded = uploadedDocs[doc.id]?.uploaded;
 
-                            return (
-                              <div
-                                key={doc.id}
-                                className="flex items-center justify-between p-3 border-b border-border last:border-b-0"
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  {isUploaded ? (
-                                    <CheckCircle2 className="h-4 w-4 text-chart-2 shrink-0" />
-                                  ) : doc.required ? (
-                                    <AlertCircle className="h-4 w-4 text-destructive shrink-0" />
-                                  ) : (
-                                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm truncate">{doc.name}</span>
-                                      {doc.required && !isUploaded && (
-                                        <Badge variant="destructive" className="text-xs shrink-0">
-                                          Requerido
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {doc.description && (
-                                      <p className="text-xs text-muted-foreground">
-                                        {doc.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant={isUploaded ? "outline" : "default"}
-                                  onClick={() => handleFileUpload(doc.id)}
-                                  data-testid={`upload-${doc.id}`}
-                                >
-                                  {isUploaded ? (
-                                    <>
-                                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                                      Cargado
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="h-3 w-3 mr-1" />
-                                      Cargar
-                                    </>
-                                  )}
-                                </Button>
+                      return (
+                        <div
+                          key={doc.id}
+                          className="flex items-center justify-between py-3 border-b border-border last:border-b-0"
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            {isUploaded ? (
+                              <CheckCircle2 className="h-5 w-5 text-chart-2 shrink-0" />
+                            ) : doc.required ? (
+                              <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+                            ) : (
+                              <FileText className="h-5 w-5 text-muted-foreground shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm">{doc.name}</span>
+                                {doc.required && !isUploaded && (
+                                  <Badge variant="destructive" className="text-xs shrink-0">
+                                    Requerido
+                                  </Badge>
+                                )}
                               </div>
-                            );
-                          })}
+                              {doc.description && (
+                                <p className="text-xs text-muted-foreground mt-0.5">
+                                  {doc.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={isUploaded ? "outline" : "default"}
+                            onClick={() => handleFileUpload(doc.id)}
+                            data-testid={`upload-${doc.id}`}
+                          >
+                            {isUploaded ? (
+                              <>
+                                <CheckCircle2 className="h-4 w-4 mr-1.5" />
+                                Cargado
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="h-4 w-4 mr-1.5" />
+                                Cargar
+                              </>
+                            )}
+                          </Button>
                         </div>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      </ScrollArea>
+    </div>
   );
 }
