@@ -4290,6 +4290,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== USER AUTHENTICATION ====================
+  
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ message: "Usuario y contraseña son requeridos" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      if (!user.activo) {
+        return res.status(403).json({ message: "Usuario desactivado. Contacte al administrador." });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      // Store user in session
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        nombre: user.nombre,
+        email: user.email,
+        tipoUsuario: user.tipoUsuario,
+        clienteId: user.clienteId,
+        isSuperAdmin: user.isSuperAdmin,
+      };
+
+      const { password: _, ...publicUser } = user;
+      res.json({ 
+        success: true, 
+        user: publicUser,
+        message: "Login exitoso" 
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    if (!req.session?.user) {
+      return res.status(401).json({ message: "No autenticado" });
+    }
+    
+    try {
+      const user = await storage.getUser(req.session.user.id);
+      if (!user) {
+        return res.status(401).json({ message: "Usuario no encontrado" });
+      }
+      const { password: _, ...publicUser } = user;
+      res.json({ user: publicUser });
+    } catch (error: any) {
+      res.status(401).json({ message: "Sesión inválida" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error al cerrar sesión" });
+      }
+      res.clearCookie('connect.sid');
+      res.json({ success: true, message: "Sesión cerrada" });
+    });
+  });
+
   // ==================== SUPER ADMIN - AUTHENTICATION ====================
   
   app.post("/api/admin/login", async (req, res) => {

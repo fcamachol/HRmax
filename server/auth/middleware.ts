@@ -1,6 +1,21 @@
 import type { Request, Response, NextFunction } from "express";
 import { checkUserPermission } from "./permissions";
 
+declare module "express-session" {
+  interface SessionData {
+    user?: {
+      id: string;
+      username: string;
+      nombre?: string;
+      email?: string;
+      tipoUsuario?: string;
+      clienteId?: string | null;
+      role?: string;
+      isSuperAdmin?: boolean;
+    };
+  }
+}
+
 declare module "express-serve-static-core" {
   interface Request {
     user?: {
@@ -78,6 +93,46 @@ export function requirePermission(
 
     next();
   };
+}
+
+export function sessionAuthMiddleware(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) {
+  // Check for session-based authentication first
+  if (req.session?.user) {
+    req.user = {
+      id: req.session.user.id,
+      username: req.session.user.username,
+      tipoUsuario: req.session.user.tipoUsuario,
+      clienteId: req.session.user.clienteId,
+      role: req.session.user.role,
+      isSuperAdmin: req.session.user.isSuperAdmin,
+    };
+    return next();
+  }
+
+  // Fallback to mock auth for development (via headers)
+  const userId = req.header("X-User-Id");
+  if (userId) {
+    const username = req.header("X-Username") || "mock-admin";
+    const tipoUsuario = req.header("X-User-Type") || "maxtalent";
+    const clienteId = req.header("X-Cliente-Id") || null;
+    const role = req.header("X-User-Role") || "user";
+    const isSuperAdmin = req.header("X-Is-Super-Admin") === "true";
+
+    req.user = {
+      id: userId,
+      username,
+      tipoUsuario,
+      clienteId,
+      role,
+      isSuperAdmin,
+    };
+  }
+
+  next();
 }
 
 export function mockAuthMiddleware(

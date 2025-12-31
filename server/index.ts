@@ -1,4 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import MemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { migrateLegalCaseStatuses } from "./migrations/migrate-legal-case-statuses";
@@ -6,9 +8,10 @@ import { migrateBajaTypes } from "./migrations/migrate-baja-types";
 import { seedModulos } from "./seeds/modulos";
 import { seedConceptosLegales } from "./seeds/conceptosLegales";
 import { seedCatalogosBase } from "./seeds/catalogosBase";
-import { mockAuthMiddleware } from "./auth/middleware";
+import { sessionAuthMiddleware } from "./auth/middleware";
 
 const app = express();
+const MemoryStoreSession = MemoryStore(session);
 
 // Health check for Replit Autoscale - responds at root path
 // This intercepts GET / requests that have no Accept header or accept JSON
@@ -42,7 +45,22 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 
-app.use(mockAuthMiddleware);
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'peopleops-secret-key-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  store: new MemoryStoreSession({
+    checkPeriod: 86400000, // 24 hours
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'lax',
+  },
+}));
+
+app.use(sessionAuthMiddleware);
 
 app.use((req, res, next) => {
   const start = Date.now();

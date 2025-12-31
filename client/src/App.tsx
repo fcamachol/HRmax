@@ -8,6 +8,8 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClienteProvider } from "@/contexts/ClienteContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
 import Altas from "@/pages/employees/Altas";
@@ -101,8 +103,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ThemeProvider>
-          <Switch>
-            <Route path="/super-admin/login" component={SuperAdminLogin} />
+          <AuthProvider>
+            <Switch>
+              <Route path="/login" component={Login} />
+              <Route path="/super-admin/login" component={SuperAdminLogin} />
             <Route path="/super-admin/users">
               {() => (
                 <SuperAdminLayout>
@@ -145,8 +149,9 @@ export default function App() {
                 </ClienteProvider>
               )}
             </Route>
-          </Switch>
-          <Toaster />
+            </Switch>
+            <Toaster />
+          </AuthProvider>
         </ThemeProvider>
       </TooltipProvider>
     </QueryClientProvider>
