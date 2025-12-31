@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Cliente } from "@shared/schema";
+import { useAuth } from "./AuthContext";
 
 interface ClienteContextType {
   selectedCliente: Cliente | null;
@@ -8,6 +10,8 @@ interface ClienteContextType {
   addToRecent: (cliente: Cliente) => void;
   isAgencyView: boolean;
   setIsAgencyView: (value: boolean) => void;
+  isClientUser: boolean;
+  canChangeCliente: boolean;
 }
 
 const ClienteContext = createContext<ClienteContextType | undefined>(undefined);
@@ -17,31 +21,51 @@ const RECENT_KEY = "peopleops_recent_clientes";
 const MAX_RECENT = 5;
 
 export function ClienteProvider({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated } = useAuth();
   const [selectedCliente, setSelectedClienteState] = useState<Cliente | null>(null);
   const [recentClientes, setRecentClientes] = useState<Cliente[]>([]);
   const [isAgencyView, setIsAgencyView] = useState(false);
 
+  const isClientUser = user?.tipoUsuario === "cliente" && !!user?.clienteId;
+  const canChangeCliente = !isClientUser;
+
+  const { data: clienteData } = useQuery<Cliente>({
+    queryKey: ["/api/clientes", user?.clienteId],
+    enabled: isClientUser && !!user?.clienteId,
+  });
+
   useEffect(() => {
-    const savedCliente = localStorage.getItem(STORAGE_KEY);
-    if (savedCliente) {
-      try {
-        setSelectedClienteState(JSON.parse(savedCliente));
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
-      }
+    if (isClientUser && clienteData) {
+      setSelectedClienteState(clienteData);
+      return;
     }
 
-    const savedRecent = localStorage.getItem(RECENT_KEY);
-    if (savedRecent) {
-      try {
-        setRecentClientes(JSON.parse(savedRecent));
-      } catch {
-        localStorage.removeItem(RECENT_KEY);
+    if (!isClientUser) {
+      const savedCliente = localStorage.getItem(STORAGE_KEY);
+      if (savedCliente) {
+        try {
+          setSelectedClienteState(JSON.parse(savedCliente));
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+
+      const savedRecent = localStorage.getItem(RECENT_KEY);
+      if (savedRecent) {
+        try {
+          setRecentClientes(JSON.parse(savedRecent));
+        } catch {
+          localStorage.removeItem(RECENT_KEY);
+        }
       }
     }
-  }, []);
+  }, [isClientUser, clienteData, isAuthenticated]);
 
   const setSelectedCliente = (cliente: Cliente | null) => {
+    if (isClientUser) {
+      return;
+    }
+    
     setSelectedClienteState(cliente);
     if (cliente) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cliente));
@@ -69,6 +93,8 @@ export function ClienteProvider({ children }: { children: ReactNode }) {
         addToRecent,
         isAgencyView,
         setIsAgencyView,
+        isClientUser,
+        canChangeCliente,
       }}
     >
       {children}

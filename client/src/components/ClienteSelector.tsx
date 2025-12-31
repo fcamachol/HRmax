@@ -15,10 +15,11 @@ import { ChevronDown, Search, LayoutGrid } from "lucide-react";
 export function ClienteSelector() {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { selectedCliente, setSelectedCliente, isAgencyView, setIsAgencyView } = useCliente();
+  const { selectedCliente, setSelectedCliente, isAgencyView, setIsAgencyView, canChangeCliente, isClientUser } = useCliente();
 
   const { data: clientes = [], isLoading } = useQuery<Cliente[]>({
     queryKey: ["/api/clientes/activos"],
+    enabled: canChangeCliente,
   });
 
   const filteredClientes = clientes.filter((cliente) =>
@@ -40,6 +41,16 @@ export function ClienteSelector() {
     setOpen(false);
     setSearchQuery("");
   };
+
+  if (isClientUser && selectedCliente) {
+    return (
+      <div className="w-full px-2 h-8 flex items-center">
+        <span className="font-medium truncate text-sm" data-testid="text-selected-cliente">
+          {selectedCliente.nombreComercial}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
