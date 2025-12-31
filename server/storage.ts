@@ -271,6 +271,7 @@ export interface IStorage {
   createBulkEmployees(employees: InsertEmployee[]): Promise<Employee[]>;
   getEmployee(id: string): Promise<Employee | undefined>;
   getEmployees(): Promise<Employee[]>;
+  getEmployeesByCliente(clienteId: string): Promise<Employee[]>;
   getEmployeesByCentroTrabajo(centroTrabajoId: string): Promise<Employee[]>;
   updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee>;
   deleteEmployee(id: string): Promise<void>;
@@ -332,6 +333,7 @@ export interface IStorage {
   createEmpresa(empresa: InsertEmpresa): Promise<Empresa>;
   getEmpresa(id: string): Promise<Empresa | undefined>;
   getEmpresas(): Promise<Empresa[]>;
+  getEmpresasByCliente(clienteId: string): Promise<Empresa[]>;
   updateEmpresa(id: string, updates: Partial<InsertEmpresa>): Promise<Empresa>;
   deleteEmpresa(id: string): Promise<void>;
   
@@ -1037,6 +1039,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(employees.estatus, 'activo'));
   }
 
+  async getEmployeesByCliente(clienteId: string): Promise<Employee[]> {
+    return await db
+      .select()
+      .from(employees)
+      .where(
+        and(
+          eq(employees.clienteId, clienteId),
+          eq(employees.estatus, 'activo')
+        )
+      );
+  }
+
   async getEmployeesByCentroTrabajo(centroTrabajoId: string): Promise<Employee[]> {
     // JOIN con empleados_centros_trabajo para obtener solo empleados asignados al centro
     const empleadosDelCentro = await db
@@ -1701,6 +1715,14 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(empresas)
+      .orderBy(desc(empresas.createdAt));
+  }
+
+  async getEmpresasByCliente(clienteId: string): Promise<Empresa[]> {
+    return await db
+      .select()
+      .from(empresas)
+      .where(eq(empresas.clienteId, clienteId))
       .orderBy(desc(empresas.createdAt));
   }
 

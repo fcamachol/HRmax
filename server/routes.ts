@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
@@ -97,6 +97,40 @@ import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
 import { requireSuperAdmin } from "./auth/middleware";
 import bcrypt from "bcrypt";
+
+// Helper function to get the effective clienteId for data filtering
+// Client users are restricted to their own clienteId
+// MaxTalent users can access any client based on the request query
+function getEffectiveClienteId(req: Request): string | null {
+  const user = req.user;
+  
+  // If user is a client user, always use their assigned clienteId
+  if (user?.tipoUsuario === "cliente" && user?.clienteId) {
+    return user.clienteId;
+  }
+  
+  // For MaxTalent users, use the clienteId from query if provided
+  const queryClienteId = req.query.clienteId as string | undefined;
+  return queryClienteId || null;
+}
+
+// Helper function to verify access to a specific clienteId
+function canAccessCliente(req: Request, targetClienteId: string): boolean {
+  const user = req.user;
+  
+  // MaxTalent users can access any client
+  if (user?.tipoUsuario === "maxtalent") {
+    return true;
+  }
+  
+  // Client users can only access their own client
+  if (user?.tipoUsuario === "cliente" && user?.clienteId) {
+    return user.clienteId === targetClienteId;
+  }
+  
+  // If no user or no clienteId, deny access
+  return false;
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configuration Change Logs
@@ -306,9 +340,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/employees", async (req, res) => {
     try {
       const { centroTrabajoId, grupoNominaId, empresaId, activo } = req.query;
+      const effectiveClienteId = getEffectiveClienteId(req);
       
       // Filtrar por empresa (returns active employees by default)
       if (empresaId) {
+        // Verify access if user is a client user
+        const empresa = await storage.getEmpresa(empresaId as string);
+        if (empresa?.clienteId && !canAccessCliente(req, empresa.clienteId)) {
+          return res.status(403).json({ message: "No tienes acceso a los empleados de esta empresa" });
+        }
+        
         // Get all centros for this empresa
         const centros = await storage.getCentrosTrabajoByEmpresa(empresaId as string);
         const centroIds = centros.map(c => c.id);
@@ -331,6 +372,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Filtrar por ambos: centro y grupo
       if (centroTrabajoId && grupoNominaId) {
+        // Verify centro access for client users
+        const centro = await storage.getCentroTrabajo(centroTrabajoId as string);
+        if (centro?.empresaId) {
+          const empresa = await storage.getEmpresa(centro.empresaId);
+          if (empresa?.clienteId && !canAccessCliente(req, empresa.clienteId)) {
+            return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
+          }
+        }
+        
         const employees = await storage.getEmployeesByCentroAndGrupo(
           centroTrabajoId as string, 
           grupoNominaId as string
@@ -340,16 +390,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Filtrar solo por centro
       if (centroTrabajoId) {
+        // Verify centro access for client users
+        const centro = await storage.getCentroTrabajo(centroTrabajoId as string);
+        if (centro?.empresaId) {
+          const empresa = await storage.getEmpresa(centro.empresaId);
+          if (empresa?.clienteId && !canAccessCliente(req, empresa.clienteId)) {
+            return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
+          }
+        }
+        
         const employees = await storage.getEmployeesByCentroTrabajo(centroTrabajoId as string);
         return res.json(serializeEmployees(employees));
       }
       
       // Filtrar solo por grupo de nómina
       if (grupoNominaId) {
+        // Verify grupo access for client users
+        const grupo = await storage.getGrupoNomina(grupoNominaId as string);
+        if (grupo?.clienteId && !canAccessCliente(req, grupo.clienteId)) {
+          return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
+        }
+        
         const employees = await storage.getEmployeesByGrupoNomina(grupoNominaId as string);
         return res.json(serializeEmployees(employees));
       }
       
+      // If user has a clienteId restriction, filter employees
+      if (effectiveClienteId) {
+        const employees = await storage.getEmployeesByCliente(effectiveClienteId);
+        return res.json(serializeEmployees(employees));
+      }
+      
+      // MaxTalent users without specific client filter get all employees
       const employees = await storage.getEmployees();
       res.json(serializeEmployees(employees));
     } catch (error: any) {
@@ -364,6 +436,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
+      
+      // Verify access for client users
+      if (employee.clienteId && !canAccessCliente(req, employee.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
+      
       res.json(serializeEmployee(employee));
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -939,6 +1017,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/empresas", async (req, res) => {
     try {
+      const effectiveClienteId = getEffectiveClienteId(req);
+      
+      // If user has a clienteId restriction, filter empresas
+      if (effectiveClienteId) {
+        const empresas = await storage.getEmpresasByCliente(effectiveClienteId);
+        return res.json(empresas);
+      }
+      
+      // MaxTalent users without specific client filter get all empresas
       const empresas = await storage.getEmpresas();
       res.json(empresas);
     } catch (error: any) {
@@ -952,6 +1039,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!empresa) {
         return res.status(404).json({ message: "Empresa no encontrada" });
       }
+      
+      // Verify access for client users
+      if (empresa.clienteId && !canAccessCliente(req, empresa.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a esta empresa" });
+      }
+      
       res.json(empresa);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
