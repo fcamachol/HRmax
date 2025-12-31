@@ -31,6 +31,8 @@ import {
   Database,
   FileUp,
   CalendarRange,
+  LogOut,
+  User,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -46,7 +48,11 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Collapsible,
   CollapsibleContent,
@@ -533,6 +539,52 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <UserFooter />
     </Sidebar>
+  );
+}
+
+function UserFooter() {
+  const { user, logout, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation("/login");
+  };
+
+  if (!isAuthenticated || !user) {
+    return null;
+  }
+
+  const initials = user.nombre
+    ? user.nombre.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+    : user.username.slice(0, 2).toUpperCase();
+
+  return (
+    <SidebarFooter className="border-t">
+      <div className="flex items-center gap-3 p-3">
+        <Avatar className="h-8 w-8">
+          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate" data-testid="text-user-name">
+            {user.nombre || user.username}
+          </p>
+          <p className="text-xs text-muted-foreground truncate" data-testid="text-user-role">
+            {user.tipoUsuario === 'internal' ? 'MaxTalent' : 'Cliente'}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleLogout}
+          className="shrink-0"
+          data-testid="button-logout"
+        >
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    </SidebarFooter>
   );
 }

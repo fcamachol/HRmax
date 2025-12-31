@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClienteProvider } from "@/contexts/ClienteContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { RequireAuth } from "@/components/RequireAuth";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
@@ -131,22 +132,24 @@ export default function App() {
             <Route path="/onboarding" component={OnboardingWizard} />
             <Route>
               {() => (
-                <ClienteProvider>
-                  <SidebarProvider style={style as React.CSSProperties}>
-                    <div className="flex h-screen w-full">
-                      <AppSidebar />
-                      <div className="flex flex-col flex-1 overflow-hidden">
-                        <header className="flex items-center justify-between p-4 border-b bg-background">
-                          <SidebarTrigger data-testid="button-sidebar-toggle" />
-                          <ThemeToggle />
-                        </header>
-                        <main className="flex-1 overflow-auto p-6 md:p-8">
-                          <Router />
-                        </main>
+                <RequireAuth>
+                  <ClienteProvider>
+                    <SidebarProvider style={style as React.CSSProperties}>
+                      <div className="flex h-screen w-full">
+                        <AppSidebar />
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                          <header className="flex items-center justify-between p-4 border-b bg-background">
+                            <SidebarTrigger data-testid="button-sidebar-toggle" />
+                            <ThemeToggle />
+                          </header>
+                          <main className="flex-1 overflow-auto p-6 md:p-8">
+                            <Router />
+                          </main>
+                        </div>
                       </div>
-                    </div>
-                  </SidebarProvider>
-                </ClienteProvider>
+                    </SidebarProvider>
+                  </ClienteProvider>
+                </RequireAuth>
               )}
             </Route>
             </Switch>
