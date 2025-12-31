@@ -4395,6 +4395,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Credenciales inválidas" });
       }
 
+      // Store super admin user in session
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        nombre: user.nombre,
+        email: user.email,
+        tipoUsuario: user.tipoUsuario,
+        clienteId: user.clienteId,
+        isSuperAdmin: true,
+      };
+
       const { password: _, ...publicUser } = user;
       res.json({ 
         success: true, 
