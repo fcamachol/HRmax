@@ -10,7 +10,9 @@ import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -48,6 +50,10 @@ import {
   X,
   Star,
   StarOff,
+  Building2,
+  Heart,
+  Trophy,
+  Sparkles,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -68,6 +74,35 @@ const formatCurrency = (value: number | string | null) => {
     currency: "MXN",
   }).format(numValue);
 };
+
+const nivelConfig = {
+  sat: { 
+    label: "SAT - Catálogo Oficial", 
+    icon: Building2, 
+    color: "text-blue-600 dark:text-blue-400",
+    bgColor: "bg-blue-50 dark:bg-blue-950/50"
+  },
+  prevision_social: { 
+    label: "Previsión Social", 
+    icon: Heart, 
+    color: "text-emerald-600 dark:text-emerald-400",
+    bgColor: "bg-emerald-50 dark:bg-emerald-950/50"
+  },
+  bonos: { 
+    label: "Bonos e Incentivos", 
+    icon: Trophy, 
+    color: "text-amber-600 dark:text-amber-400",
+    bgColor: "bg-amber-50 dark:bg-amber-950/50"
+  },
+  adicional: { 
+    label: "Conceptos Adicionales", 
+    icon: Sparkles, 
+    color: "text-purple-600 dark:text-purple-400",
+    bgColor: "bg-purple-50 dark:bg-purple-950/50"
+  },
+} as const;
+
+type NivelKey = keyof typeof nivelConfig;
 
 export default function PlantillasNomina() {
   const { toast } = useToast();
@@ -362,6 +397,16 @@ export default function PlantillasNomina() {
   const conceptosDisponiblesParaAgregar = conceptosDisponibles.filter(
     c => !conceptosYaAgregados.includes(c.id)
   );
+
+  const conceptosAgrupadosPorNivel = (["sat", "prevision_social", "bonos", "adicional"] as NivelKey[]).reduce((acc, nivel) => {
+    const conceptosDelNivel = conceptosDisponiblesParaAgregar.filter(
+      c => (c.nivel || "adicional") === nivel
+    );
+    if (conceptosDelNivel.length > 0) {
+      acc[nivel] = conceptosDelNivel;
+    }
+    return acc;
+  }, {} as Record<NivelKey, ConceptoMedioPago[]>);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -781,27 +826,55 @@ export default function PlantillasNomina() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="concepto">Concepto</Label>
+              <Label htmlFor="concepto">Concepto del Catálogo</Label>
               <Select
                 value={conceptoFormData.conceptoId}
                 onValueChange={(value) => setConceptoFormData({ ...conceptoFormData, conceptoId: value })}
               >
                 <SelectTrigger data-testid="select-concepto">
-                  <SelectValue placeholder="Selecciona un concepto" />
+                  <SelectValue placeholder="Selecciona un concepto del catálogo" />
                 </SelectTrigger>
-                <SelectContent>
-                  {conceptosDisponiblesParaAgregar.map((concepto) => (
-                    <SelectItem key={concepto.id} value={concepto.id}>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={concepto.tipo === "percepcion" ? "default" : "destructive"} className="text-xs">
-                          {concepto.tipo === "percepcion" ? "P" : "D"}
-                        </Badge>
-                        {concepto.nombre}
-                      </div>
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[400px]">
+                  {Object.entries(conceptosAgrupadosPorNivel).map(([nivel, conceptos]) => {
+                    const config = nivelConfig[nivel as NivelKey];
+                    const IconComponent = config.icon;
+                    return (
+                      <SelectGroup key={nivel}>
+                        <SelectLabel className={`flex items-center gap-2 ${config.color} font-semibold`}>
+                          <IconComponent className="h-4 w-4" />
+                          {config.label}
+                        </SelectLabel>
+                        {conceptos.map((concepto) => (
+                          <SelectItem key={concepto.id} value={concepto.id}>
+                            <div className="flex items-center gap-2">
+                              <Badge 
+                                variant={concepto.tipo === "percepcion" ? "default" : "destructive"} 
+                                className="text-xs"
+                              >
+                                {concepto.tipo === "percepcion" ? "P" : "D"}
+                              </Badge>
+                              <span>{concepto.nombre}</span>
+                              {concepto.satClave && (
+                                <span className="text-xs text-muted-foreground">
+                                  ({concepto.satClave})
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    );
+                  })}
+                  {Object.keys(conceptosAgrupadosPorNivel).length === 0 && (
+                    <div className="py-4 text-center text-muted-foreground text-sm">
+                      Todos los conceptos ya están agregados a esta plantilla
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Los conceptos provienen del Catálogo de Conceptos unificado
+              </p>
             </div>
 
             <div className="space-y-2">
