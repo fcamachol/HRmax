@@ -67,11 +67,14 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 117-131, LISR Art. 93 Fracc. XIV",
     ordenCalculo: 30,
   },
+  // ============================================================================
+  // NIVEL PREVISIÓN SOCIAL - Beneficios y Previsión Social (configurables)
+  // ============================================================================
   {
     nombre: "Reembolso de Gastos Médicos",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "004",
     satTipoCatalogo: "percepcion",
     formula: "MONTO_REEMBOLSO",
@@ -86,7 +89,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Fondo de Ahorro",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "005",
     satTipoCatalogo: "percepcion",
     formula: "APORTACION_EMPRESA",
@@ -101,7 +104,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Caja de Ahorro",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "006",
     satTipoCatalogo: "percepcion",
     formula: "APORTACION_CAJA",
@@ -131,7 +134,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Prima de Seguro de Vida",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "011",
     satTipoCatalogo: "percepcion",
     formula: "MONTO_PRIMA",
@@ -146,7 +149,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Seguro de Gastos Médicos Mayores",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "012",
     satTipoCatalogo: "percepcion",
     formula: "MONTO_PRIMA",
@@ -176,7 +179,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Becas para Trabajadores e Hijos",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "015",
     satTipoCatalogo: "percepcion",
     formula: "MONTO_BECA",
@@ -281,7 +284,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     nombre: "Vales de Despensa",
     tipo: "percepcion",
     categoria: "vales",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "029",
     satTipoCatalogo: "percepcion",
     formula: "MONTO_VALES",
@@ -445,14 +448,11 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LFT Art. 110 Fracc. VI",
     ordenCalculo: 350,
   },
-  // ============================================================================
-  // NIVEL SAT - OTROS PAGOS
-  // ============================================================================
   {
     nombre: "Subsidio al Empleo",
     tipo: "percepcion",
     categoria: "prevision_social",
-    nivel: "sat",
+    nivel: "prevision_social",
     satClave: "002",
     satTipoCatalogo: "otro_pago",
     formula: "SUBSIDIO_TABLA_2025(BASE_GRAVABLE)",
@@ -463,9 +463,6 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     fundamentoLegal: "LISR Art. 98",
     ordenCalculo: 400,
   },
-  // ============================================================================
-  // NIVEL PREVISIÓN SOCIAL - Configurables dentro de límites SAT
-  // ============================================================================
   {
     nombre: "Ayuda para Gastos Funerarios",
     tipo: "percepcion",
@@ -574,21 +571,6 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
   // ============================================================================
   // NIVEL ADICIONAL - Completamente configurables por empresa
   // ============================================================================
-  {
-    nombre: "Bono de Productividad",
-    tipo: "percepcion",
-    categoria: "bonos_incentivos",
-    nivel: "adicional",
-    satClave: "038",
-    satTipoCatalogo: "percepcion",
-    formula: "MONTO_BONO",
-    limiteExento: null,
-    gravableISR: true,
-    integraSBC: true,
-    limiteAnual: null,
-    fundamentoLegal: "LFT Art. 84",
-    ordenCalculo: 100,
-  },
   {
     nombre: "Gratificación Especial",
     tipo: "percepcion",
