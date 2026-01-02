@@ -1740,7 +1740,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Conceptos de Medios de Pago
+  // ============================================================================
+  // CATÁLOGO DE CONCEPTOS UNIFICADO (Single Source of Truth)
+  // ============================================================================
+  
+  // Obtener catálogo agrupado por nivel (SAT, Previsión Social, Adicionales)
+  app.get("/api/catalogo-conceptos", async (req, res) => {
+    try {
+      const catalogo = await storage.getCatalogoConceptosAgrupado();
+      res.json(catalogo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Obtener catálogos SAT oficiales (para selectores)
+  app.get("/api/sat-catalogos", async (req, res) => {
+    try {
+      const catalogos = await storage.getSatCatalogos();
+      res.json(catalogos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Conceptos de Medios de Pago (legacy endpoint, ahora con filtro por nivel)
   app.post("/api/conceptos-medio-pago", async (req, res) => {
     try {
       const validatedData = insertConceptoMedioPagoSchema.parse(req.body);
@@ -1753,7 +1777,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/conceptos-medio-pago", async (req, res) => {
     try {
-      const conceptos = await storage.getConceptosMedioPago();
+      const { nivel } = req.query;
+      const conceptos = await storage.getConceptosMedioPago(nivel as string | undefined);
       res.json(conceptos);
     } catch (error: any) {
       res.status(500).json({ message: error.message });

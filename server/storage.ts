@@ -256,7 +256,10 @@ import {
   type CatMunicipio,
   catMunicipios,
   type CatCodigoPostal,
-  catCodigosPostales
+  catCodigosPostales,
+  catSatTiposPercepcion,
+  catSatTiposDeduccion,
+  catSatTiposOtroPago
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -421,10 +424,20 @@ export interface IStorage {
   updateMedioPago(id: string, updates: Partial<InsertMedioPago>): Promise<MedioPago>;
   deleteMedioPago(id: string): Promise<void>;
 
-  // Conceptos de Medios de Pago
+  // Conceptos de Medios de Pago (Catálogo Unificado)
   createConceptoMedioPago(concepto: InsertConceptoMedioPago): Promise<ConceptoMedioPagoWithRelations>;
   getConceptoMedioPago(id: string): Promise<ConceptoMedioPagoWithRelations | undefined>;
-  getConceptosMedioPago(): Promise<ConceptoMedioPagoWithRelations[]>;
+  getConceptosMedioPago(nivel?: string): Promise<ConceptoMedioPagoWithRelations[]>;
+  getCatalogoConceptosAgrupado(): Promise<{
+    sat: ConceptoMedioPagoWithRelations[];
+    previsionSocial: ConceptoMedioPagoWithRelations[];
+    adicional: ConceptoMedioPagoWithRelations[];
+  }>;
+  getSatCatalogos(): Promise<{
+    percepciones: any[];
+    deducciones: any[];
+    otrosPagos: any[];
+  }>;
   updateConceptoMedioPago(id: string, updates: Partial<InsertConceptoMedioPago>): Promise<ConceptoMedioPagoWithRelations>;
   deleteConceptoMedioPago(id: string): Promise<void>;
   
@@ -2316,12 +2329,15 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getConceptosMedioPago(): Promise<ConceptoMedioPagoWithRelations[]> {
-    // Obtener todos los conceptos
-    const conceptos = await db
-      .select()
-      .from(conceptosMedioPago)
-      .orderBy(conceptosMedioPago.nombre);
+  async getConceptosMedioPago(nivel?: string): Promise<ConceptoMedioPagoWithRelations[]> {
+    // Obtener conceptos filtrados por nivel si se especifica
+    let query = db.select().from(conceptosMedioPago);
+    
+    if (nivel) {
+      query = query.where(eq(conceptosMedioPago.nivel, nivel)) as typeof query;
+    }
+    
+    const conceptos = await query.orderBy(conceptosMedioPago.ordenCalculo, conceptosMedioPago.nombre);
     
     // Obtener todas las relaciones de una vez
     const todasRelaciones = await db
@@ -2335,6 +2351,32 @@ export class DatabaseStorage implements IStorage {
         .filter((r) => r.conceptoId === concepto.id)
         .map((r) => r.medioPagoId),
     }));
+  }
+
+  async getCatalogoConceptosAgrupado(): Promise<{
+    sat: ConceptoMedioPagoWithRelations[];
+    previsionSocial: ConceptoMedioPagoWithRelations[];
+    adicional: ConceptoMedioPagoWithRelations[];
+  }> {
+    const todosConceptos = await this.getConceptosMedioPago();
+    
+    return {
+      sat: todosConceptos.filter(c => c.nivel === 'sat'),
+      previsionSocial: todosConceptos.filter(c => c.nivel === 'prevision_social'),
+      adicional: todosConceptos.filter(c => c.nivel === 'adicional'),
+    };
+  }
+
+  async getSatCatalogos(): Promise<{
+    percepciones: any[];
+    deducciones: any[];
+    otrosPagos: any[];
+  }> {
+    const percepciones = await db.select().from(catSatTiposPercepcion).orderBy(catSatTiposPercepcion.clave);
+    const deducciones = await db.select().from(catSatTiposDeduccion).orderBy(catSatTiposDeduccion.clave);
+    const otrosPagos = await db.select().from(catSatTiposOtroPago).orderBy(catSatTiposOtroPago.clave);
+    
+    return { percepciones, deducciones, otrosPagos };
   }
 
   async updateConceptoMedioPago(id: string, updates: Partial<InsertConceptoMedioPago>): Promise<ConceptoMedioPagoWithRelations> {
