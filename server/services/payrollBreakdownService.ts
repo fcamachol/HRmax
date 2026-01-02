@@ -33,6 +33,13 @@ import {
   type ResumenDiasTrabajados,
   getDiasPorFrecuencia
 } from "./diasTrabajadosCalculator";
+import {
+  obtenerPlantillaPredeterminada,
+  evaluarConceptosPlantilla,
+  generarVariablesNomina,
+  type VariablesNomina,
+  type ConceptoEvaluado,
+} from "./plantillaConceptosService";
 
 // ============================================================================
 // TIPOS E INTERFACES
@@ -222,87 +229,139 @@ export async function generarDesgloseNomina(
   const sbc = parseFloat(emp.sbc || emp.salarioDiarioReal || '0');
   const sdi = parseFloat(emp.sdi || emp.sbc || emp.salarioDiarioReal || '0');
 
-  // 4. Calcular percepciones
-  // Usamos arrays separados: uno para tracking de BigInt, otro para respuesta
+  // 4. Calcular percepciones usando la plantilla predeterminada
   interface PercepcionInterna extends ConceptoPercepcion {
     importeBp: bigint;
   }
   const percepcionesInternas: PercepcionInterna[] = [];
 
-  // Sueldo base nominal (gravado)
-  const sueldoNominalBp = pesosToBp(salarioDiarioNominal * diasPagados);
-  percepcionesInternas.push({
-    clave: 'P001',
-    nombre: 'Sueldo Base (Nominal)',
-    tipo: 'gravado',
-    base: salarioDiarioNominal,
-    tasa: diasPagados,
-    importe: bpToPesos(sueldoNominalBp),
-    importeBp: sueldoNominalBp,
-    fundamentoLegal: 'LFT Art. 82-89',
+  // Generar variables de nómina para evaluación de fórmulas
+  const variablesNomina: VariablesNomina = generarVariablesNomina({
+    salarioDiarioReal,
+    salarioDiarioNominal,
+    sbc,
+    sdi,
+    diasTrabajados: diasPagados,
+    diasPeriodo,
+    diasPagados,
+    horasExtraDobles: resumenDias?.horasExtra || 0,
+    horasExtraTriples: 0,
+    diasVacaciones: resumenDias?.vacaciones || 0,
+    antiguedadAnos: 1,
+    diasFestivosTrabajados: resumenDias?.diasFestivos || 0,
+    diasDomingo: resumenDias?.diasDomingo || 0,
+    umaDiaria: CONFIG_FISCAL_2025.uma.diaria,
+    smgDiario: CONFIG_FISCAL_2025.salarioMinimo.general,
   });
 
-  // Percepción adicional exenta
-  if (salarioDiarioExento > 0) {
-    const percepcionExentaBp = pesosToBp(salarioDiarioExento * diasPagados);
-    percepcionesInternas.push({
-      clave: 'P002',
-      nombre: 'Percepción Adicional Diaria (Exento)',
-      tipo: 'exento',
-      base: salarioDiarioExento,
-      tasa: diasPagados,
-      importe: bpToPesos(percepcionExentaBp),
-      importeBp: percepcionExentaBp,
-      fundamentoLegal: 'LISR Art. 93',
-    });
+  // Intentar obtener plantilla predeterminada de la empresa
+  let usandoPlantilla = false;
+  let conceptosPlantilla: ConceptoEvaluado[] = [];
+
+  if (emp.empresaId) {
+    const plantilla = await obtenerPlantillaPredeterminada(emp.empresaId);
+    if (plantilla && plantilla.conceptos.length > 0) {
+      const resultado = evaluarConceptosPlantilla(plantilla, variablesNomina);
+      conceptosPlantilla = resultado.conceptosEvaluados;
+      usandoPlantilla = true;
+    }
   }
 
-  // Horas extra (si hay)
-  if (resumenDias && resumenDias.horasExtra > 0) {
-    const horasExtraImporte = (salarioDiarioReal / 8) * resumenDias.horasExtra * 2;
-    const horasExtraBp = pesosToBp(horasExtraImporte);
-    percepcionesInternas.push({
-      clave: 'P019',
-      nombre: 'Horas Extra Dobles',
-      tipo: 'exento',
-      base: salarioDiarioReal / 8,
-      tasa: resumenDias.horasExtra * 2,
-      importe: bpToPesos(horasExtraBp),
-      importeBp: horasExtraBp,
-      fundamentoLegal: 'LFT Art. 67-68, LISR Art. 93 Fracc. I',
-    });
-  }
+  if (usandoPlantilla && conceptosPlantilla.length > 0) {
+    // Usar conceptos de la plantilla predeterminada
+    for (const concepto of conceptosPlantilla) {
+      if (concepto.tipo === 'percepcion' && concepto.importe > 0) {
+        const importeBp = pesosToBp(concepto.importe);
+        percepcionesInternas.push({
+          clave: concepto.clave,
+          nombre: concepto.nombre,
+          tipo: concepto.tipoGravable === 'exento' ? 'exento' : 
+                concepto.tipoGravable === 'gravado' ? 'gravado' : 'gravado',
+          base: concepto.importeGravado > 0 ? concepto.importeGravado : concepto.importe,
+          importe: concepto.importe,
+          importeBp,
+          fundamentoLegal: concepto.fundamentoLegal,
+        });
+      }
+    }
+  } else {
+    // Fallback: usar percepciones hardcodeadas si no hay plantilla
 
-  // Días festivos trabajados (pago doble adicional)
-  if (resumenDias && resumenDias.diasFestivos > 0) {
-    const festivoImporte = salarioDiarioReal * resumenDias.diasFestivos;
-    const festivoBp = pesosToBp(festivoImporte);
+    // Sueldo base nominal (gravado)
+    const sueldoNominalBp = pesosToBp(salarioDiarioNominal * diasPagados);
     percepcionesInternas.push({
-      clave: 'P028',
-      nombre: 'Días Festivos Trabajados (Extra)',
+      clave: 'P001',
+      nombre: 'Sueldo Base (Nominal)',
       tipo: 'gravado',
-      base: salarioDiarioReal,
-      tasa: resumenDias.diasFestivos,
-      importe: bpToPesos(festivoBp),
-      importeBp: festivoBp,
-      fundamentoLegal: 'LFT Art. 74-75',
+      base: salarioDiarioNominal,
+      tasa: diasPagados,
+      importe: bpToPesos(sueldoNominalBp),
+      importeBp: sueldoNominalBp,
+      fundamentoLegal: 'LFT Art. 82-89',
     });
-  }
 
-  // Prima dominical (25%)
-  if (resumenDias && resumenDias.diasDomingo > 0) {
-    const primaDomImporte = salarioDiarioReal * resumenDias.diasDomingo * 0.25;
-    const primaDomBp = pesosToBp(primaDomImporte);
-    percepcionesInternas.push({
-      clave: 'P020',
-      nombre: 'Prima Dominical (25%)',
-      tipo: 'exento',
-      base: salarioDiarioReal * 0.25,
-      tasa: resumenDias.diasDomingo,
-      importe: bpToPesos(primaDomBp),
-      importeBp: primaDomBp,
-      fundamentoLegal: 'LFT Art. 71, LISR Art. 93 Fracc. I',
-    });
+    // Percepción adicional exenta
+    if (salarioDiarioExento > 0) {
+      const percepcionExentaBp = pesosToBp(salarioDiarioExento * diasPagados);
+      percepcionesInternas.push({
+        clave: 'P002',
+        nombre: 'Percepción Adicional Diaria (Exento)',
+        tipo: 'exento',
+        base: salarioDiarioExento,
+        tasa: diasPagados,
+        importe: bpToPesos(percepcionExentaBp),
+        importeBp: percepcionExentaBp,
+        fundamentoLegal: 'LISR Art. 93',
+      });
+    }
+
+    // Horas extra (si hay)
+    if (resumenDias && resumenDias.horasExtra > 0) {
+      const horasExtraImporte = (salarioDiarioReal / 8) * resumenDias.horasExtra * 2;
+      const horasExtraBp = pesosToBp(horasExtraImporte);
+      percepcionesInternas.push({
+        clave: 'P019',
+        nombre: 'Horas Extra Dobles',
+        tipo: 'exento',
+        base: salarioDiarioReal / 8,
+        tasa: resumenDias.horasExtra * 2,
+        importe: bpToPesos(horasExtraBp),
+        importeBp: horasExtraBp,
+        fundamentoLegal: 'LFT Art. 67-68, LISR Art. 93 Fracc. I',
+      });
+    }
+
+    // Días festivos trabajados (pago doble adicional)
+    if (resumenDias && resumenDias.diasFestivos > 0) {
+      const festivoImporte = salarioDiarioReal * resumenDias.diasFestivos;
+      const festivoBp = pesosToBp(festivoImporte);
+      percepcionesInternas.push({
+        clave: 'P028',
+        nombre: 'Días Festivos Trabajados (Extra)',
+        tipo: 'gravado',
+        base: salarioDiarioReal,
+        tasa: resumenDias.diasFestivos,
+        importe: bpToPesos(festivoBp),
+        importeBp: festivoBp,
+        fundamentoLegal: 'LFT Art. 74-75',
+      });
+    }
+
+    // Prima dominical (25%)
+    if (resumenDias && resumenDias.diasDomingo > 0) {
+      const primaDomImporte = salarioDiarioReal * resumenDias.diasDomingo * 0.25;
+      const primaDomBp = pesosToBp(primaDomImporte);
+      percepcionesInternas.push({
+        clave: 'P020',
+        nombre: 'Prima Dominical (25%)',
+        tipo: 'exento',
+        base: salarioDiarioReal * 0.25,
+        tasa: resumenDias.diasDomingo,
+        importe: bpToPesos(primaDomBp),
+        importeBp: primaDomBp,
+        fundamentoLegal: 'LFT Art. 71, LISR Art. 93 Fracc. I',
+      });
+    }
   }
 
   // Totales de percepciones (usando BigInt internamente)
