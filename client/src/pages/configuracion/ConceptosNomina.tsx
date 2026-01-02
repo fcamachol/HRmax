@@ -121,7 +121,7 @@ export default function ConceptosNomina() {
     empresaId: "",
     activo: true,
     nivel: "adicional" as "sat" | "prevision_social" | "bonos" | "adicional",
-    medioPagoId: "" as string,
+    medioPagoId: "none" as string,
   });
 
   const { data: clientes = [] } = useQuery<Cliente[]>({
@@ -220,7 +220,7 @@ export default function ConceptosNomina() {
       empresaId: empresas[0]?.id || "",
       activo: true,
       nivel: "adicional",
-      medioPagoId: "",
+      medioPagoId: "none",
     });
     setEditingConcepto(null);
     setShowCustomCategoria(false);
@@ -245,7 +245,7 @@ export default function ConceptosNomina() {
       empresaId: concepto.empresaId,
       activo: concepto.activo ?? true,
       nivel: (concepto.nivel || "adicional") as "sat" | "prevision_social" | "bonos" | "adicional",
-      medioPagoId: concepto.medioPagoId || "",
+      medioPagoId: concepto.medioPagoId || "none",
     });
     
     if (isCustomCategoria) {
@@ -270,7 +270,7 @@ export default function ConceptosNomina() {
       categoria: showCustomCategoria && customCategoria.trim() 
         ? customCategoria.trim() 
         : formData.categoria,
-      medioPagoId: formData.medioPagoId || undefined,
+      medioPagoId: formData.medioPagoId === "none" || !formData.medioPagoId ? undefined : formData.medioPagoId,
     };
 
     if (editingConcepto) {
@@ -862,7 +862,7 @@ export default function ConceptosNomina() {
                       <SelectValue placeholder="Selecciona medio de pago" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">
+                      <SelectItem value="none">
                         <span className="text-muted-foreground">Sin medio de pago específico</span>
                       </SelectItem>
                       {mediosPago.map((mp) => (
