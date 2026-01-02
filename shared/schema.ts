@@ -330,6 +330,7 @@ export const plantillaConceptos = pgTable("plantilla_conceptos", {
   canal: varchar("canal", { length: 20 }).notNull().default("nomina"), // "nomina" (gravable, integra SBC) | "exento" (no integra SBC)
   valorDefault: decimal("valor_default", { precision: 18, scale: 4 }), // Valor predeterminado opcional
   esObligatorio: boolean("es_obligatorio").notNull().default(false), // Si el concepto es obligatorio en esta plantilla
+  integraSalarioBase: boolean("integra_salario_base").notNull().default(false), // Si el concepto es parte del salario base (no suma adicional, solo desglose)
   orden: integer("orden").notNull().default(0), // Orden de aparición en la plantilla
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),

@@ -124,6 +124,7 @@ export default function PlantillasNomina() {
     canal: "nomina" as "nomina" | "exento",
     valorDefault: "",
     esObligatorio: false,
+    integraSalarioBase: false,
     orden: 0,
   });
 
@@ -384,6 +385,7 @@ export default function PlantillasNomina() {
       canal: conceptoFormData.canal,
       valorDefault: conceptoFormData.valorDefault ? parseFloat(conceptoFormData.valorDefault) : null,
       esObligatorio: conceptoFormData.esObligatorio,
+      integraSalarioBase: conceptoFormData.integraSalarioBase,
       orden: conceptoFormData.orden,
       clienteId: selectedPlantillaData.clienteId,
       empresaId: selectedPlantillaData.empresaId,
@@ -937,6 +939,23 @@ export default function PlantillasNomina() {
                   setConceptoFormData({ ...conceptoFormData, esObligatorio: checked })
                 }
                 data-testid="switch-obligatorio"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="integraSalarioBase">Integra como parte del Salario Base</Label>
+                <p className="text-xs text-muted-foreground">
+                  Este concepto es parte del salario base (no suma adicional, solo muestra el desglose)
+                </p>
+              </div>
+              <Switch
+                id="integraSalarioBase"
+                checked={conceptoFormData.integraSalarioBase}
+                onCheckedChange={(checked) => 
+                  setConceptoFormData({ ...conceptoFormData, integraSalarioBase: checked })
+                }
+                data-testid="switch-integra-salario-base"
               />
             </div>
           </div>
