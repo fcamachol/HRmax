@@ -116,7 +116,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     ordenCalculo: 100,
   },
   {
-    nombre: "Premios por Puntualidad",
+    nombre: "Bono de Puntualidad",
     tipo: "percepcion",
     categoria: "bonos_incentivos",
     nivel: "sat",
@@ -341,7 +341,7 @@ const CONCEPTOS_LEGALES: ConceptoLegal[] = [
     ordenCalculo: 200,
   },
   {
-    nombre: "Premios por Asistencia",
+    nombre: "Bono de Asistencia",
     tipo: "percepcion",
     categoria: "bonos_incentivos",
     nivel: "sat",
