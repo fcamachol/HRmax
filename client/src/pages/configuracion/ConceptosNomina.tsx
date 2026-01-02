@@ -59,16 +59,26 @@ import {
   Scale,
   Building2,
   AlertTriangle,
+  Lock,
+  Shield,
+  Sparkles,
+  CreditCard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { ConceptoMedioPago, Cliente, Empresa, CategoriaConcepto } from "@shared/schema";
+import type { ConceptoMedioPago, Cliente, Empresa, CategoriaConcepto, MedioPago } from "@shared/schema";
 import { categoriasConcepto } from "@shared/schema";
 
 interface FormulaVariable {
   variable: string;
   descripcion: string;
   ejemplo: string;
+}
+
+interface CatalogoAgrupado {
+  sat: ConceptoMedioPago[];
+  previsionSocial: ConceptoMedioPago[];
+  adicional: ConceptoMedioPago[];
 }
 
 const CATEGORIA_LABELS: Record<CategoriaConcepto, string> = {
@@ -108,6 +118,8 @@ export default function ConceptosNomina() {
     clienteId: "",
     empresaId: "",
     activo: true,
+    nivel: "adicional" as "sat" | "prevision_social" | "adicional",
+    medioPagoId: "" as string,
   });
 
   const { data: clientes = [] } = useQuery<Cliente[]>({
@@ -118,12 +130,20 @@ export default function ConceptosNomina() {
     queryKey: ["/api/empresas"],
   });
 
-  const { data: conceptos = [], isLoading } = useQuery<ConceptoMedioPago[]>({
-    queryKey: ["/api/conceptos-medio-pago"],
+  const { data: catalogo, isLoading } = useQuery<CatalogoAgrupado>({
+    queryKey: ["/api/catalogo-conceptos"],
   });
+
+  const conceptosSat = catalogo?.sat || [];
+  const conceptosPrevision = catalogo?.previsionSocial || [];
+  const conceptosAdicional = catalogo?.adicional || [];
 
   const { data: variables = [] } = useQuery<FormulaVariable[]>({
     queryKey: ["/api/formula-variables"],
+  });
+
+  const { data: mediosPago = [] } = useQuery<MedioPago[]>({
+    queryKey: ["/api/medios-pago"],
   });
 
   useEffect(() => {
@@ -144,7 +164,7 @@ export default function ConceptosNomina() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conceptos-medio-pago"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/catalogo-conceptos"] });
       toast({ title: "Concepto creado correctamente" });
       setIsDialogOpen(false);
       resetForm();
@@ -160,7 +180,7 @@ export default function ConceptosNomina() {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conceptos-medio-pago"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/catalogo-conceptos"] });
       toast({ title: "Concepto actualizado correctamente" });
       setIsDialogOpen(false);
       resetForm();
@@ -175,7 +195,7 @@ export default function ConceptosNomina() {
       await apiRequest("DELETE", `/api/conceptos-medio-pago/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/conceptos-medio-pago"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/catalogo-conceptos"] });
       toast({ title: "Concepto eliminado correctamente" });
     },
     onError: (error: Error) => {
@@ -196,6 +216,8 @@ export default function ConceptosNomina() {
       clienteId: clientes[0]?.id || "",
       empresaId: empresas[0]?.id || "",
       activo: true,
+      nivel: "adicional",
+      medioPagoId: "",
     });
     setEditingConcepto(null);
     setShowCustomCategoria(false);
@@ -219,6 +241,8 @@ export default function ConceptosNomina() {
       clienteId: concepto.clienteId,
       empresaId: concepto.empresaId,
       activo: concepto.activo ?? true,
+      nivel: (concepto.nivel || "adicional") as "sat" | "prevision_social" | "adicional",
+      medioPagoId: concepto.medioPagoId || "",
     });
     
     if (isCustomCategoria) {
@@ -243,6 +267,7 @@ export default function ConceptosNomina() {
       categoria: showCustomCategoria && customCategoria.trim() 
         ? customCategoria.trim() 
         : formData.categoria,
+      medioPagoId: formData.medioPagoId || null,
     };
 
     if (editingConcepto) {
@@ -259,91 +284,127 @@ export default function ConceptosNomina() {
     }));
   };
 
-  const filteredConceptos = conceptos.filter(c => {
-    const matchesSearch = c.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === "todos" || c.tipo === filterType;
-    const matchesCategoria = filterCategoria === "todos" || (c.categoria || "otros") === filterCategoria;
-    return matchesSearch && matchesType && matchesCategoria;
-  });
+  const applyFilters = (conceptos: ConceptoMedioPago[]) => {
+    return conceptos.filter(c => {
+      const matchesSearch = c.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesType = filterType === "todos" || c.tipo === filterType;
+      const matchesCategoria = filterCategoria === "todos" || (c.categoria || "otros") === filterCategoria;
+      return matchesSearch && matchesType && matchesCategoria;
+    });
+  };
 
-  const percepciones = filteredConceptos.filter(c => c.tipo === "percepcion");
-  const deducciones = filteredConceptos.filter(c => c.tipo === "deduccion");
+  const filteredSat = applyFilters(conceptosSat);
+  const filteredPrevision = applyFilters(conceptosPrevision);
+  const filteredAdicional = applyFilters(conceptosAdicional);
 
   const getCategoriaLabel = (categoria: string | null | undefined): string => {
     if (!categoria) return CATEGORIA_LABELS.otros;
     return CATEGORIA_LABELS[categoria as CategoriaConcepto] || categoria;
   };
 
-  const ConceptoRow = ({ concepto }: { concepto: ConceptoMedioPago }) => (
-    <TableRow key={concepto.id} data-testid={`row-concepto-${concepto.id}`}>
-      <TableCell>
-        <div className="flex flex-col gap-1">
-          <span className="font-medium">{concepto.nombre}</span>
-          {!concepto.activo && (
-            <Badge variant="secondary" className="w-fit text-xs">Inactivo</Badge>
-          )}
-        </div>
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className="text-xs font-normal">
-          {getCategoriaLabel(concepto.categoria)}
-        </Badge>
-      </TableCell>
-      <TableCell className="font-mono text-xs max-w-[250px]">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="truncate cursor-help">
-              {concepto.formula || "-"}
+  const ConceptoRow = ({ concepto, nivel }: { concepto: ConceptoMedioPago; nivel: 'sat' | 'prevision_social' | 'adicional' }) => {
+    const isSat = nivel === 'sat';
+    const isReadOnly = isSat;
+    
+    return (
+      <TableRow key={concepto.id} data-testid={`row-concepto-${concepto.id}`}>
+        <TableCell>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <span className="font-medium">{concepto.nombre}</span>
+              {concepto.satClave && (
+                <Badge variant="outline" className="text-xs font-mono">
+                  {concepto.satClave}
+                </Badge>
+              )}
             </div>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-md">
-            <pre className="text-xs whitespace-pre-wrap">{concepto.formula || "Sin fórmula"}</pre>
-          </TooltipContent>
-        </Tooltip>
-      </TableCell>
-      <TableCell className="text-xs">
-        {concepto.limiteExento || "-"}
-      </TableCell>
-      <TableCell className="text-center">
-        {concepto.gravableISR ? (
-          <Check className="h-4 w-4 text-amber-600 mx-auto" />
-        ) : (
-          <X className="h-4 w-4 text-muted-foreground mx-auto" />
-        )}
-      </TableCell>
-      <TableCell className="text-center">
-        {concepto.integraSBC ? (
-          <Check className="h-4 w-4 text-blue-600 mx-auto" />
-        ) : (
-          <X className="h-4 w-4 text-muted-foreground mx-auto" />
-        )}
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => handleEdit(concepto)}
-            data-testid={`button-edit-concepto-${concepto.id}`}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              if (confirm("¿Estás seguro de eliminar este concepto?")) {
-                deleteMutation.mutate(concepto.id);
-              }
-            }}
-            data-testid={`button-delete-concepto-${concepto.id}`}
-          >
-            <Trash2 className="h-4 w-4 text-destructive" />
-          </Button>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
+            <div className="flex items-center gap-1">
+              <Badge 
+                variant="secondary" 
+                className={`text-xs ${concepto.tipo === 'percepcion' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'}`}
+              >
+                {concepto.tipo === 'percepcion' ? 'Percepción' : 'Deducción'}
+              </Badge>
+              {!concepto.activo && (
+                <Badge variant="secondary" className="text-xs">Inactivo</Badge>
+              )}
+            </div>
+          </div>
+        </TableCell>
+        <TableCell>
+          <Badge variant="outline" className="text-xs font-normal">
+            {getCategoriaLabel(concepto.categoria)}
+          </Badge>
+        </TableCell>
+        <TableCell className="font-mono text-xs max-w-[250px]">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="truncate cursor-help">
+                {concepto.formula || "-"}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-md">
+              <pre className="text-xs whitespace-pre-wrap">{concepto.formula || "Sin fórmula"}</pre>
+            </TooltipContent>
+          </Tooltip>
+        </TableCell>
+        <TableCell className="text-xs">
+          {concepto.limiteExento || "-"}
+        </TableCell>
+        <TableCell className="text-center">
+          {concepto.gravableISR ? (
+            <Check className="h-4 w-4 text-amber-600 mx-auto" />
+          ) : (
+            <X className="h-4 w-4 text-muted-foreground mx-auto" />
+          )}
+        </TableCell>
+        <TableCell className="text-center">
+          {concepto.integraSBC ? (
+            <Check className="h-4 w-4 text-blue-600 mx-auto" />
+          ) : (
+            <X className="h-4 w-4 text-muted-foreground mx-auto" />
+          )}
+        </TableCell>
+        <TableCell>
+          {isReadOnly ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center justify-center">
+                  <Lock className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                Concepto SAT oficial (solo lectura)
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleEdit(concepto)}
+                data-testid={`button-edit-concepto-${concepto.id}`}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  if (confirm("¿Estás seguro de eliminar este concepto?")) {
+                    deleteMutation.mutate(concepto.id);
+                  }
+                }}
+                data-testid={`button-delete-concepto-${concepto.id}`}
+              >
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            </div>
+          )}
+        </TableCell>
+      </TableRow>
+    );
+  };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -433,26 +494,35 @@ export default function ConceptosNomina() {
               Cargando conceptos...
             </div>
           ) : (
-            <Tabs defaultValue="percepciones" className="w-full">
-              <TabsList className="w-full justify-start px-4 h-auto flex-wrap">
-                <TabsTrigger value="percepciones" className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-green-600" />
-                  Percepciones
-                  <Badge variant="secondary">{percepciones.length}</Badge>
+            <Tabs defaultValue="sat" className="w-full">
+              <TabsList className="w-full justify-start px-4 h-auto flex-wrap gap-1">
+                <TabsTrigger value="sat" className="flex items-center gap-2" data-testid="tab-sat">
+                  <Lock className="h-4 w-4 text-blue-600" />
+                  Catálogo SAT
+                  <Badge variant="secondary">{filteredSat.length}</Badge>
                 </TabsTrigger>
-                <TabsTrigger value="deducciones" className="flex items-center gap-2">
-                  <Minus className="h-4 w-4 text-red-600" />
-                  Deducciones
-                  <Badge variant="secondary">{deducciones.length}</Badge>
+                <TabsTrigger value="prevision" className="flex items-center gap-2" data-testid="tab-prevision">
+                  <Shield className="h-4 w-4 text-emerald-600" />
+                  Previsión Social
+                  <Badge variant="secondary">{filteredPrevision.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger value="adicional" className="flex items-center gap-2" data-testid="tab-adicional">
+                  <Sparkles className="h-4 w-4 text-purple-600" />
+                  Adicionales
+                  <Badge variant="secondary">{filteredAdicional.length}</Badge>
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="percepciones" className="m-0">
+              <TabsContent value="sat" className="m-0">
+                <div className="px-4 py-2 bg-blue-50 dark:bg-blue-950/30 border-b text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                  <Lock className="h-4 w-4" />
+                  Conceptos oficiales del catálogo SAT CFDI 4.0 (solo lectura)
+                </div>
                 <ScrollArea className="h-[500px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nombre</TableHead>
+                        <TableHead>Nombre / Clave SAT</TableHead>
                         <TableHead>Categoría</TableHead>
                         <TableHead>Fórmula</TableHead>
                         <TableHead>Límite Exento</TableHead>
@@ -462,26 +532,30 @@ export default function ConceptosNomina() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {percepciones.length === 0 ? (
+                      {filteredSat.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                            No hay percepciones registradas
+                            No hay conceptos SAT registrados
                           </TableCell>
                         </TableRow>
                       ) : (
-                        percepciones.map((c) => <ConceptoRow key={c.id} concepto={c} />)
+                        filteredSat.map((c) => <ConceptoRow key={c.id} concepto={c} nivel="sat" />)
                       )}
                     </TableBody>
                   </Table>
                 </ScrollArea>
               </TabsContent>
 
-              <TabsContent value="deducciones" className="m-0">
+              <TabsContent value="prevision" className="m-0">
+                <div className="px-4 py-2 bg-emerald-50 dark:bg-emerald-950/30 border-b text-sm text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                  <Shield className="h-4 w-4" />
+                  Beneficios de previsión social configurables dentro de límites SAT
+                </div>
                 <ScrollArea className="h-[500px]">
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nombre</TableHead>
+                        <TableHead>Nombre / Tipo</TableHead>
                         <TableHead>Categoría</TableHead>
                         <TableHead>Fórmula</TableHead>
                         <TableHead>Límite Exento</TableHead>
@@ -491,14 +565,47 @@ export default function ConceptosNomina() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {deducciones.length === 0 ? (
+                      {filteredPrevision.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                            No hay deducciones registradas
+                            No hay conceptos de previsión social registrados
                           </TableCell>
                         </TableRow>
                       ) : (
-                        deducciones.map((c) => <ConceptoRow key={c.id} concepto={c} />)
+                        filteredPrevision.map((c) => <ConceptoRow key={c.id} concepto={c} nivel="prevision_social" />)
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="adicional" className="m-0">
+                <div className="px-4 py-2 bg-purple-50 dark:bg-purple-950/30 border-b text-sm text-purple-700 dark:text-purple-300 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4" />
+                  Prestaciones adicionales personalizables con medio de pago configurable
+                </div>
+                <ScrollArea className="h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre / Tipo</TableHead>
+                        <TableHead>Categoría</TableHead>
+                        <TableHead>Fórmula</TableHead>
+                        <TableHead>Límite Exento</TableHead>
+                        <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
+                        <TableHead className="text-center w-[100px]">Integra SBC</TableHead>
+                        <TableHead className="w-[100px]">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredAdicional.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            No hay prestaciones adicionales registradas
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredAdicional.map((c) => <ConceptoRow key={c.id} concepto={c} nivel="adicional" />)
                       )}
                     </TableBody>
                   </Table>
@@ -662,6 +769,69 @@ export default function ConceptosNomina() {
                   data-testid="input-concepto-limite-anual"
                 />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="nivel">Nivel del Catálogo</Label>
+                <Select
+                  value={formData.nivel}
+                  onValueChange={(v: "sat" | "prevision_social" | "adicional") => setFormData({ ...formData, nivel: v })}
+                >
+                  <SelectTrigger data-testid="select-concepto-nivel">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sat">
+                      <div className="flex items-center gap-2">
+                        <Lock className="h-4 w-4 text-blue-600" />
+                        Catálogo SAT
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="prevision_social">
+                      <div className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-emerald-600" />
+                        Previsión Social
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="adicional">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-purple-600" />
+                        Adicionales
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formData.nivel === "adicional" && (
+                <div className="space-y-2">
+                  <Label htmlFor="medioPago">Medio de Pago</Label>
+                  <Select
+                    value={formData.medioPagoId}
+                    onValueChange={(v) => setFormData({ ...formData, medioPagoId: v })}
+                  >
+                    <SelectTrigger data-testid="select-concepto-medio-pago">
+                      <SelectValue placeholder="Selecciona medio de pago" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">
+                        <span className="text-muted-foreground">Sin medio de pago específico</span>
+                      </SelectItem>
+                      {mediosPago.map((mp) => (
+                        <SelectItem key={mp.id} value={mp.id}>
+                          <div className="flex items-center gap-2">
+                            <CreditCard className="h-4 w-4" />
+                            {mp.nombre}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Define cómo se pagará esta prestación adicional
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-3 gap-4 pt-2">
