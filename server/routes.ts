@@ -2187,6 +2187,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
+  // NÓMINAS - DESGLOSE POR EMPLEADO
+  // ============================================================================
+
+  app.get("/api/nomina/desglose/:empleadoId", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const { fechaInicio, fechaFin, frecuencia, diasPeriodo, usarIncidencias } = req.query;
+      
+      // Validar empleado existe
+      const empleado = await storage.getEmployee(empleadoId);
+      if (!empleado) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+      
+      // Verificar acceso para usuarios de cliente (skip si no hay sesión - API interna)
+      const user = req.user;
+      if (user && empleado.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
+      
+      // Parsear fechas o usar defaults (quincena actual)
+      const hoy = new Date();
+      const diaDelMes = hoy.getDate();
+      let inicio: Date;
+      let fin: Date;
+      
+      if (fechaInicio && fechaFin) {
+        inicio = new Date(fechaInicio as string);
+        fin = new Date(fechaFin as string);
+      } else {
+        // Default: quincena actual
+        if (diaDelMes <= 15) {
+          inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+          fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+        } else {
+          inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+          fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        }
+      }
+      
+      const { generarDesgloseNomina } = await import("./services/payrollBreakdownService");
+      
+      const desglose = await generarDesgloseNomina({
+        empleadoId,
+        fechaInicio: inicio,
+        fechaFin: fin,
+        frecuencia: (frecuencia as any) || 'quincenal',
+        diasPeriodo: diasPeriodo ? parseInt(diasPeriodo as string) : undefined,
+        usarIncidencias: usarIncidencias !== 'false',
+      });
+      
+      res.json(desglose);
+    } catch (error: any) {
+      console.error('[DESGLOSE NOMINA ERROR]', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
   // NÓMINAS - CRUD Operations
   // ============================================================================
 
