@@ -431,6 +431,7 @@ export interface IStorage {
   getCatalogoConceptosAgrupado(): Promise<{
     sat: ConceptoMedioPagoWithRelations[];
     previsionSocial: ConceptoMedioPagoWithRelations[];
+    bonos: ConceptoMedioPagoWithRelations[];
     adicional: ConceptoMedioPagoWithRelations[];
   }>;
   getSatCatalogos(): Promise<{
@@ -2356,6 +2357,7 @@ export class DatabaseStorage implements IStorage {
   async getCatalogoConceptosAgrupado(): Promise<{
     sat: ConceptoMedioPagoWithRelations[];
     previsionSocial: ConceptoMedioPagoWithRelations[];
+    bonos: ConceptoMedioPagoWithRelations[];
     adicional: ConceptoMedioPagoWithRelations[];
   }> {
     const todosConceptos = await this.getConceptosMedioPago();
@@ -2363,6 +2365,7 @@ export class DatabaseStorage implements IStorage {
     return {
       sat: todosConceptos.filter(c => c.nivel === 'sat'),
       previsionSocial: todosConceptos.filter(c => c.nivel === 'prevision_social'),
+      bonos: todosConceptos.filter(c => c.nivel === 'bonos'),
       adicional: todosConceptos.filter(c => c.nivel === 'adicional'),
     };
   }

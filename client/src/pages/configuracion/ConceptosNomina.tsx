@@ -63,6 +63,7 @@ import {
   Shield,
   Sparkles,
   CreditCard,
+  Trophy,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -78,6 +79,7 @@ interface FormulaVariable {
 interface CatalogoAgrupado {
   sat: ConceptoMedioPago[];
   previsionSocial: ConceptoMedioPago[];
+  bonos: ConceptoMedioPago[];
   adicional: ConceptoMedioPago[];
 }
 
@@ -118,7 +120,7 @@ export default function ConceptosNomina() {
     clienteId: "",
     empresaId: "",
     activo: true,
-    nivel: "adicional" as "sat" | "prevision_social" | "adicional",
+    nivel: "adicional" as "sat" | "prevision_social" | "bonos" | "adicional",
     medioPagoId: "" as string,
   });
 
@@ -136,6 +138,7 @@ export default function ConceptosNomina() {
 
   const conceptosSat = catalogo?.sat || [];
   const conceptosPrevision = catalogo?.previsionSocial || [];
+  const conceptosBonos = catalogo?.bonos || [];
   const conceptosAdicional = catalogo?.adicional || [];
 
   const { data: variables = [] } = useQuery<FormulaVariable[]>({
@@ -241,7 +244,7 @@ export default function ConceptosNomina() {
       clienteId: concepto.clienteId,
       empresaId: concepto.empresaId,
       activo: concepto.activo ?? true,
-      nivel: (concepto.nivel || "adicional") as "sat" | "prevision_social" | "adicional",
+      nivel: (concepto.nivel || "adicional") as "sat" | "prevision_social" | "bonos" | "adicional",
       medioPagoId: concepto.medioPagoId || "",
     });
     
@@ -267,7 +270,7 @@ export default function ConceptosNomina() {
       categoria: showCustomCategoria && customCategoria.trim() 
         ? customCategoria.trim() 
         : formData.categoria,
-      medioPagoId: formData.medioPagoId || null,
+      medioPagoId: formData.medioPagoId || undefined,
     };
 
     if (editingConcepto) {
@@ -295,6 +298,7 @@ export default function ConceptosNomina() {
 
   const filteredSat = applyFilters(conceptosSat);
   const filteredPrevision = applyFilters(conceptosPrevision);
+  const filteredBonos = applyFilters(conceptosBonos);
   const filteredAdicional = applyFilters(conceptosAdicional);
 
   const getCategoriaLabel = (categoria: string | null | undefined): string => {
@@ -302,7 +306,7 @@ export default function ConceptosNomina() {
     return CATEGORIA_LABELS[categoria as CategoriaConcepto] || categoria;
   };
 
-  const ConceptoRow = ({ concepto, nivel }: { concepto: ConceptoMedioPago; nivel: 'sat' | 'prevision_social' | 'adicional' }) => {
+  const ConceptoRow = ({ concepto, nivel }: { concepto: ConceptoMedioPago; nivel: 'sat' | 'prevision_social' | 'bonos' | 'adicional' }) => {
     const isSat = nivel === 'sat';
     const isReadOnly = isSat;
     
@@ -506,6 +510,11 @@ export default function ConceptosNomina() {
                   Previsión Social
                   <Badge variant="secondary">{filteredPrevision.length}</Badge>
                 </TabsTrigger>
+                <TabsTrigger value="bonos" className="flex items-center gap-2" data-testid="tab-bonos">
+                  <Trophy className="h-4 w-4 text-amber-600" />
+                  Bonos
+                  <Badge variant="secondary">{filteredBonos.length}</Badge>
+                </TabsTrigger>
                 <TabsTrigger value="adicional" className="flex items-center gap-2" data-testid="tab-adicional">
                   <Sparkles className="h-4 w-4 text-purple-600" />
                   Adicionales
@@ -573,6 +582,39 @@ export default function ConceptosNomina() {
                         </TableRow>
                       ) : (
                         filteredPrevision.map((c) => <ConceptoRow key={c.id} concepto={c} nivel="prevision_social" />)
+                      )}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="bonos" className="m-0">
+                <div className="px-4 py-2 bg-amber-50 dark:bg-amber-950/30 border-b text-sm text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                  <Trophy className="h-4 w-4" />
+                  Bonos e incentivos personalizados configurables por la empresa
+                </div>
+                <ScrollArea className="h-[500px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nombre / Tipo</TableHead>
+                        <TableHead>Categoría</TableHead>
+                        <TableHead>Fórmula</TableHead>
+                        <TableHead>Límite Exento</TableHead>
+                        <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
+                        <TableHead className="text-center w-[100px]">Integra SBC</TableHead>
+                        <TableHead className="w-[100px]">Acciones</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBonos.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                            No hay bonos registrados. Crea bonos personalizados para tu empresa.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        filteredBonos.map((c) => <ConceptoRow key={c.id} concepto={c} nivel="bonos" />)
                       )}
                     </TableBody>
                   </Table>
@@ -776,7 +818,7 @@ export default function ConceptosNomina() {
                 <Label htmlFor="nivel">Nivel del Catálogo</Label>
                 <Select
                   value={formData.nivel}
-                  onValueChange={(v: "sat" | "prevision_social" | "adicional") => setFormData({ ...formData, nivel: v })}
+                  onValueChange={(v: "sat" | "prevision_social" | "bonos" | "adicional") => setFormData({ ...formData, nivel: v })}
                 >
                   <SelectTrigger data-testid="select-concepto-nivel">
                     <SelectValue />
@@ -792,6 +834,12 @@ export default function ConceptosNomina() {
                       <div className="flex items-center gap-2">
                         <Shield className="h-4 w-4 text-emerald-600" />
                         Previsión Social
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="bonos">
+                      <div className="flex items-center gap-2">
+                        <Trophy className="h-4 w-4 text-amber-600" />
+                        Bonos
                       </div>
                     </SelectItem>
                     <SelectItem value="adicional">

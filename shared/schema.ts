@@ -231,7 +231,7 @@ export const tiposConcepto = ["percepcion", "deduccion"] as const;
 export type TipoConcepto = typeof tiposConcepto[number];
 
 // Niveles jerárquicos del catálogo de conceptos
-export const nivelesConcepto = ["sat", "prevision_social", "adicional"] as const;
+export const nivelesConcepto = ["sat", "prevision_social", "bonos", "adicional"] as const;
 export type NivelConcepto = typeof nivelesConcepto[number];
 
 // Tipo de catálogo SAT al que pertenece
