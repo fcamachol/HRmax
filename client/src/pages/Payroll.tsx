@@ -563,7 +563,16 @@ export default function Payroll() {
     const percepciones = [...plantillaPercepciones, ...manualPercepciones];
     const deducciones = [...plantillaDeducciones, ...manualDeducciones];
     
-    return { percepciones, deducciones };
+    const totalPlantillaPercepciones = plantillaPercepciones.reduce((sum, p) => sum + p.amount, 0);
+    const totalPlantillaDeducciones = plantillaDeducciones.reduce((sum, d) => sum + d.amount, 0);
+    
+    return { 
+      percepciones, 
+      deducciones,
+      totalPlantillaPercepciones,
+      totalPlantillaDeducciones,
+      hasPlantilla: plantillaPercepciones.length > 0 || plantillaDeducciones.length > 0
+    };
   };
 
   const calculateEmployeePayroll = (employeeId: string) => {
@@ -1001,9 +1010,20 @@ export default function Payroll() {
   const selectedEmployeesData = employeesToShow.filter(emp => selectedEmployees.has(emp.id));
 
   const totalSalary = selectedEmployeesData.reduce((sum, emp) => sum + emp.salary, 0);
-  const totalEarnings = selectedEmployeesData.reduce((sum, emp) => sum + emp.earnings, 0);
+  
+  const getEmployeeTotalPercepciones = (emp: typeof selectedEmployeesData[0]) => {
+    const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
+    const extrasPercepciones = emp.primaDominical + emp.pagoFestivos + emp.horasDoblesPago + emp.horasTriplesPago + emp.vacacionesPago + emp.primaVacacional;
+    const conceptosPercepciones = breakdown.percepciones.reduce((s, p) => s + p.amount, 0);
+    if (breakdown.hasPlantilla && conceptosPercepciones > 0) {
+      return conceptosPercepciones + extrasPercepciones;
+    }
+    return emp.earnings;
+  };
+  
+  const totalEarnings = selectedEmployeesData.reduce((sum, emp) => sum + getEmployeeTotalPercepciones(emp), 0);
   const totalDeductions = selectedEmployeesData.reduce((sum, emp) => sum + emp.deductions, 0);
-  const totalNetPay = selectedEmployeesData.reduce((sum, emp) => sum + emp.netPay, 0);
+  const totalNetPay = selectedEmployeesData.reduce((sum, emp) => sum + (getEmployeeTotalPercepciones(emp) - emp.deductions), 0);
 
   const toggleEmployee = (id: string) => {
     const newSelected = new Set(selectedEmployees);
@@ -1758,12 +1778,18 @@ export default function Payroll() {
                                     </CardContent>
                                   </Card>
 
-                                  {/* Percepciones Adicionales */}
+                                  {/* Desglose de Percepciones */}
                                   <Card>
                                     <CardHeader className="pb-3">
-                                      <CardTitle className="text-sm font-medium">Percepciones Adicionales</CardTitle>
+                                      <CardTitle className="text-sm font-medium">Desglose de Percepciones</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-2 text-sm">
+                                      {employee.percepciones.map((concepto) => (
+                                        <div key={concepto.id} className="flex justify-between">
+                                          <span className="text-muted-foreground">{concepto.name}</span>
+                                          <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                        </div>
+                                      ))}
                                       {employee.primaDominical > 0 && (
                                         <div className="flex justify-between">
                                           <span className="text-muted-foreground">Prima Dominical (25%)</span>
@@ -1819,15 +1845,9 @@ export default function Payroll() {
                                           <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
                                         </div>
                                       )}
-                                      {employee.percepciones.map((concepto) => (
-                                        <div key={concepto.id} className="flex justify-between">
-                                          <span className="text-muted-foreground">{concepto.name}</span>
-                                          <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
-                                        </div>
-                                      ))}
-                                      {employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && employee.percepciones.length === 0 && (
+                                      {employee.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && (
                                         <div className="text-muted-foreground text-center py-4">
-                                          Sin percepciones adicionales
+                                          Sin percepciones configuradas
                                         </div>
                                       )}
                                       <div className="h-px bg-border my-2" />
@@ -2475,6 +2495,7 @@ export default function Payroll() {
                     {selectedEmployeesData.map((employee) => {
                       const breakdown = getEmployeeConceptBreakdown(employee.id, employee);
                       const salarioDiario = employee.salary / 30;
+                      const totalPercepciones = getEmployeeTotalPercepciones(employee);
                       
                       return (
                         <AccordionItem 
@@ -2498,7 +2519,7 @@ export default function Payroll() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Percepciones</div>
-                                  <div className="font-mono text-primary">{formatCurrency(employee.earnings)}</div>
+                                  <div className="font-mono text-primary">{formatCurrency(totalPercepciones)}</div>
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Deducciones</div>
@@ -2506,7 +2527,7 @@ export default function Payroll() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Neto</div>
-                                  <div className="font-mono font-semibold text-lg">{formatCurrency(employee.netPay)}</div>
+                                  <div className="font-mono font-semibold text-lg">{formatCurrency(totalPercepciones - employee.deductions)}</div>
                                 </div>
                               </div>
                             </div>
@@ -2563,12 +2584,18 @@ export default function Payroll() {
                                 </CardContent>
                               </Card>
 
-                              {/* Percepciones Adicionales */}
+                              {/* Desglose de Percepciones */}
                               <Card>
                                 <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm font-medium">Percepciones Adicionales</CardTitle>
+                                  <CardTitle className="text-sm font-medium">Desglose de Percepciones</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
+                                  {breakdown.percepciones.map((concepto) => (
+                                    <div key={concepto.id} className="flex justify-between">
+                                      <span className="text-muted-foreground">{concepto.name}</span>
+                                      <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                    </div>
+                                  ))}
                                   {employee.primaDominical > 0 && (
                                     <div className="flex justify-between">
                                       <span className="text-muted-foreground">Prima Dominical (25%)</span>
@@ -2600,7 +2627,6 @@ export default function Payroll() {
                                           <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
                                         </div>
                                       )}
-                                      {/* Desglose ISR: Exento / Gravado */}
                                       <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
                                         <div className="flex justify-between text-xs">
                                           <span className="text-green-600 dark:text-green-400">Exento ISR</span>
@@ -2625,21 +2651,15 @@ export default function Payroll() {
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
                                     </div>
                                   )}
-                                  {breakdown.percepciones.map((concepto) => (
-                                    <div key={concepto.id} className="flex justify-between">
-                                      <span className="text-muted-foreground">{concepto.name}</span>
-                                      <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
-                                    </div>
-                                  ))}
-                                  {employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && breakdown.percepciones.length === 0 && (
+                                  {breakdown.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && (
                                     <div className="text-muted-foreground text-center py-4">
-                                      Sin percepciones adicionales
+                                      Sin percepciones configuradas
                                     </div>
                                   )}
                                   <div className="h-px bg-border my-2" />
                                   <div className="flex justify-between font-semibold">
                                     <span>Total Percepciones</span>
-                                    <span className="font-mono text-primary">{formatCurrency(employee.earnings)}</span>
+                                    <span className="font-mono text-primary">{formatCurrency(totalPercepciones)}</span>
                                   </div>
                                 </CardContent>
                               </Card>
