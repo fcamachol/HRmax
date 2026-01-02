@@ -230,6 +230,14 @@ export const mediosPago = pgTable("medios_pago", {
 export const tiposConcepto = ["percepcion", "deduccion"] as const;
 export type TipoConcepto = typeof tiposConcepto[number];
 
+// Niveles jerárquicos del catálogo de conceptos
+export const nivelesConcepto = ["sat", "prevision_social", "adicional"] as const;
+export type NivelConcepto = typeof nivelesConcepto[number];
+
+// Tipo de catálogo SAT al que pertenece
+export const tiposSatCatalogo = ["percepcion", "deduccion", "otro_pago"] as const;
+export type TipoSatCatalogo = typeof tiposSatCatalogo[number];
+
 // Categorías predefinidas para conceptos de nómina (percepciones/deducciones)
 export const categoriasConcepto = [
   "salario",
@@ -253,17 +261,30 @@ export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   nombre: varchar("nombre", { length: 200 }).notNull().unique(),
   tipo: varchar("tipo", { length: 20 }).notNull(), // percepcion, deduccion
   categoria: varchar("categoria", { length: 50 }).default("otros"), // Categoría para clasificación
+  
+  // Jerarquía del catálogo unificado
+  nivel: varchar("nivel", { length: 30 }).default("adicional"), // sat, prevision_social, adicional
+  satClave: varchar("sat_clave", { length: 10 }), // Clave del catálogo SAT (001, 002, etc.)
+  satTipoCatalogo: varchar("sat_tipo_catalogo", { length: 20 }), // percepcion, deduccion, otro_pago
+  fundamentoLegal: text("fundamento_legal"), // Referencia legal (LFT Art. X, LISR Art. Y)
+  
+  // Medio de pago (para prestaciones adicionales)
+  medioPagoId: varchar("medio_pago_id").references(() => mediosPago.id, { onDelete: "set null" }),
+  
   formula: text("formula").notNull(),
   limiteExento: text("limite_exento"), // Puede ser fórmula (ej: "3*UMA") o cantidad
   gravableISR: boolean("gravable_isr").notNull().default(true),
   integraSBC: boolean("integra_sbc").notNull().default(false),
   limiteAnual: text("limite_anual"), // Puede ser fórmula o cantidad
+  ordenCalculo: integer("orden_calculo").default(100), // Orden en que se calcula
   activo: boolean("activo").default(true),
   createdAt: timestamp("created_at").default(sql`now()`),
   updatedAt: timestamp("updated_at").default(sql`now()`),
 }, (table) => ({
   clienteEmpresaIdx: index("conceptos_medio_pago_cliente_empresa_idx").on(table.clienteId, table.empresaId),
   categoriaIdx: index("conceptos_medio_pago_categoria_idx").on(table.categoria),
+  nivelIdx: index("conceptos_medio_pago_nivel_idx").on(table.nivel),
+  satClaveIdx: index("conceptos_medio_pago_sat_clave_idx").on(table.satClave),
 }));
 
 // Tabla de relación muchos a muchos entre conceptos y medios de pago
@@ -810,7 +831,9 @@ export const insertConceptoMedioPagoSchema = createInsertSchema(conceptosMedioPa
   updatedAt: true,
 }).extend({
   tipo: z.enum(tiposConcepto),
-  mediosPagoIds: z.array(z.string()).optional(), // IDs de medios de pago a vincular
+  nivel: z.enum(nivelesConcepto).optional(),
+  satTipoCatalogo: z.enum(tiposSatCatalogo).nullish(),
+  mediosPagoIds: z.array(z.string()).optional(), // IDs de medios de pago a vincular (legacy)
 });
 
 export const updateConceptoMedioPagoSchema = insertConceptoMedioPagoSchema.partial();
