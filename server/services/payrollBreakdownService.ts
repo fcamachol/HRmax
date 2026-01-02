@@ -62,6 +62,11 @@ export interface ConceptoPercepcion {
   tasa?: number;
   importe: number;
   fundamentoLegal?: string;
+  // Campos adicionales para compatibilidad con ResultadoNomina del frontend
+  concepto?: string;  // Alias de nombre
+  monto?: number;     // Alias de importe
+  gravado?: number;   // Importe gravado
+  exento?: number;    // Importe exento
 }
 
 export interface ConceptoDeduccion {
@@ -71,6 +76,9 @@ export interface ConceptoDeduccion {
   tasa?: number;
   importe: number;
   fundamentoLegal?: string;
+  // Campos adicionales para compatibilidad con ResultadoNomina del frontend
+  concepto?: string;  // Alias de nombre
+  monto?: number;     // Alias de importe
 }
 
 export interface DesgloseIMSS {
@@ -425,8 +433,19 @@ export async function generarDesgloseNomina(
     .filter(p => p.tipo === 'exento')
     .reduce((sum, p) => sumarBp(sum, p.importeBp), BigInt(0));
   
-  // Convertir a formato de respuesta (sin BigInt)
-  const percepciones: ConceptoPercepcion[] = percepcionesInternas.map(({ importeBp, ...rest }) => rest);
+  // Convertir a formato de respuesta compatible con frontend (sin BigInt)
+  // El frontend espera: { concepto, monto, gravado, exento }
+  const percepciones: ConceptoPercepcion[] = percepcionesInternas.map(({ importeBp, nombre, importe, tipo, ...rest }) => ({
+    ...rest,
+    nombre,
+    tipo,
+    importe,
+    // Campos adicionales para compatibilidad con ResultadoNomina del frontend
+    concepto: nombre,
+    monto: importe,
+    gravado: tipo === 'gravado' ? importe : 0,
+    exento: tipo === 'exento' ? importe : 0,
+  }));
 
   // 5. Calcular IMSS
   const configIMSS: ConfiguracionIMSS = {
@@ -465,30 +484,40 @@ export async function generarDesgloseNomina(
 
   // ISR (si es positivo)
   if (isrNeto > 0) {
+    const nombreISR = 'ISR (Retención)';
     deducciones.push({
       clave: 'D002',
-      nombre: 'ISR (Retención)',
+      nombre: nombreISR,
       base: bpToPesos(baseISRBp),
       importe: isrNeto,
       fundamentoLegal: 'LISR Art. 96',
+      concepto: nombreISR,
+      monto: isrNeto,
     });
   }
 
   // IMSS Obrero
   for (const cuota of resultadoIMSS.cuotasObrero) {
+    const nombreCuota = `IMSS ${cuota.concepto}`;
     deducciones.push({
       clave: 'D001',
-      nombre: `IMSS ${cuota.concepto}`,
+      nombre: nombreCuota,
       base: cuota.base,
       tasa: cuota.tasaPorcentaje,
       importe: cuota.monto,
       fundamentoLegal: 'LSS Art. 25, 106, 147',
+      concepto: nombreCuota,
+      monto: cuota.monto,
     });
   }
 
   // Deducciones de la plantilla (Infonavit, préstamos, etc.)
   for (const deduccion of deduccionesPlantilla) {
-    deducciones.push(deduccion);
+    deducciones.push({
+      ...deduccion,
+      concepto: deduccion.nombre,
+      monto: deduccion.importe,
+    });
   }
 
   // Subsidio al empleo (si aplica, es una percepción negativa / reducción de ISR)
