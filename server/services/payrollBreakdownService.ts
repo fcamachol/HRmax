@@ -267,19 +267,68 @@ export async function generarDesgloseNomina(
     }
   }
 
+  // Variables para deducciones adicionales de plantilla
+  const deduccionesPlantilla: ConceptoDeduccion[] = [];
+
   if (usandoPlantilla && conceptosPlantilla.length > 0) {
     // Usar conceptos de la plantilla predeterminada
     for (const concepto of conceptosPlantilla) {
       if (concepto.tipo === 'percepcion' && concepto.importe > 0) {
-        const importeBp = pesosToBp(concepto.importe);
-        percepcionesInternas.push({
+        // Calcular base diaria y días para mantener semántica: importe = base * tasa
+        // Proteger contra diasPagados = 0 (empleado en licencia/incapacidad)
+        const tasaDias = diasPagados > 0 ? diasPagados : 1;
+        const baseDiaria = concepto.importe / tasaDias;
+        
+        // Para conceptos mixtos (gravado + exento), creamos dos filas separadas
+        if (concepto.tipoGravable === 'mixto' && concepto.importeGravado > 0 && concepto.importeExento > 0) {
+          // Fila gravada
+          const gravadoBp = pesosToBp(concepto.importeGravado);
+          const baseGravadaDiaria = concepto.importeGravado / tasaDias;
+          percepcionesInternas.push({
+            clave: concepto.clave,
+            nombre: `${concepto.nombre} (Gravado)`,
+            tipo: 'gravado',
+            base: baseGravadaDiaria,
+            tasa: tasaDias,
+            importe: concepto.importeGravado,
+            importeBp: gravadoBp,
+            fundamentoLegal: concepto.fundamentoLegal,
+          });
+          
+          // Fila exenta - mantiene la misma clave SAT base
+          const exentoBp = pesosToBp(concepto.importeExento);
+          const baseExentaDiaria = concepto.importeExento / tasaDias;
+          percepcionesInternas.push({
+            clave: concepto.clave,
+            nombre: `${concepto.nombre} (Exento)`,
+            tipo: 'exento',
+            base: baseExentaDiaria,
+            tasa: tasaDias,
+            importe: concepto.importeExento,
+            importeBp: exentoBp,
+            fundamentoLegal: concepto.fundamentoLegal,
+          });
+        } else {
+          // Concepto simple: todo gravado o todo exento
+          const importeBp = pesosToBp(concepto.importe);
+          percepcionesInternas.push({
+            clave: concepto.clave,
+            nombre: concepto.nombre,
+            tipo: concepto.tipoGravable === 'exento' ? 'exento' : 'gravado',
+            base: baseDiaria,
+            tasa: tasaDias,
+            importe: concepto.importe,
+            importeBp,
+            fundamentoLegal: concepto.fundamentoLegal,
+          });
+        }
+      } else if (concepto.tipo === 'deduccion' && concepto.importe > 0) {
+        // Agregar deducciones de la plantilla (ej: Infonavit, préstamos)
+        deduccionesPlantilla.push({
           clave: concepto.clave,
           nombre: concepto.nombre,
-          tipo: concepto.tipoGravable === 'exento' ? 'exento' : 
-                concepto.tipoGravable === 'gravado' ? 'gravado' : 'gravado',
-          base: concepto.importeGravado > 0 ? concepto.importeGravado : concepto.importe,
+          base: concepto.importe,
           importe: concepto.importe,
-          importeBp,
           fundamentoLegal: concepto.fundamentoLegal,
         });
       }
@@ -366,6 +415,9 @@ export async function generarDesgloseNomina(
 
   // Totales de percepciones (usando BigInt internamente)
   const totalPercepcionesBp = percepcionesInternas.reduce((sum, p) => sumarBp(sum, p.importeBp), BigInt(0));
+  
+  // Totales gravado/exento: ahora que las filas están separadas correctamente,
+  // usamos el tipo de cada percepción interna
   const totalPercepcionesGravadasBp = percepcionesInternas
     .filter(p => p.tipo === 'gravado')
     .reduce((sum, p) => sumarBp(sum, p.importeBp), BigInt(0));
@@ -432,6 +484,11 @@ export async function generarDesgloseNomina(
       importe: cuota.monto,
       fundamentoLegal: 'LSS Art. 25, 106, 147',
     });
+  }
+
+  // Deducciones de la plantilla (Infonavit, préstamos, etc.)
+  for (const deduccion of deduccionesPlantilla) {
+    deducciones.push(deduccion);
   }
 
   // Subsidio al empleo (si aplica, es una percepción negativa / reducción de ISR)

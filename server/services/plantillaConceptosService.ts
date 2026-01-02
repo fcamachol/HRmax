@@ -25,6 +25,7 @@ import type {
 // ============================================================================
 
 export interface VariablesNomina {
+  // Salarios base
   SALARIO_BASE: number;
   SALARIO_DIARIO: number;
   SALARIO_DIARIO_REAL: number;
@@ -33,27 +34,34 @@ export interface VariablesNomina {
   SALARIO_HORA: number;
   SBC: number;
   SDI: number;
+  // Días
   DIAS_TRABAJADOS: number;
   DIAS_PERIODO: number;
   DIAS_PAGADOS: number;
   DIAS_AGUINALDO: number;
+  // UMA y Salario Mínimo
   UMA_DIARIA: number;
   UMA_MENSUAL: number;
   UMA_ANUAL: number;
   SMG_DIARIO: number;
   SMG_MENSUAL: number;
+  SALARIO_MINIMO: number;
+  // Incidencias
   HORAS_EXTRA_DOBLES: number;
   HORAS_EXTRA_TRIPLES: number;
   DIAS_VACACIONES: number;
   ANTIGUEDAD_ANOS: number;
   DIAS_FESTIVOS_TRABAJADOS: number;
   DIAS_DOMINGO: number;
-  MONTO_VALES?: number;
-  MONTO_FONDO_AHORRO?: number;
-  PORCENTAJE_PTU?: number;
-  CUOTA_IMSS?: number;
-  ISR_RETENIDO?: number;
-  SUBSIDIO_EMPLEO?: number;
+  // Deducciones y beneficios (valores opcionales, default 0)
+  DESCUENTO_INFONAVIT: number;
+  DESCUENTO_FONACOT: number;
+  MONTO_VALES: number;
+  MONTO_FONDO_AHORRO: number;
+  PORCENTAJE_PTU: number;
+  CUOTA_IMSS: number;
+  ISR_RETENIDO: number;
+  SUBSIDIO_EMPLEO: number;
 }
 
 export interface ConceptoEvaluado {
@@ -88,17 +96,24 @@ export interface PlantillaConConceptosEvaluados {
 // CONSTANTES
 // ============================================================================
 
+// Variables permitidas en evaluación de fórmulas del catálogo unificado
+// Incluye todas las variables que pueden aparecer en fórmulas del catálogo
 const ALLOWED_FORMULA_VARIABLES = new Set([
+  // Salarios base
   'SALARIO_BASE', 'SALARIO_DIARIO', 'SALARIO_DIARIO_REAL', 'SALARIO_DIARIO_NOMINAL',
   'SALARIO_PERIODO', 'SALARIO_HORA', 'SBC', 'SDI', 
+  // Días
   'DIAS_TRABAJADOS', 'DIAS_PERIODO', 'DIAS_PAGADOS', 'DIAS_AGUINALDO',
+  // UMA y Salario Mínimo
   'UMA_DIARIA', 'UMA_MENSUAL', 'UMA_ANUAL',
   'SMG_DIARIO', 'SMG_MENSUAL', 'SALARIO_MINIMO',
+  // Incidencias
   'HORAS_EXTRA_DOBLES', 'HORAS_EXTRA_TRIPLES',
   'DIAS_VACACIONES', 'ANTIGUEDAD_ANOS', 'DIAS_FESTIVOS_TRABAJADOS', 'DIAS_DOMINGO',
+  // Deducciones y beneficios (valores opcionales con defaults en 0)
+  'DESCUENTO_INFONAVIT', 'DESCUENTO_FONACOT',
   'MONTO_VALES', 'MONTO_FONDO_AHORRO', 'PORCENTAJE_PTU',
   'CUOTA_IMSS', 'ISR_RETENIDO', 'SUBSIDIO_EMPLEO',
-  'DESCUENTO_INFONAVIT', 'DESCUENTO_FONACOT',
 ]);
 
 const ALLOWED_FUNCTIONS = ['min', 'max', 'abs', 'round', 'ceil', 'floor'];
@@ -418,6 +433,7 @@ export function generarVariablesNomina(params: {
   } = params;
 
   return {
+    // Salarios base
     SALARIO_BASE: salarioDiarioNominal,
     SALARIO_DIARIO: salarioDiarioReal,
     SALARIO_DIARIO_REAL: salarioDiarioReal,
@@ -426,20 +442,33 @@ export function generarVariablesNomina(params: {
     SALARIO_HORA: salarioDiarioReal / 8,
     SBC: sbc,
     SDI: sdi,
+    // Días
     DIAS_TRABAJADOS: diasTrabajados,
     DIAS_PERIODO: diasPeriodo,
     DIAS_PAGADOS: diasPagados,
     DIAS_AGUINALDO: 15,
+    // UMA y Salario Mínimo
     UMA_DIARIA: umaDiaria,
     UMA_MENSUAL: umaDiaria * 30.4,
     UMA_ANUAL: umaDiaria * 365,
+    SALARIO_MINIMO: smgDiario,
     SMG_DIARIO: smgDiario,
     SMG_MENSUAL: smgDiario * 30.4,
+    // Incidencias
     HORAS_EXTRA_DOBLES: horasExtraDobles,
     HORAS_EXTRA_TRIPLES: horasExtraTriples,
     DIAS_VACACIONES: diasVacaciones,
     ANTIGUEDAD_ANOS: antiguedadAnos,
     DIAS_FESTIVOS_TRABAJADOS: diasFestivosTrabajados,
     DIAS_DOMINGO: diasDomingo,
+    // Deducciones y beneficios (defaults en 0 - se pueden sobrescribir en el cálculo)
+    DESCUENTO_INFONAVIT: 0,
+    DESCUENTO_FONACOT: 0,
+    MONTO_VALES: 0,
+    MONTO_FONDO_AHORRO: 0,
+    PORCENTAJE_PTU: 0,
+    CUOTA_IMSS: 0,
+    ISR_RETENIDO: 0,
+    SUBSIDIO_EMPLEO: 0,
   };
 }

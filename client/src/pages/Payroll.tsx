@@ -92,7 +92,7 @@ interface EmployeePayrollDetail {
   id: string;
   name: string;
   rfc: string;
-  department: string;
+  department: string | null;
   salary: number;
   baseSalary: number;
   daysWorked: number;
