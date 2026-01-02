@@ -2533,120 +2533,79 @@ export default function Payroll() {
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="pt-4 pb-2">
-                            <div className="grid grid-cols-3 gap-4">
-                              {/* Salario Base */}
-                              <Card>
-                                <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm font-medium">Salario Base</CardTitle>
-                                </CardHeader>
-                                <CardContent className="space-y-2 text-sm">
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Días del periodo</span>
-                                    <span className="font-mono">{employee.periodDays}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Días trabajados</span>
-                                    <span className="font-mono">{employee.daysWorked}</span>
-                                  </div>
-                                  {employee.absences > 0 && (
-                                    <div className="flex justify-between text-destructive">
-                                      <span>Faltas</span>
-                                      <span className="font-mono">-{employee.absences}</span>
-                                    </div>
-                                  )}
-                                  {employee.incapacities > 0 && (
-                                    <div className="flex justify-between text-orange-600">
-                                      <span>Incapacidades</span>
-                                      <span className="font-mono">-{employee.incapacities}</span>
-                                    </div>
-                                  )}
-                                  {employee.diasDomingo > 0 && (
-                                    <div className="flex justify-between text-primary">
-                                      <span>Domingos trabajados</span>
-                                      <span className="font-mono">+{employee.diasDomingo}</span>
-                                    </div>
-                                  )}
-                                  {employee.diasFestivos > 0 && (
-                                    <div className="flex justify-between text-purple-600 dark:text-purple-400">
-                                      <span>Días festivos trabajados</span>
-                                      <span className="font-mono">+{employee.diasFestivos}</span>
-                                    </div>
-                                  )}
-                                  <div className="h-px bg-border my-2" />
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Salario diario</span>
-                                    <span className="font-mono">{formatCurrency(salarioDiario)}</span>
-                                  </div>
-                                  <div className="flex justify-between font-semibold">
-                                    <span>Salario proporcional</span>
-                                    <span className="font-mono">{formatCurrency(employee.baseSalary)}</span>
-                                  </div>
-                                </CardContent>
-                              </Card>
+                            {/* Metadatos contextuales */}
+                            <div className="flex flex-wrap gap-4 mb-4 text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
+                              <div className="flex items-center gap-2">
+                                <span>Periodo:</span>
+                                <span className="font-mono font-medium text-foreground">{employee.periodDays} días</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span>Trabajados:</span>
+                                <span className="font-mono font-medium text-foreground">{employee.daysWorked} días</span>
+                              </div>
+                              {employee.absences > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span>Faltas:</span>
+                                  <span className="font-mono font-medium text-destructive">{employee.absences}</span>
+                                </div>
+                              )}
+                              {employee.incapacities > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span>Incapacidades:</span>
+                                  <span className="font-mono font-medium text-orange-600">{employee.incapacities}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2">
+                                <span>Salario diario:</span>
+                                <span className="font-mono font-medium text-foreground">{formatCurrency(salarioDiario)}</span>
+                              </div>
+                            </div>
 
-                              {/* Desglose de Percepciones */}
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* Percepciones - Lista única estilo NOI */}
                               <Card>
                                 <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm font-medium">Desglose de Percepciones</CardTitle>
+                                  <CardTitle className="text-sm font-medium">Percepciones</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
                                   {breakdown.percepciones.map((concepto) => (
-                                    <div key={concepto.id} className="flex justify-between">
+                                    <div key={concepto.id} className="flex justify-between gap-2">
                                       <span className="text-muted-foreground">{concepto.name}</span>
                                       <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
                                     </div>
                                   ))}
                                   {employee.primaDominical > 0 && (
-                                    <div className="flex justify-between">
-                                      <span className="text-muted-foreground">Prima Dominical (25%)</span>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-muted-foreground">Prima Dominical ({employee.diasDomingo}d × 25%)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
                                   {employee.pagoFestivos > 0 && (
-                                    <div className="flex justify-between">
+                                    <div className="flex justify-between gap-2">
                                       <span className="text-muted-foreground">Días Festivos ({employee.diasFestivos}d × 200%)</span>
-                                      <span className="font-mono text-purple-600 dark:text-purple-400">{formatCurrency(employee.pagoFestivos)}</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.pagoFestivos)}</span>
                                     </div>
                                   )}
-                                  {(employee.horasDoblesPago > 0 || employee.horasTriplesPago > 0) && (
-                                    <div className="space-y-1">
-                                      <div className="font-medium text-foreground">Horas Extra:</div>
-                                      {employee.horasDoblesPago > 0 && (
-                                        <div className="flex justify-between pl-3">
-                                          <span className="text-muted-foreground">
-                                            Dobles {employee.horasDobles} (200%)
-                                          </span>
-                                          <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
-                                        </div>
-                                      )}
-                                      {employee.horasTriplesPago > 0 && (
-                                        <div className="flex justify-between pl-3">
-                                          <span className="text-muted-foreground">
-                                            Triples {employee.horasTriples} (300%)
-                                          </span>
-                                          <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
-                                        </div>
-                                      )}
-                                      <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
-                                        <div className="flex justify-between text-xs">
-                                          <span className="text-green-600 dark:text-green-400">Exento ISR</span>
-                                          <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.horasExtraExento)}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs">
-                                          <span className="text-orange-600 dark:text-orange-400">Gravado ISR</span>
-                                          <span className="font-mono text-orange-600 dark:text-orange-400">{formatCurrency(employee.horasExtraGravado)}</span>
-                                        </div>
-                                      </div>
+                                  {employee.horasDoblesPago > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-muted-foreground">Horas Dobles ({employee.horasDobles}h × 200%)</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
+                                    </div>
+                                  )}
+                                  {employee.horasTriplesPago > 0 && (
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-muted-foreground">Horas Triples ({employee.horasTriples}h × 300%)</span>
+                                      <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
                                     </div>
                                   )}
                                   {employee.vacacionesPago > 0 && (
-                                    <div className="flex justify-between">
+                                    <div className="flex justify-between gap-2">
                                       <span className="text-muted-foreground">Vacaciones ({employee.diasVacaciones} días)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.vacacionesPago)}</span>
                                     </div>
                                   )}
                                   {employee.primaVacacional > 0 && (
-                                    <div className="flex justify-between">
+                                    <div className="flex justify-between gap-2">
                                       <span className="text-muted-foreground">Prima Vacacional (25%)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
                                     </div>
