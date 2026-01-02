@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Parser } from "expr-eval";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -448,10 +449,63 @@ export default function Payroll() {
     }
   };
 
-  const getEmployeeConceptBreakdown = (employeeId: string) => {
-    const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
+  const evaluateFormulaForEmployee = useCallback((formula: string, employeeCalc: any, employee: any) => {
+    if (!formula || !employeeCalc) return 0;
     
-    const percepciones = employeeValues
+    const parser = new Parser();
+    const periodDays = selectedFrequency === "semanal" ? 7 
+                     : selectedFrequency === "quincenal" ? 15 
+                     : 30;
+    
+    const salarioDiario = employee?.salary ? employee.salary / 30 : 0;
+    const salarioPeriodo = salarioDiario * periodDays;
+    
+    const baseVars: Record<string, number> = {
+      SALARIO_PERIODO: salarioPeriodo,
+      SALARIO_DIARIO: salarioDiario,
+      SALARIO_MENSUAL: employee?.salary || 0,
+      DIAS_PERIODO: periodDays,
+      DIAS_TRABAJADOS: employeeCalc.daysWorked || 0,
+      FALTAS: employeeCalc.absences || 0,
+      INCAPACIDADES: employeeCalc.incapacities || 0,
+      HORAS_EXTRA: employeeCalc.horasExtra || 0,
+      SALARIO_BASE: employeeCalc.baseSalary || 0,
+      SBC_DIARIO: employeeCalc.sbcDiario || 0,
+      SDI_DIARIO: employeeCalc.sdiDiario || 0,
+      MONTO_BONO: salarioPeriodo * 0.10,
+      DESCUENTO_INFONAVIT: 0,
+      DESCUENTO_FONACOT: 0,
+      MONTO_VALES: 0,
+      MONTO_FONDO_AHORRO: 0,
+      PORCENTAJE_PTU: 0,
+      CUOTA_IMSS: employeeCalc.imssTotal || 0,
+      ISR_RETENIDO: employeeCalc.isrRetenido || 0,
+      SUBSIDIO_EMPLEO: employeeCalc.subsidioEmpleo || 0,
+    };
+    
+    const variables: Record<string, number> = {};
+    for (const [key, value] of Object.entries(baseVars)) {
+      variables[key] = value;
+      variables[key.toLowerCase()] = value;
+    }
+    
+    try {
+      const cleanFormula = formula.replace(/[^a-zA-Z0-9_+\-*/().* ]/g, '').trim();
+      if (!cleanFormula) return 0;
+      const expr = parser.parse(cleanFormula);
+      const result = expr.evaluate(variables);
+      return typeof result === 'number' && isFinite(result) ? Math.round(result * 100) / 100 : 0;
+    } catch (error) {
+      console.warn('Error evaluating formula:', formula, error);
+      return 0;
+    }
+  }, [selectedFrequency]);
+
+  const getEmployeeConceptBreakdown = (employeeId: string, employeeCalc?: any) => {
+    const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
+    const employee = allEmployees.find(e => e.id === employeeId);
+    
+    const manualPercepciones = employeeValues
       .filter(cv => {
         const concept = concepts.find(c => c.id === cv.conceptId);
         return concept?.type === "percepcion";
@@ -465,7 +519,7 @@ export default function Payroll() {
         };
       });
     
-    const deducciones = employeeValues
+    const manualDeducciones = employeeValues
       .filter(cv => {
         const concept = concepts.find(c => c.id === cv.conceptId);
         return concept?.type === "deduccion";
@@ -478,6 +532,36 @@ export default function Payroll() {
           amount: cv.amount,
         };
       });
+    
+    const plantillaPercepciones: { id: string; name: string; amount: number }[] = [];
+    const plantillaDeducciones: { id: string; name: string; amount: number }[] = [];
+    
+    if (selectedPlantillaData?.conceptos && employeeCalc && employee) {
+      const sortedConceptos = [...selectedPlantillaData.conceptos].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+      
+      for (const plantillaConcepto of sortedConceptos) {
+        const conceptoData = plantillaConcepto.concepto;
+        if (!conceptoData || conceptoData.activo === false) continue;
+        
+        const amount = evaluateFormulaForEmployee(conceptoData.formula, employeeCalc, employee);
+        if (amount <= 0) continue;
+        
+        const item = {
+          id: plantillaConcepto.id,
+          name: conceptoData.nombre || 'Concepto',
+          amount,
+        };
+        
+        if (conceptoData.tipo === 'percepcion') {
+          plantillaPercepciones.push(item);
+        } else if (conceptoData.tipo === 'deduccion') {
+          plantillaDeducciones.push(item);
+        }
+      }
+    }
+    
+    const percepciones = [...plantillaPercepciones, ...manualPercepciones];
+    const deducciones = [...plantillaDeducciones, ...manualDeducciones];
     
     return { percepciones, deducciones };
   };
@@ -1135,7 +1219,7 @@ export default function Payroll() {
   const createPreNomina = () => {
     // Build employee details with all calculation data
     const employeeDetails: EmployeePayrollDetail[] = selectedEmployeesData.map(emp => {
-      const breakdown = getEmployeeConceptBreakdown(emp.id);
+      const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
       return {
         id: emp.id,
         name: emp.name,
@@ -2389,7 +2473,7 @@ export default function Payroll() {
                 <CardContent>
                   <Accordion type="multiple" className="space-y-2">
                     {selectedEmployeesData.map((employee) => {
-                      const breakdown = getEmployeeConceptBreakdown(employee.id);
+                      const breakdown = getEmployeeConceptBreakdown(employee.id, employee);
                       const salarioDiario = employee.salary / 30;
                       
                       return (
