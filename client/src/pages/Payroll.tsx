@@ -516,6 +516,7 @@ export default function Payroll() {
           id: cv.conceptId,
           name: concept?.name || "",
           amount: cv.amount,
+          integraSalarioBase: false, // Conceptos manuales no integran salario base
         };
       });
     
@@ -543,14 +544,17 @@ export default function Payroll() {
         const conceptoData = plantillaConcepto.concepto;
         if (!conceptoData || conceptoData.activo === false) continue;
         
-        const amount = evaluateFormulaForEmployee(conceptoData.formula, employeeCalc, employee);
+        const amount = evaluateFormulaForEmployee(conceptoData.formula ?? '', employeeCalc, employee);
         if (amount <= 0) continue;
+        
+        // Override de plantilla tiene prioridad, sino usar valor del concepto
+        const integraSalarioBase = plantillaConcepto.integraSalarioBaseOverride ?? conceptoData.integraSalarioBase ?? false;
         
         const item = {
           id: plantillaConcepto.id,
           name: conceptoData.nombre || 'Concepto',
           amount,
-          integraSalarioBase: plantillaConcepto.integraSalarioBase ?? false,
+          integraSalarioBase,
         };
         
         if (conceptoData.tipo === 'percepcion') {

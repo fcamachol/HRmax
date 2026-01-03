@@ -316,13 +316,16 @@ export function evaluarConceptosPlantilla(
       importe = evaluarFormulaNomina(concepto.formula, variables);
     }
 
-    // Calcular límite exento
-    const limiteExento = evaluarLimiteExento(concepto.limiteExento, variables);
+    // Calcular límite exento (conceptosNomina no tiene limiteExento, usar undefined)
+    const limiteExento = undefined;
 
+    // Usar afectaIsr del nuevo schema (equivalente a gravableISR)
+    const esGravable = concepto.afectaIsr ?? concepto.gravado;
+    
     // Calcular gravado vs exento
     const { gravado, exento } = calcularImportesGravadoExento(
       importe,
-      concepto.gravableISR,
+      esGravable,
       limiteExento
     );
 
@@ -334,12 +337,16 @@ export function evaluarConceptosPlantilla(
       tipoGravable = 'gravado';
     }
 
-    // Generar clave basada en tipo y SAT clave si existe
-    const claveBase = concepto.satClave || concepto.id.substring(0, 6).toUpperCase();
+    // Generar clave basada en código o SAT clave si existe
+    const claveBase = concepto.satClave || concepto.codigo || concepto.id.substring(0, 6).toUpperCase();
     const clave = concepto.tipo === 'percepcion' ? `P${claveBase}` : `D${claveBase}`;
 
-    // Verificar si el concepto integra al salario base (parte del desglose, no suma adicional)
-    const integraSalarioBase = pc.integraSalarioBase ?? false;
+    // Verificar si el concepto integra al salario base (override de plantilla o valor del concepto)
+    const integraSalarioBase = pc.integraSalarioBaseOverride ?? concepto.integraSalarioBase ?? false;
+
+    // Determinar canal: si tiene medioPagoId (override o del concepto), es 'exento', sino 'nomina'
+    const medioPagoEfectivo = pc.medioPagoOverrideId || concepto.medioPagoId;
+    const canal: 'nomina' | 'exento' = medioPagoEfectivo ? 'exento' : 'nomina';
 
     const conceptoEvaluado: ConceptoEvaluado = {
       id: concepto.id,
@@ -348,14 +355,14 @@ export function evaluarConceptosPlantilla(
       tipo: concepto.tipo as 'percepcion' | 'deduccion',
       tipoGravable,
       categoria: concepto.categoria || 'otros',
-      nivel: concepto.nivel || 'adicional',
-      formula: concepto.formula,
+      nivel: 'adicional', // conceptosNomina no tiene nivel, usar default
+      formula: concepto.formula || '',
       importe,
       importeGravado: gravado,
       importeExento: exento,
       limiteExento,
-      fundamentoLegal: concepto.fundamentoLegal || undefined,
-      canal: pc.canal as 'nomina' | 'exento',
+      fundamentoLegal: undefined, // conceptosNomina no tiene fundamentoLegal
+      canal,
       esObligatorio: pc.esObligatorio,
       integraSalarioBase,
       orden: pc.orden,
