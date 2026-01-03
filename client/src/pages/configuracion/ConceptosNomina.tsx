@@ -669,7 +669,7 @@ export default function ConceptosNomina() {
               Define la fórmula de cálculo y propiedades fiscales del concepto
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-1 max-h-[60vh] pr-4">
+          <div className="flex-1 overflow-y-auto max-h-[60vh] pr-4">
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -922,7 +922,7 @@ export default function ConceptosNomina() {
               </div>
             </div>
           </div>
-          </ScrollArea>
+          </div>
           <DialogFooter className="flex-shrink-0 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
