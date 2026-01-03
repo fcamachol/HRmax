@@ -61,7 +61,7 @@ import type {
   PlantillaNomina, 
   PlantillaNominaWithConceptos,
   PlantillaConcepto,
-  ConceptoMedioPago,
+  ConceptoNomina,
   Empresa,
   Cliente
 } from "@shared/schema";
@@ -120,11 +120,11 @@ export default function PlantillasNomina() {
   });
 
   const [conceptoFormData, setConceptoFormData] = useState({
-    conceptoId: "",
-    canal: "nomina" as "nomina" | "exento",
+    conceptoNominaId: "",
+    medioPagoOverrideId: null as string | null, // null = paga por nómina, id = paga por medio alterno
     valorDefault: "",
     esObligatorio: false,
-    integraSalarioBase: false,
+    integraSalarioBaseOverride: false,
     orden: 0,
   });
 
@@ -152,8 +152,8 @@ export default function PlantillasNomina() {
     queryKey: ["/api/plantillas-nomina"],
   });
 
-  const { data: conceptosDisponibles = [] } = useQuery<ConceptoMedioPago[]>({
-    queryKey: ["/api/conceptos-medio-pago"],
+  const { data: conceptosDisponibles = [] } = useQuery<ConceptoNomina[]>({
+    queryKey: ["/api/conceptos-nomina"],
   });
 
   const { data: selectedPlantillaData } = useQuery<PlantillaNominaWithConceptos>({
@@ -314,10 +314,11 @@ export default function PlantillasNomina() {
 
   const resetConceptoForm = () => {
     setConceptoFormData({
-      conceptoId: "",
-      canal: "nomina",
+      conceptoNominaId: "",
+      medioPagoOverrideId: null,
       valorDefault: "",
       esObligatorio: false,
+      integraSalarioBaseOverride: false,
       orden: 0,
     });
   };
@@ -361,7 +362,7 @@ export default function PlantillasNomina() {
   };
 
   const handleAddConcepto = () => {
-    if (!conceptoFormData.conceptoId) {
+    if (!conceptoFormData.conceptoNominaId) {
       toast({
         title: "Error",
         description: "Selecciona un concepto",
@@ -381,34 +382,42 @@ export default function PlantillasNomina() {
 
     addConceptoMutation.mutate({
       plantillaId: selectedPlantillaId,
-      conceptoId: conceptoFormData.conceptoId,
-      canal: conceptoFormData.canal,
+      conceptoNominaId: conceptoFormData.conceptoNominaId,
+      medioPagoOverrideId: conceptoFormData.medioPagoOverrideId,
       valorDefault: conceptoFormData.valorDefault ? parseFloat(conceptoFormData.valorDefault) : null,
       esObligatorio: conceptoFormData.esObligatorio,
-      integraSalarioBase: conceptoFormData.integraSalarioBase,
+      integraSalarioBaseOverride: conceptoFormData.integraSalarioBaseOverride,
       orden: conceptoFormData.orden,
       clienteId: selectedPlantillaData.clienteId,
       empresaId: selectedPlantillaData.empresaId,
     });
   };
 
-  const conceptosNomina = selectedPlantillaData?.conceptos?.filter(c => c.canal === "nomina") || [];
-  const conceptosExentos = selectedPlantillaData?.conceptos?.filter(c => c.canal === "exento") || [];
+  // Canal determinado por: override → medioPagoId del concepto → nomina (default)
+  const conceptosNominaList = selectedPlantillaData?.conceptos?.filter(c => {
+    const medioPagoEfectivo = c.medioPagoOverrideId || c.concepto?.medioPagoId;
+    return !medioPagoEfectivo; // Si no hay medio de pago alterno, es nómina
+  }) || [];
+  const conceptosExentos = selectedPlantillaData?.conceptos?.filter(c => {
+    const medioPagoEfectivo = c.medioPagoOverrideId || c.concepto?.medioPagoId;
+    return !!medioPagoEfectivo; // Si hay medio de pago alterno, es "exento"
+  }) || [];
 
-  const conceptosYaAgregados = selectedPlantillaData?.conceptos?.map(c => c.conceptoId) || [];
+  const conceptosYaAgregados = selectedPlantillaData?.conceptos?.map(c => c.conceptoNominaId) || [];
   const conceptosDisponiblesParaAgregar = conceptosDisponibles.filter(
     c => !conceptosYaAgregados.includes(c.id)
   );
 
+  // Agrupar por categoría (conceptosNomina usa categoria en lugar de nivel)
   const conceptosAgrupadosPorNivel = (["sat", "prevision_social", "bonos", "adicional"] as NivelKey[]).reduce((acc, nivel) => {
     const conceptosDelNivel = conceptosDisponiblesParaAgregar.filter(
-      c => (c.nivel || "adicional") === nivel
+      c => (c.categoria || "adicional") === nivel
     );
     if (conceptosDelNivel.length > 0) {
       acc[nivel] = conceptosDelNivel;
     }
     return acc;
-  }, {} as Record<NivelKey, ConceptoMedioPago[]>);
+  }, {} as Record<NivelKey, ConceptoNomina[]>);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -574,7 +583,7 @@ export default function PlantillasNomina() {
                         Conceptos gravables que integran al SBC (Salario Base de Cotización)
                       </p>
                       <div className="text-2xl font-bold text-primary mt-2">
-                        {conceptosNomina.length} conceptos
+                        {conceptosNominaList.length} conceptos
                       </div>
                     </CardContent>
                   </Card>
@@ -600,11 +609,11 @@ export default function PlantillasNomina() {
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-primary" />
                         <span>Conceptos de Nómina (Integran SBC)</span>
-                        <Badge variant="outline" className="ml-2">{conceptosNomina.length}</Badge>
+                        <Badge variant="outline" className="ml-2">{conceptosNominaList.length}</Badge>
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">
-                      {conceptosNomina.length === 0 ? (
+                      {conceptosNominaList.length === 0 ? (
                         <div className="text-center py-4 text-muted-foreground">
                           No hay conceptos de nómina configurados
                         </div>
@@ -621,7 +630,7 @@ export default function PlantillasNomina() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {conceptosNomina.map((pc) => (
+                            {conceptosNominaList.map((pc) => (
                               <TableRow key={pc.id}>
                                 <TableCell className="font-medium">{pc.concepto.nombre}</TableCell>
                                 <TableCell>
@@ -830,8 +839,8 @@ export default function PlantillasNomina() {
             <div className="space-y-2">
               <Label htmlFor="concepto">Concepto del Catálogo</Label>
               <Select
-                value={conceptoFormData.conceptoId}
-                onValueChange={(value) => setConceptoFormData({ ...conceptoFormData, conceptoId: value })}
+                value={conceptoFormData.conceptoNominaId}
+                onValueChange={(value) => setConceptoFormData({ ...conceptoFormData, conceptoNominaId: value })}
               >
                 <SelectTrigger data-testid="select-concepto">
                   <SelectValue placeholder="Selecciona un concepto del catálogo" />
@@ -880,35 +889,10 @@ export default function PlantillasNomina() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="canal">Canal de Pago</Label>
-              <Select
-                value={conceptoFormData.canal}
-                onValueChange={(value: "nomina" | "exento") => 
-                  setConceptoFormData({ ...conceptoFormData, canal: value })
-                }
-              >
-                <SelectTrigger data-testid="select-canal">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nomina">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      <span>Nómina (Integra SBC)</span>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="exento">
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-4 w-4 text-green-600" />
-                      <span>Exento (No integra SBC)</span>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Canal de Pago</Label>
               <p className="text-xs text-muted-foreground">
-                {conceptoFormData.canal === "nomina" 
-                  ? "Los conceptos de nómina se usan para calcular el SBC (cuotas IMSS)"
-                  : "Los conceptos exentos no integran al SBC pero sí al salario real"}
+                El canal de pago se determina automáticamente por el medio de pago configurado en el concepto.
+                Si el concepto tiene un medio de pago alternativo, se pagará por ese canal; de lo contrario, se pagará por nómina.
               </p>
             </div>
 
@@ -951,9 +935,9 @@ export default function PlantillasNomina() {
               </div>
               <Switch
                 id="integraSalarioBase"
-                checked={conceptoFormData.integraSalarioBase}
+                checked={conceptoFormData.integraSalarioBaseOverride}
                 onCheckedChange={(checked) => 
-                  setConceptoFormData({ ...conceptoFormData, integraSalarioBase: checked })
+                  setConceptoFormData({ ...conceptoFormData, integraSalarioBaseOverride: checked })
                 }
                 data-testid="switch-integra-salario-base"
               />
