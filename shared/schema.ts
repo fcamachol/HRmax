@@ -326,18 +326,20 @@ export const plantillaConceptos = pgTable("plantilla_conceptos", {
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   plantillaId: varchar("plantilla_id").notNull().references(() => plantillasNomina.id, { onDelete: "cascade" }),
-  conceptoId: varchar("concepto_id").notNull().references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
-  canal: varchar("canal", { length: 20 }).notNull().default("nomina"), // "nomina" (gravable, integra SBC) | "exento" (no integra SBC)
+  conceptoNominaId: varchar("concepto_nomina_id").notNull().references(() => conceptosNomina.id, { onDelete: "cascade" }),
+  // Override del medio de pago para esta plantilla específica (si es null, usa el del concepto o nómina normal)
+  medioPagoOverrideId: varchar("medio_pago_override_id").references(() => mediosPago.id, { onDelete: "set null" }),
   valorDefault: decimal("valor_default", { precision: 18, scale: 4 }), // Valor predeterminado opcional
   esObligatorio: boolean("es_obligatorio").notNull().default(false), // Si el concepto es obligatorio en esta plantilla
-  integraSalarioBase: boolean("integra_salario_base").notNull().default(false), // Si el concepto es parte del salario base (no suma adicional, solo desglose)
+  // Override de integraSalarioBase para esta plantilla (si es null, usa el valor del concepto)
+  integraSalarioBaseOverride: boolean("integra_salario_base_override"),
   orden: integer("orden").notNull().default(0), // Orden de aparición en la plantilla
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 }, (table) => ({
   clienteEmpresaIdx: index("plantilla_conceptos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
   plantillaIdx: index("plantilla_conceptos_plantilla_idx").on(table.plantillaId),
-  uniqueConcepto: unique().on(table.plantillaId, table.conceptoId),
+  uniqueConcepto: unique().on(table.plantillaId, table.conceptoNominaId),
 }));
 
 export const attendance = pgTable("attendance", {
@@ -852,8 +854,6 @@ export const insertPlantillaConceptoSchema = createInsertSchema(plantillaConcept
   id: true,
   createdAt: true,
   updatedAt: true,
-}).extend({
-  canal: z.enum(canalesConcepto),
 });
 
 export const updatePlantillaConceptoSchema = insertPlantillaConceptoSchema.partial();
@@ -1039,7 +1039,7 @@ export type InsertPlantillaConcepto = z.infer<typeof insertPlantillaConceptoSche
 // Tipo extendido para plantilla con sus conceptos
 export type PlantillaNominaWithConceptos = PlantillaNomina & {
   conceptos: (PlantillaConcepto & {
-    concepto: ConceptoMedioPago;
+    concepto: ConceptoNomina;
   })[];
 };
 
@@ -3438,6 +3438,12 @@ export const conceptosNomina = pgTable("conceptos_nomina", {
   etiquetaRecibo: varchar("etiqueta_recibo", { length: 255 }),
   grupoRecibo: varchar("grupo_recibo", { length: 50 }), // Para agrupar en recibo
   
+  // Medio de pago alternativo (opcional - si es null, se paga por nómina normal)
+  medioPagoId: varchar("medio_pago_id").references(() => mediosPago.id, { onDelete: "set null" }),
+  
+  // Si el concepto forma parte del desglose del salario base (no suma al total, solo muestra)
+  integraSalarioBase: boolean("integra_salario_base").notNull().default(false),
+  
   // Multi-tenancy y auditoría
   centroTrabajoId: varchar("centro_trabajo_id"),
   activo: boolean("activo").notNull().default(true),
@@ -3449,6 +3455,7 @@ export const conceptosNomina = pgTable("conceptos_nomina", {
   tipoIdx: index("conceptos_nomina_tipo_idx").on(table.tipo),
   categoriaIdx: index("conceptos_nomina_categoria_idx").on(table.categoria),
   ordenIdx: index("conceptos_nomina_orden_idx").on(table.ordenCalculo),
+  medioPagoIdx: index("conceptos_nomina_medio_pago_idx").on(table.medioPagoId),
 }));
 
 export type ConceptoNomina = typeof conceptosNomina.$inferSelect;

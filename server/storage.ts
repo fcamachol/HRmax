@@ -454,7 +454,7 @@ export interface IStorage {
   addConceptoToPlantilla(data: InsertPlantillaConcepto): Promise<PlantillaConcepto>;
   updatePlantillaConcepto(id: string, updates: Partial<InsertPlantillaConcepto>): Promise<PlantillaConcepto>;
   removeConceptoFromPlantilla(id: string): Promise<void>;
-  getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoMedioPago })[]>;
+  getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoNomina })[]>;
   
   // Payroll Periods
   createPayrollPeriods(periods: InsertPayrollPeriod[]): Promise<PayrollPeriod[]>;
@@ -2517,14 +2517,14 @@ export class DatabaseStorage implements IStorage {
       .where(eq(plantillaConceptos.id, id));
   }
 
-  async getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoMedioPago })[]> {
+  async getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoNomina })[]> {
     const results = await db
       .select({
         plantillaConcepto: plantillaConceptos,
-        concepto: conceptosMedioPago,
+        concepto: conceptosNomina,
       })
       .from(plantillaConceptos)
-      .innerJoin(conceptosMedioPago, eq(plantillaConceptos.conceptoId, conceptosMedioPago.id))
+      .innerJoin(conceptosNomina, eq(plantillaConceptos.conceptoNominaId, conceptosNomina.id))
       .where(eq(plantillaConceptos.plantillaId, plantillaId))
       .orderBy(plantillaConceptos.orden);
     
