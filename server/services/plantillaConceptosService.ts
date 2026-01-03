@@ -80,6 +80,7 @@ export interface ConceptoEvaluado {
   fundamentoLegal?: string;
   canal: 'nomina' | 'exento';
   esObligatorio: boolean;
+  integraSalarioBase: boolean; // Si es parte del desglose del salario base (no suma adicional)
   orden: number;
 }
 
@@ -337,6 +338,9 @@ export function evaluarConceptosPlantilla(
     const claveBase = concepto.satClave || concepto.id.substring(0, 6).toUpperCase();
     const clave = concepto.tipo === 'percepcion' ? `P${claveBase}` : `D${claveBase}`;
 
+    // Verificar si el concepto integra al salario base (parte del desglose, no suma adicional)
+    const integraSalarioBase = pc.integraSalarioBase ?? false;
+
     const conceptoEvaluado: ConceptoEvaluado = {
       id: concepto.id,
       clave,
@@ -353,16 +357,21 @@ export function evaluarConceptosPlantilla(
       fundamentoLegal: concepto.fundamentoLegal || undefined,
       canal: pc.canal as 'nomina' | 'exento',
       esObligatorio: pc.esObligatorio,
+      integraSalarioBase,
       orden: pc.orden,
     };
 
     conceptosEvaluados.push(conceptoEvaluado);
 
-    // Acumular totales
+    // Acumular totales - los conceptos que integran salario base NO suman al total
+    // ya que son parte del desglose del salario base, no percepciones adicionales
     if (concepto.tipo === 'percepcion') {
-      totalPercepciones += importe;
-      totalPercepcionesGravadas += gravado;
-      totalPercepcionesExentas += exento;
+      if (!integraSalarioBase) {
+        totalPercepciones += importe;
+        totalPercepcionesGravadas += gravado;
+        totalPercepcionesExentas += exento;
+      }
+      // Si integraSalarioBase=true, el concepto se muestra pero no suma al total
     } else {
       totalDeducciones += importe;
     }
