@@ -270,7 +270,7 @@ export default function ConceptosNomina() {
       categoria: showCustomCategoria && customCategoria.trim() 
         ? customCategoria.trim() 
         : formData.categoria,
-      medioPagoId: formData.medioPagoId === "none" || !formData.medioPagoId ? undefined : formData.medioPagoId,
+      medioPagoId: formData.medioPagoId === "none" || !formData.medioPagoId ? "" : formData.medioPagoId,
     };
 
     if (editingConcepto) {
@@ -659,7 +659,7 @@ export default function ConceptosNomina() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
@@ -669,6 +669,7 @@ export default function ConceptosNomina() {
               Define la fórmula de cálculo y propiedades fiscales del concepto
             </DialogDescription>
           </DialogHeader>
+          <ScrollArea className="flex-1 pr-4">
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -921,6 +922,7 @@ export default function ConceptosNomina() {
               </div>
             </div>
           </div>
+          </ScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
