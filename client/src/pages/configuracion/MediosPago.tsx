@@ -14,12 +14,28 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Edit, Trash2, CheckCircle, XCircle } from "lucide-react";
 import { MedioPagoForm } from "@/components/configuracion/MedioPagoForm";
-import type { MedioPago } from "@shared/schema";
+import { useCliente } from "@/contexts/ClienteContext";
+import type { MedioPago, Empresa } from "@shared/schema";
 
 export default function MediosPago() {
   const [searchTerm, setSearchTerm] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedMedio, setSelectedMedio] = useState<MedioPago | undefined>();
+  const { selectedCliente } = useCliente();
+
+  const { data: empresas = [], isLoading: empresasLoading } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas"],
+    enabled: !!selectedCliente?.id,
+  });
+
+  // Filter empresas for the selected cliente
+  const clienteEmpresas = empresas.filter(e => e.clienteId === selectedCliente?.id);
+  const currentEmpresa = clienteEmpresas[0];
+  
+  // Only use valid IDs - never empty strings
+  const clienteId = selectedCliente?.id;
+  const empresaId = currentEmpresa?.id;
+  const hasValidContext = !!clienteId && !!empresaId;
 
   const { data: mediosPago = [], isLoading } = useQuery<MedioPago[]>({
     queryKey: ["/api/medios-pago"],
@@ -84,7 +100,11 @@ export default function MediosPago() {
             Monederos electrónicos, sindicatos y otros medios de dispersión
           </p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} data-testid="button-nuevo-medio-pago">
+        <Button 
+          onClick={() => setDialogOpen(true)} 
+          data-testid="button-nuevo-medio-pago"
+          disabled={!hasValidContext || empresasLoading}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Nuevo Medio de Pago
         </Button>
@@ -183,11 +203,15 @@ export default function MediosPago() {
         </Table>
       </div>
 
-      <MedioPagoForm
-        open={dialogOpen}
-        onClose={handleDialogClose}
-        medioPago={selectedMedio}
-      />
+      {hasValidContext && (
+        <MedioPagoForm
+          open={dialogOpen}
+          onClose={handleDialogClose}
+          medioPago={selectedMedio}
+          clienteId={clienteId}
+          empresaId={empresaId}
+        />
+      )}
     </div>
   );
 }

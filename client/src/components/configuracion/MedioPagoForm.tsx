@@ -36,14 +36,18 @@ interface MedioPagoFormProps {
   open: boolean;
   onClose: () => void;
   medioPago?: MedioPago;
+  clienteId: string;
+  empresaId: string;
 }
 
-export function MedioPagoForm({ open, onClose, medioPago }: MedioPagoFormProps) {
+export function MedioPagoForm({ open, onClose, medioPago, clienteId, empresaId }: MedioPagoFormProps) {
   const isEditing = !!medioPago;
 
   const getDefaultValues = (): InsertMedioPago => {
     if (medioPago) {
       return {
+        clienteId: medioPago.clienteId,
+        empresaId: medioPago.empresaId,
         nombre: medioPago.nombre,
         descripcion: medioPago.descripcion || undefined,
         tipoComprobante: medioPago.tipoComprobante as "factura" | "recibo_sin_iva",
@@ -52,6 +56,8 @@ export function MedioPagoForm({ open, onClose, medioPago }: MedioPagoFormProps) 
       };
     }
     return {
+      clienteId,
+      empresaId,
       nombre: "",
       descripcion: undefined,
       tipoComprobante: "factura",
