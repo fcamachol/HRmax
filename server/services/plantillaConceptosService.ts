@@ -10,13 +10,13 @@ import {
   empresas, 
   plantillasNomina, 
   plantillaConceptos, 
-  conceptosMedioPago 
+  conceptosNomina 
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { Parser } from "expr-eval";
 import type { 
   PlantillaNominaWithConceptos, 
-  ConceptoMedioPago, 
+  ConceptoNomina, 
   PlantillaConcepto 
 } from "@shared/schema";
 
@@ -274,10 +274,10 @@ export async function obtenerPlantillaPredeterminada(
   const conceptosData = await db
     .select({
       plantillaConcepto: plantillaConceptos,
-      concepto: conceptosMedioPago,
+      concepto: conceptosNomina,
     })
     .from(plantillaConceptos)
-    .innerJoin(conceptosMedioPago, eq(plantillaConceptos.conceptoId, conceptosMedioPago.id))
+    .innerJoin(conceptosNomina, eq(plantillaConceptos.conceptoNominaId, conceptosNomina.id))
     .where(eq(plantillaConceptos.plantillaId, plantillaId))
     .orderBy(plantillaConceptos.orden);
 
