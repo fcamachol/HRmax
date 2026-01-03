@@ -275,6 +275,7 @@ export const conceptosMedioPago = pgTable("conceptos_medio_pago", {
   limiteExento: text("limite_exento"), // Puede ser fórmula (ej: "3*UMA") o cantidad
   gravableISR: boolean("gravable_isr").notNull().default(true),
   integraSBC: boolean("integra_sbc").notNull().default(false),
+  integraSalarioBase: boolean("integra_salario_base").notNull().default(false), // Si se incluye como parte del salario base
   limiteAnual: text("limite_anual"), // Puede ser fórmula o cantidad
   ordenCalculo: integer("orden_calculo").default(100), // Orden en que se calcula
   activo: boolean("activo").default(true),

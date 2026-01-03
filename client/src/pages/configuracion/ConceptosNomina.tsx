@@ -206,6 +206,20 @@ export default function ConceptosNomina() {
     },
   });
 
+  const toggleSalarioBaseMutation = useMutation({
+    mutationFn: async ({ id, integraSalarioBase }: { id: string; integraSalarioBase: boolean }) => {
+      const response = await apiRequest("PATCH", `/api/conceptos-medio-pago/${id}`, { integraSalarioBase });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/catalogo-conceptos"] });
+      toast({ title: "Configuración actualizada" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error al actualizar", description: error.message, variant: "destructive" });
+    },
+  });
+
   const resetForm = () => {
     setFormData({
       nombre: "",
@@ -369,6 +383,32 @@ export default function ConceptosNomina() {
             <X className="h-4 w-4 text-muted-foreground mx-auto" />
           )}
         </TableCell>
+        {(nivel === 'sat' || nivel === 'prevision_social') && (
+          <TableCell className="text-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex justify-center">
+                  <Switch
+                    checked={concepto.integraSalarioBase ?? false}
+                    onCheckedChange={(checked) => {
+                      toggleSalarioBaseMutation.mutate({
+                        id: concepto.id,
+                        integraSalarioBase: checked,
+                      });
+                    }}
+                    disabled={toggleSalarioBaseMutation.isPending}
+                    data-testid={`switch-salario-base-${concepto.id}`}
+                  />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {concepto.integraSalarioBase 
+                  ? "Este concepto se incluye como parte del salario base" 
+                  : "Activar para incluir en el salario base"}
+              </TooltipContent>
+            </Tooltip>
+          </TableCell>
+        )}
         <TableCell>
           {isReadOnly ? (
             <Tooltip>
@@ -537,13 +577,14 @@ export default function ConceptosNomina() {
                         <TableHead>Límite Exento</TableHead>
                         <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
                         <TableHead className="text-center w-[100px]">Integra SBC</TableHead>
+                        <TableHead className="text-center w-[120px]">En Salario Base</TableHead>
                         <TableHead className="w-[100px]">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredSat.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                             No hay conceptos SAT registrados
                           </TableCell>
                         </TableRow>
@@ -570,13 +611,14 @@ export default function ConceptosNomina() {
                         <TableHead>Límite Exento</TableHead>
                         <TableHead className="text-center w-[100px]">Grava ISR</TableHead>
                         <TableHead className="text-center w-[100px]">Integra SBC</TableHead>
+                        <TableHead className="text-center w-[120px]">En Salario Base</TableHead>
                         <TableHead className="w-[100px]">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredPrevision.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                          <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                             No hay conceptos de previsión social registrados
                           </TableCell>
                         </TableRow>
