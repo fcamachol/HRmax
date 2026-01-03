@@ -132,7 +132,7 @@ interface EmployeePayrollDetail {
   earnings: number;
   deductions: number;
   netPay: number;
-  percepciones: { id: string; name: string; amount: number }[];
+  percepciones: { id: string; name: string; amount: number; integraSalarioBase?: boolean }[];
   deducciones: { id: string; name: string; amount: number }[];
 }
 
@@ -533,7 +533,7 @@ export default function Payroll() {
         };
       });
     
-    const plantillaPercepciones: { id: string; name: string; amount: number }[] = [];
+    const plantillaPercepciones: { id: string; name: string; amount: number; integraSalarioBase?: boolean }[] = [];
     const plantillaDeducciones: { id: string; name: string; amount: number }[] = [];
     
     if (selectedPlantillaData?.conceptos && employeeCalc && employee) {
@@ -550,6 +550,7 @@ export default function Payroll() {
           id: plantillaConcepto.id,
           name: conceptoData.nombre || 'Concepto',
           amount,
+          integraSalarioBase: plantillaConcepto.integraSalarioBase ?? false,
         };
         
         if (conceptoData.tipo === 'percepcion') {
@@ -563,7 +564,10 @@ export default function Payroll() {
     const percepciones = [...plantillaPercepciones, ...manualPercepciones];
     const deducciones = [...plantillaDeducciones, ...manualDeducciones];
     
-    const totalPlantillaPercepciones = plantillaPercepciones.reduce((sum, p) => sum + p.amount, 0);
+    // Excluir conceptos que integran salario base del total (son parte del desglose, no suman)
+    const totalPlantillaPercepciones = plantillaPercepciones
+      .filter(p => !p.integraSalarioBase)
+      .reduce((sum, p) => sum + p.amount, 0);
     const totalPlantillaDeducciones = plantillaDeducciones.reduce((sum, d) => sum + d.amount, 0);
     
     return { 
@@ -1014,7 +1018,10 @@ export default function Payroll() {
   const getEmployeeTotalPercepciones = (emp: typeof selectedEmployeesData[0]) => {
     const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
     const extrasPercepciones = emp.primaDominical + emp.pagoFestivos + emp.horasDoblesPago + emp.horasTriplesPago + emp.vacacionesPago + emp.primaVacacional;
-    const conceptosPercepciones = breakdown.percepciones.reduce((s, p) => s + p.amount, 0);
+    // Excluir conceptos que integran salario base del total (son parte del desglose, no suman)
+    const conceptosPercepciones = breakdown.percepciones
+      .filter(p => !p.integraSalarioBase)
+      .reduce((s, p) => s + p.amount, 0);
     if (breakdown.hasPlantilla && conceptosPercepciones > 0) {
       return conceptosPercepciones + extrasPercepciones;
     }
