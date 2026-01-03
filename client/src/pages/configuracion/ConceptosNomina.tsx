@@ -659,8 +659,8 @@ export default function ConceptosNomina() {
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Calculator className="h-5 w-5" />
               {editingConcepto ? "Editar Concepto" : "Nuevo Concepto"}
@@ -669,7 +669,7 @@ export default function ConceptosNomina() {
               Define la fórmula de cálculo y propiedades fiscales del concepto
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-1 pr-4">
+          <ScrollArea className="flex-1 max-h-[60vh] pr-4">
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -923,7 +923,7 @@ export default function ConceptosNomina() {
             </div>
           </div>
           </ScrollArea>
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0 pt-4 border-t">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
