@@ -6598,6 +6598,234 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================================
+  // Payroll Engine V2 Test Environment (No Auth Required)
+  // ============================================================================
+
+  app.post("/api/payroll/test-calculate", async (req, res) => {
+    try {
+      const { employee, period, incidents } = req.body;
+
+      // Import payroll engine modules
+      const {
+        ConceptRegistry,
+        ValidationFramework,
+        PayrollOrchestrator,
+      } = await import('../shared/payrollEngineV2');
+
+      const { BUILTIN_CALCULATORS } = await import('../shared/payrollCalculators');
+      const { BUILTIN_VALIDATORS } = await import('../shared/payrollValidators');
+      const { pesosToBp, bpToPesos } = await import('../shared/payrollEngine');
+
+      // Initialize engine components
+      const registry = new ConceptRegistry();
+      const validationFramework = new ValidationFramework();
+      const orchestrator = new PayrollOrchestrator(registry, validationFramework);
+
+      // Register all built-in calculators
+      for (const [name, calculator] of Object.entries(BUILTIN_CALCULATORS)) {
+        registry.registerCalculator(name, calculator);
+      }
+
+      // Register all built-in validators
+      for (const validator of BUILTIN_VALIDATORS) {
+        validationFramework.registerValidator(validator);
+      }
+
+      // Register basic concepts (similar to database concepts)
+      // Note: In production, these would be loaded from the database
+      const basicConcepts = [
+        {
+          id: 'c-salario-base',
+          codigo: 'SALARIO_BASE',
+          nombre: 'Sueldo',
+          tipo: 'percepcion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'SALARIO_BASE',
+          satClave: '001',
+          gravableISR: true,
+          gravableIMSS: true,
+          ordenEjecucion: 10,
+          activo: true,
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-horas-extra',
+          codigo: 'HORAS_EXTRA',
+          nombre: 'Horas Extra',
+          tipo: 'percepcion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'HORAS_EXTRA',
+          satClave: '019',
+          gravableISR: true,
+          gravableIMSS: true,
+          ordenEjecucion: 20,
+          activo: true,
+          dependencias: ['SALARIO_BASE'],
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-faltas',
+          codigo: 'FALTAS',
+          nombre: 'Faltas',
+          tipo: 'deduccion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'FALTAS',
+          satClave: '002',
+          gravableISR: false,
+          gravableIMSS: false,
+          ordenEjecucion: 15,
+          activo: true,
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-prima-dominical',
+          codigo: 'PRIMA_DOMINICAL',
+          nombre: 'Prima Dominical',
+          tipo: 'percepcion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'PRIMA_DOMINICAL',
+          satClave: '002',
+          gravableISR: true,
+          gravableIMSS: true,
+          ordenEjecucion: 25,
+          activo: true,
+          dependencias: ['SALARIO_BASE'],
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-vales-despensa',
+          codigo: 'VALES_DESPENSA',
+          nombre: 'Vales de Despensa',
+          tipo: 'percepcion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'VALES_DESPENSA',
+          satClave: '029',
+          gravableISR: true,
+          gravableIMSS: false,
+          ordenEjecucion: 30,
+          activo: true,
+          dependencias: ['SALARIO_BASE'],
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-incapacidad',
+          codigo: 'INCAPACIDAD',
+          nombre: 'Incapacidad',
+          tipo: 'deduccion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'INCAPACIDADES',
+          satClave: '006',
+          gravableISR: false,
+          gravableIMSS: false,
+          ordenEjecucion: 18,
+          activo: true,
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-isr',
+          codigo: 'ISR',
+          nombre: 'ISR',
+          tipo: 'deduccion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'ISR',
+          satClave: '002',
+          gravableISR: false,
+          gravableIMSS: false,
+          ordenEjecucion: 90,
+          activo: true,
+          dependencias: ['SALARIO_BASE'],
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: 'c-imss',
+          codigo: 'IMSS',
+          nombre: 'IMSS',
+          tipo: 'deduccion' as const,
+          tipoCalculo: 'codigo' as const,
+          codigoCalculador: 'IMSS',
+          satClave: '001',
+          gravableISR: false,
+          gravableIMSS: false,
+          ordenEjecucion: 85,
+          activo: true,
+          dependencias: ['SALARIO_BASE'],
+          clienteId: employee.clienteId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+      ];
+
+      // Register all concepts
+      for (const concept of basicConcepts) {
+        registry.registerConcept(concept);
+      }
+
+      // Convert salary to basis points
+      const employeeWithBp = {
+        ...employee,
+        salarioDiarioBp: pesosToBp(employee.salarioDiario),
+        salarioDiarioIntegradoBp: pesosToBp(employee.salarioDiarioIntegrado),
+      };
+
+      // Calculate payroll
+      const result = await orchestrator.calcularNominaCompleta(
+        employeeWithBp,
+        period,
+        incidents
+      );
+
+      // Convert result back to pesos for response
+      const response = {
+        empleadoId: result.empleadoId,
+        periodoId: result.periodoId,
+        percepciones: result.percepciones.map(p => ({
+          codigo: p.codigo,
+          nombre: p.nombre,
+          monto: bpToPesos(p.montoBp),
+          gravado: bpToPesos(p.gravadoBp),
+          exento: bpToPesos(p.exentoBp),
+        })),
+        deducciones: result.deducciones.map(d => ({
+          codigo: d.codigo,
+          nombre: d.nombre,
+          monto: bpToPesos(d.montoBp),
+        })),
+        otrosPagos: result.otrosPagos.map(o => ({
+          codigo: o.codigo,
+          nombre: o.nombre,
+          monto: bpToPesos(o.montoBp),
+        })),
+        totalPercepciones: bpToPesos(result.totalPercepcionesBp),
+        totalDeducciones: bpToPesos(result.totalDeduccionesBp),
+        netoPagar: bpToPesos(result.netoPagarBp),
+        auditTrail: result.auditTrail,
+      };
+
+      res.json(response);
+    } catch (error: any) {
+      console.error('Test payroll calculation error:', error);
+      res.status(400).json({
+        message: error.message,
+        errors: error.errors || [],
+      });
+    }
+  });
+
   const httpServer = createServer(app);
 
   return httpServer;

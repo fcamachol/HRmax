@@ -51,6 +51,7 @@ import SuperAdminUsers from "@/pages/super-admin/Users";
 import SuperAdminClientes from "@/pages/super-admin/Clientes";
 import OnboardingWizard from "@/pages/onboarding-wizard";
 import NotFound from "@/pages/not-found";
+import PayrollTest from "@/pages/PayrollTest";
 
 function Router() {
   return (
@@ -130,6 +131,7 @@ export default function App() {
               )}
             </Route>
             <Route path="/onboarding" component={OnboardingWizard} />
+            <Route path="/payroll-test" component={PayrollTest} />
             <Route>
               {() => (
                 <RequireAuth>

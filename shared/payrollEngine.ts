@@ -38,7 +38,7 @@ export type TipoJornada = 'diurna' | 'nocturna' | 'mixta' | 'reducida';
 export type ZonaSalario = 'general' | 'frontera';
 export type TipoSeparacion = 'renuncia' | 'despido_justificado' | 'despido_injustificado' | 'muerte' | 'incapacidad_permanente';
 
-export interface ConfiguracionFiscal2025 {
+export interface ConfiguracionFiscal {
   uma: {
     diaria: number;
     mensual: number;
@@ -55,7 +55,7 @@ export interface ConfiguracionFiscal2025 {
   factorintegracionMinimo: number;
 }
 
-export const CONFIG_FISCAL_2025: ConfiguracionFiscal2025 = {
+export const CONFIG_FISCAL_2025: ConfiguracionFiscal = {
   uma: {
     diaria: 113.14,
     mensual: 3439.46,
@@ -64,6 +64,27 @@ export const CONFIG_FISCAL_2025: ConfiguracionFiscal2025 = {
   salarioMinimo: {
     general: 278.80,
     frontera: 419.88,
+  },
+  diasAnio: 365,
+  aguinaldoMinimo: 15,
+  primaVacacionalMinimo: 25,
+  limiteSuperiorCotizacionUMAs: 25,
+  factorintegracionMinimo: 1.0452,
+};
+
+// CONFIG FISCAL 2026 - Vigente a partir del 1 de enero de 2026
+// Fuente: CONASAMI - DOF 03/12/2025
+// Nota: UMA 2026 se publicará por INEGI en enero 2026 (vigencia desde 01/02/2026)
+//       Por ahora se mantiene UMA 2025 hasta su actualización oficial
+export const CONFIG_FISCAL_2026: ConfiguracionFiscal = {
+  uma: {
+    diaria: 113.14,      // PENDIENTE: Se actualizará en enero 2026 por INEGI
+    mensual: 3439.46,    // PENDIENTE: Se actualizará en enero 2026 por INEGI
+    anual: 41273.52,     // PENDIENTE: Se actualizará en enero 2026 por INEGI
+  },
+  salarioMinimo: {
+    general: 315.04,     // Incremento 13% (278.80 → 315.04) - Vigente 01/01/2026
+    frontera: 440.87,    // Incremento 5% (419.88 → 440.87) - Vigente 01/01/2026
   },
   diasAnio: 365,
   aguinaldoMinimo: 15,
@@ -226,6 +247,98 @@ export const TABLAS_ISR_2025: Record<TipoPeriodo, TablaISR> = {
   },
 };
 
+// ===================== TABLAS ISR 2026 =====================
+// TABLA ISR 2026 OFICIAL - Anexo 8 RMF 2026 DOF 28/12/2025
+// Factor de actualización: 1.1321 (inflación acumulada 13.21% Art. 152 LISR)
+// Se actualizan límites y cuotas fijas, las tasas porcentuales se mantienen
+export const TABLAS_ISR_2026: Record<TipoPeriodo, TablaISR> = {
+  mensual: {
+    periodo: 'mensual',
+    anio: 2026,
+    tramos: [
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(844.59), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(844.60), limiteSuperiorBp: pesosToBp(7168.45), cuotaFijaBp: pesosToBp(16.22), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(7168.46), limiteSuperiorBp: pesosToBp(12599.66), cuotaFijaBp: pesosToBp(420.94), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(12599.67), limiteSuperiorBp: pesosToBp(14643.97), cuotaFijaBp: pesosToBp(1011.68), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(14643.98), limiteSuperiorBp: pesosToBp(17529.77), cuotaFijaBp: pesosToBp(1338.77), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(17529.78), limiteSuperiorBp: pesosToBp(35360.60), cuotaFijaBp: pesosToBp(1856.47), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(35360.61), limiteSuperiorBp: pesosToBp(55741.63), cuotaFijaBp: pesosToBp(5665.17), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(55741.64), limiteSuperiorBp: pesosToBp(106431.92), cuotaFijaBp: pesosToBp(10459.38), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(106431.93), limiteSuperiorBp: pesosToBp(141909.23), cuotaFijaBp: pesosToBp(25666.46), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(141909.24), limiteSuperiorBp: pesosToBp(425727.71), cuotaFijaBp: pesosToBp(37019.30), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(425727.72), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(133517.58), tasaExcedenteBp: porcentajeToBp(35.00) },
+    ],
+  },
+  quincenal: {
+    periodo: 'quincenal',
+    anio: 2026,
+    tramos: [
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(422.30), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(422.31), limiteSuperiorBp: pesosToBp(3584.23), cuotaFijaBp: pesosToBp(8.11), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(3584.24), limiteSuperiorBp: pesosToBp(6299.83), cuotaFijaBp: pesosToBp(210.47), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(6299.84), limiteSuperiorBp: pesosToBp(7321.99), cuotaFijaBp: pesosToBp(505.84), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(7322.00), limiteSuperiorBp: pesosToBp(8764.89), cuotaFijaBp: pesosToBp(669.39), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(8764.90), limiteSuperiorBp: pesosToBp(17680.30), cuotaFijaBp: pesosToBp(928.24), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(17680.31), limiteSuperiorBp: pesosToBp(27870.82), cuotaFijaBp: pesosToBp(2832.59), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(27870.83), limiteSuperiorBp: pesosToBp(53215.96), cuotaFijaBp: pesosToBp(5229.69), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(53215.97), limiteSuperiorBp: pesosToBp(70954.62), cuotaFijaBp: pesosToBp(12833.23), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(70954.63), limiteSuperiorBp: pesosToBp(212863.86), cuotaFijaBp: pesosToBp(18509.65), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(212863.87), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(66758.79), tasaExcedenteBp: porcentajeToBp(35.00) },
+    ],
+  },
+  catorcenal: {
+    periodo: 'catorcenal',
+    anio: 2026,
+    tramos: [
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(394.14), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(394.15), limiteSuperiorBp: pesosToBp(3345.31), cuotaFijaBp: pesosToBp(7.56), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(3345.32), limiteSuperiorBp: pesosToBp(5879.85), cuotaFijaBp: pesosToBp(196.44), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(5879.86), limiteSuperiorBp: pesosToBp(6833.38), cuotaFijaBp: pesosToBp(472.11), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(6833.39), limiteSuperiorBp: pesosToBp(8183.38), cuotaFijaBp: pesosToBp(624.64), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(8183.39), limiteSuperiorBp: pesosToBp(16502.28), cuotaFijaBp: pesosToBp(866.56), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(16502.29), limiteSuperiorBp: pesosToBp(26012.09), cuotaFijaBp: pesosToBp(2643.75), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(26012.10), limiteSuperiorBp: pesosToBp(49667.56), cuotaFijaBp: pesosToBp(4880.90), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(49667.57), limiteSuperiorBp: pesosToBp(66217.30), cuotaFijaBp: pesosToBp(11977.54), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(66217.31), limiteSuperiorBp: pesosToBp(198651.89), cuotaFijaBp: pesosToBp(17273.46), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(198651.90), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(62281.02), tasaExcedenteBp: porcentajeToBp(35.00) },
+    ],
+  },
+  semanal: {
+    periodo: 'semanal',
+    anio: 2026,
+    tramos: [
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(197.07), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(197.08), limiteSuperiorBp: pesosToBp(1672.66), cuotaFijaBp: pesosToBp(3.78), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(1672.67), limiteSuperiorBp: pesosToBp(2939.93), cuotaFijaBp: pesosToBp(98.22), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(2939.94), limiteSuperiorBp: pesosToBp(3416.69), cuotaFijaBp: pesosToBp(236.06), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(3416.70), limiteSuperiorBp: pesosToBp(4091.69), cuotaFijaBp: pesosToBp(312.32), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(4091.70), limiteSuperiorBp: pesosToBp(8251.14), cuotaFijaBp: pesosToBp(433.28), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(8251.15), limiteSuperiorBp: pesosToBp(13006.05), cuotaFijaBp: pesosToBp(1321.88), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(13006.06), limiteSuperiorBp: pesosToBp(24833.78), cuotaFijaBp: pesosToBp(2440.45), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(24833.79), limiteSuperiorBp: pesosToBp(33108.65), cuotaFijaBp: pesosToBp(5988.77), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(33108.66), limiteSuperiorBp: pesosToBp(99325.95), cuotaFijaBp: pesosToBp(8636.73), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(99325.96), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(31140.51), tasaExcedenteBp: porcentajeToBp(35.00) },
+    ],
+  },
+  diario: {
+    periodo: 'diario',
+    anio: 2026,
+    tramos: [
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(28.15), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(28.16), limiteSuperiorBp: pesosToBp(238.95), cuotaFijaBp: pesosToBp(0.54), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(238.96), limiteSuperiorBp: pesosToBp(419.99), cuotaFijaBp: pesosToBp(14.03), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(420.00), limiteSuperiorBp: pesosToBp(488.10), cuotaFijaBp: pesosToBp(33.72), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(488.11), limiteSuperiorBp: pesosToBp(584.53), cuotaFijaBp: pesosToBp(44.62), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(584.54), limiteSuperiorBp: pesosToBp(1178.74), cuotaFijaBp: pesosToBp(61.90), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(1178.75), limiteSuperiorBp: pesosToBp(1858.01), cuotaFijaBp: pesosToBp(188.84), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(1858.02), limiteSuperiorBp: pesosToBp(3547.68), cuotaFijaBp: pesosToBp(348.63), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(3547.69), limiteSuperiorBp: pesosToBp(4729.81), cuotaFijaBp: pesosToBp(855.53), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(4729.82), limiteSuperiorBp: pesosToBp(14189.42), cuotaFijaBp: pesosToBp(1233.81), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(14189.43), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(4450.08), tasaExcedenteBp: porcentajeToBp(35.00) },
+    ],
+  },
+};
+
 // ===================== SUBSIDIO AL EMPLEO 2025 =====================
 // CAMBIO IMPORTANTE: A partir de 2025, el subsidio cambió drásticamente.
 // DOF 31/12/2024 - Art. Décimo Transitorio Reforma Fiscal
@@ -234,15 +347,32 @@ export const TABLAS_ISR_2025: Record<TipoPeriodo, TablaISR> = {
 // - $0 si ingreso > $10,171
 // El subsidio es 13.8% de la UMA mensual ($3,439.46 × 0.138 = $474.65 ≈ $475)
 
-export interface ConfigSubsidio2025 {
+export interface ConfigSubsidio {
   limiteIngresoMensualBp: bigint;
   subsidioMensualBp: bigint;
 }
 
 // Configuración simplificada para 2025
-export const CONFIG_SUBSIDIO_2025: ConfigSubsidio2025 = {
+export const CONFIG_SUBSIDIO_2025: ConfigSubsidio = {
   limiteIngresoMensualBp: pesosToBp(10171.00),
   subsidioMensualBp: pesosToBp(475.00),
+};
+
+// ===================== SUBSIDIO AL EMPLEO 2026 =====================
+// DOF 31/12/2025 - Actualización del subsidio al empleo para 2026
+// El subsidio se calcula como porcentaje de la UMA mensual:
+// - ENERO 2026: 15.59% de UMA 2025 = 15.59% × $3,439.46 = $536.21
+// - FEB-DIC 2026: 15.02% de UMA 2026 (se actualizará cuando INEGI publique UMA 2026)
+// - Límite de ingreso: $11,492.66 mensuales (vs $10,171 en 2025)
+
+export const CONFIG_SUBSIDIO_2026_ENERO: ConfigSubsidio = {
+  limiteIngresoMensualBp: pesosToBp(11492.66),
+  subsidioMensualBp: pesosToBp(536.21),  // 15.59% de UMA 2025 para enero 2026
+};
+
+export const CONFIG_SUBSIDIO_2026: ConfigSubsidio = {
+  limiteIngresoMensualBp: pesosToBp(11492.66),
+  subsidioMensualBp: pesosToBp(536.22),  // 15.02% de UMA 2026 (PENDIENTE: actualizar con UMA 2026 oficial)
 };
 
 // Factores de conversión por periodo (días / 30.4)
@@ -309,9 +439,90 @@ export const SUBSIDIOS_POR_PERIODO_2025: Record<TipoPeriodo, { limiteBp: bigint;
     limiteBp: pesosToBp(2341.99),  // 10171 * 7 / 30.4
     subsidioBp: pesosToBp(109.38)  // 475 * 7 / 30.4
   },
-  diario: { 
+  diario: {
     limiteBp: pesosToBp(334.57),   // 10171 / 30.4
     subsidioBp: pesosToBp(15.63)   // 475 / 30.4
+  },
+};
+
+/**
+ * Calcula el subsidio al empleo 2026 según el nuevo esquema de cuota fija
+ * @param ingresoGravableBp Ingreso gravable del periodo en basis points
+ * @param periodo Tipo de periodo de nómina
+ * @param mes Mes del año (1-12). Enero usa configuración especial
+ * @returns Subsidio aplicable en basis points
+ */
+export function calcularSubsidio2026(
+  ingresoGravableBp: bigint,
+  periodo: TipoPeriodo,
+  mes: number = 1
+): bigint {
+  // Seleccionar configuración según el mes
+  const config = mes === 1 ? CONFIG_SUBSIDIO_2026_ENERO : CONFIG_SUBSIDIO_2026;
+
+  // Calcular límite de ingreso proporcional al periodo
+  const limiteIngresoPeriodo = BigInt(
+    Math.trunc(Number(config.limiteIngresoMensualBp) * DIAS_PERIODO[periodo] / 30.4)
+  );
+
+  // Si el ingreso supera el límite, no hay subsidio
+  if (ingresoGravableBp > limiteIngresoPeriodo) {
+    return BigInt(0);
+  }
+
+  // Calcular subsidio proporcional al periodo
+  const subsidio = BigInt(
+    Math.trunc(Number(config.subsidioMensualBp) * FACTORES_PERIODO[periodo])
+  );
+
+  return subsidio;
+}
+
+// Montos de subsidio precalculados por periodo para 2026 (enero)
+export const SUBSIDIOS_POR_PERIODO_2026_ENERO: Record<TipoPeriodo, { limiteBp: bigint; subsidioBp: bigint }> = {
+  mensual: {
+    limiteBp: CONFIG_SUBSIDIO_2026_ENERO.limiteIngresoMensualBp,
+    subsidioBp: CONFIG_SUBSIDIO_2026_ENERO.subsidioMensualBp
+  },
+  quincenal: {
+    limiteBp: pesosToBp(5668.75),  // 11492.66 * 15 / 30.4
+    subsidioBp: pesosToBp(264.58)  // 536.21 * 15 / 30.4
+  },
+  catorcenal: {
+    limiteBp: pesosToBp(5290.49),  // 11492.66 * 14 / 30.4
+    subsidioBp: pesosToBp(246.95)  // 536.21 * 14 / 30.4
+  },
+  semanal: {
+    limiteBp: pesosToBp(2645.24),  // 11492.66 * 7 / 30.4
+    subsidioBp: pesosToBp(123.47)  // 536.21 * 7 / 30.4
+  },
+  diario: {
+    limiteBp: pesosToBp(377.89),   // 11492.66 / 30.4
+    subsidioBp: pesosToBp(17.64)   // 536.21 / 30.4
+  },
+};
+
+// Montos de subsidio precalculados por periodo para 2026 (febrero-diciembre)
+export const SUBSIDIOS_POR_PERIODO_2026: Record<TipoPeriodo, { limiteBp: bigint; subsidioBp: bigint }> = {
+  mensual: {
+    limiteBp: CONFIG_SUBSIDIO_2026.limiteIngresoMensualBp,
+    subsidioBp: CONFIG_SUBSIDIO_2026.subsidioMensualBp
+  },
+  quincenal: {
+    limiteBp: pesosToBp(5668.75),  // 11492.66 * 15 / 30.4
+    subsidioBp: pesosToBp(264.58)  // 536.22 * 15 / 30.4
+  },
+  catorcenal: {
+    limiteBp: pesosToBp(5290.49),  // 11492.66 * 14 / 30.4
+    subsidioBp: pesosToBp(246.96)  // 536.22 * 14 / 30.4
+  },
+  semanal: {
+    limiteBp: pesosToBp(2645.24),  // 11492.66 * 7 / 30.4
+    subsidioBp: pesosToBp(123.48)  // 536.22 * 7 / 30.4
+  },
+  diario: {
+    limiteBp: pesosToBp(377.89),   // 11492.66 / 30.4
+    subsidioBp: pesosToBp(17.64)   // 536.22 / 30.4
   },
 };
 
@@ -378,6 +589,47 @@ export function calcularISR(
   // NOTA 2025: Si subsidio > ISR, la diferencia NO se entrega al trabajador
   const isrRetenidoBp = maxBp(restarBp(isrBp, subsidioEmpleoBp), BigInt(0));
   
+  return { isrBp, subsidioEmpleoBp, isrRetenidoBp, tramoAplicado };
+}
+
+/**
+ * Calcula ISR con tabla 2026
+ * Fórmula: (Base Gravable - Límite Inferior) × Tasa Excedente + Cuota Fija
+ *
+ * NOTA 2026: El subsidio al empleo aumenta a $536.21 (enero) / $536.22 (feb-dic)
+ * con límite de ingreso de $11,492.66 mensuales (vs $10,171 en 2025)
+ */
+export function calcularISR2026(
+  baseGravableBp: bigint,
+  periodo: TipoPeriodo,
+  mes: number = 1
+): { isrBp: bigint; subsidioEmpleoBp: bigint; isrRetenidoBp: bigint; tramoAplicado: number } {
+  const tablaISR = TABLAS_ISR_2026[periodo];
+
+  let tramoAplicado = 0;
+  let isrBp = BigInt(0);
+
+  // Calcular ISR según tabla progresiva 2026
+  for (let i = 0; i < tablaISR.tramos.length; i++) {
+    const tramo = tablaISR.tramos[i];
+    const enTramo = compararBp(baseGravableBp, tramo.limiteInferiorBp) >= 0 &&
+      (tramo.limiteSuperiorBp === null || compararBp(baseGravableBp, tramo.limiteSuperiorBp) <= 0);
+
+    if (enTramo) {
+      tramoAplicado = i + 1;
+      const excedenteBp = restarBp(baseGravableBp, tramo.limiteInferiorBp);
+      const isrExcedenteBp = multiplicarBpPorTasa(excedenteBp, tramo.tasaExcedenteBp);
+      isrBp = sumarBp(isrExcedenteBp, tramo.cuotaFijaBp);
+      break;
+    }
+  }
+
+  // Calcular subsidio al empleo 2026 (cuota fija mejorada)
+  const subsidioEmpleoBp = calcularSubsidio2026(baseGravableBp, periodo, mes);
+
+  // ISR retenido = ISR causado - Subsidio (mínimo 0)
+  const isrRetenidoBp = maxBp(restarBp(isrBp, subsidioEmpleoBp), BigInt(0));
+
   return { isrBp, subsidioEmpleoBp, isrRetenidoBp, tramoAplicado };
 }
 
