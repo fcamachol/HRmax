@@ -2518,7 +2518,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConceptosByPlantilla(plantillaId: string): Promise<(PlantillaConcepto & { concepto: ConceptoNomina })[]> {
-    const results = await db
+    // Primero intentar con conceptoNominaId (nueva arquitectura)
+    const resultsNew = await db
       .select({
         plantillaConcepto: plantillaConceptos,
         concepto: conceptosNomina,
@@ -2528,10 +2529,61 @@ export class DatabaseStorage implements IStorage {
       .where(eq(plantillaConceptos.plantillaId, plantillaId))
       .orderBy(plantillaConceptos.orden);
     
-    return results.map((r) => ({
+    // Después buscar registros legacy con conceptoId (tabla conceptos_medio_pago)
+    const resultsLegacy = await db
+      .select({
+        plantillaConcepto: plantillaConceptos,
+        conceptoLegacy: conceptosMedioPago,
+      })
+      .from(plantillaConceptos)
+      .innerJoin(conceptosMedioPago, eq(plantillaConceptos.conceptoId, conceptosMedioPago.id))
+      .where(eq(plantillaConceptos.plantillaId, plantillaId))
+      .orderBy(plantillaConceptos.orden);
+    
+    // Mapear resultados nuevos
+    const newMapped = resultsNew.map((r) => ({
       ...r.plantillaConcepto,
       concepto: r.concepto,
     }));
+    
+    // Mapear resultados legacy a formato ConceptoNomina compatible
+    const legacyMapped = resultsLegacy
+      .filter(r => !resultsNew.some(n => n.plantillaConcepto.id === r.plantillaConcepto.id))
+      .map((r) => ({
+        ...r.plantillaConcepto,
+        concepto: {
+          id: r.conceptoLegacy.id,
+          nombre: r.conceptoLegacy.nombre,
+          codigo: r.conceptoLegacy.nombre.toUpperCase().replace(/\s+/g, '_').substring(0, 20),
+          tipo: r.conceptoLegacy.tipo as 'percepcion' | 'deduccion',
+          categoria: r.conceptoLegacy.categoria,
+          satClave: r.conceptoLegacy.satClave,
+          satTipoCatalogo: r.conceptoLegacy.satTipoCatalogo,
+          formula: r.conceptoLegacy.formula,
+          afectaIsr: r.conceptoLegacy.gravableIsr ?? false,
+          integraSbc: r.conceptoLegacy.integraSbc ?? false,
+          integraSalarioBase: false,
+          activo: r.conceptoLegacy.activo,
+          orden: 0,
+          createdAt: r.conceptoLegacy.createdAt,
+          updatedAt: r.conceptoLegacy.updatedAt,
+          clienteId: r.conceptoLegacy.clienteId,
+          empresaId: r.conceptoLegacy.empresaId,
+          centroTrabajoId: null,
+          medioPagoId: r.conceptoLegacy.medioPagoId,
+          descripcion: null,
+          fundamentoLegal: r.conceptoLegacy.fundamentoLegal,
+          limiteExento: r.conceptoLegacy.limiteExento,
+          unidadExentoUma: null,
+          periodicidad: null,
+          esEspecial: false,
+        } as ConceptoNomina,
+      }));
+    
+    // Combinar y ordenar por orden
+    const combined = [...newMapped, ...legacyMapped].sort((a, b) => (a.orden || 0) - (b.orden || 0));
+    
+    return combined;
   }
 
   // Payroll Periods

@@ -326,11 +326,18 @@ export const plantillaConceptos = pgTable("plantilla_conceptos", {
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   plantillaId: varchar("plantilla_id").notNull().references(() => plantillasNomina.id, { onDelete: "cascade" }),
-  conceptoNominaId: varchar("concepto_nomina_id").notNull().references(() => conceptosNomina.id, { onDelete: "cascade" }),
+  // Legacy: referencia a conceptos_medio_pago (deprecated, use conceptoNominaId)
+  conceptoId: varchar("concepto_id").references(() => conceptosMedioPago.id, { onDelete: "cascade" }),
+  // Nueva: referencia a conceptos_nomina (tabla unificada)
+  conceptoNominaId: varchar("concepto_nomina_id").references(() => conceptosNomina.id, { onDelete: "cascade" }),
+  // Legacy: canal de pago (deprecated, usar medioPagoOverrideId)
+  canal: varchar("canal", { length: 20 }),
   // Override del medio de pago para esta plantilla específica (si es null, usa el del concepto o nómina normal)
   medioPagoOverrideId: varchar("medio_pago_override_id").references(() => mediosPago.id, { onDelete: "set null" }),
   valorDefault: decimal("valor_default", { precision: 18, scale: 4 }), // Valor predeterminado opcional
   esObligatorio: boolean("es_obligatorio").notNull().default(false), // Si el concepto es obligatorio en esta plantilla
+  // Legacy: integra salario base (deprecated, usar integraSalarioBaseOverride)
+  integraSalarioBase: boolean("integra_salario_base"),
   // Override de integraSalarioBase para esta plantilla (si es null, usa el valor del concepto)
   integraSalarioBaseOverride: boolean("integra_salario_base_override"),
   orden: integer("orden").notNull().default(0), // Orden de aparición en la plantilla
@@ -339,7 +346,6 @@ export const plantillaConceptos = pgTable("plantilla_conceptos", {
 }, (table) => ({
   clienteEmpresaIdx: index("plantilla_conceptos_cliente_empresa_idx").on(table.clienteId, table.empresaId),
   plantillaIdx: index("plantilla_conceptos_plantilla_idx").on(table.plantillaId),
-  uniqueConcepto: unique().on(table.plantillaId, table.conceptoNominaId),
 }));
 
 export const attendance = pgTable("attendance", {
