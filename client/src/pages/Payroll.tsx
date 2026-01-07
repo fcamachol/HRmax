@@ -342,23 +342,86 @@ export default function Payroll() {
 
   // Transform API nominas to local format
   const nominas: Nomina[] = useMemo(() => {
-    return nominasFromApi.map((n: any) => ({
-      id: n.id,
-      type: n.tipo as "ordinaria" | "extraordinaria",
-      period: n.periodo,
-      frequency: n.frecuencia,
-      extraordinaryType: n.tipoExtraordinario,
-      employeeIds: (n.empleadosData || []).map((e: any) => e.empleadoId),
-      status: n.status as "draft" | "pre_nomina" | "approved" | "paid",
-      createdAt: new Date(n.createdAt),
-      totalNet: parseFloat(n.totalNeto) || 0,
-      totalEarnings: 0, // Will be calculated from empleadosData
-      totalDeductions: 0,
-      totalSalary: 0,
-      employeeCount: n.totalEmpleados || 0,
-      editable: n.status === "pre_nomina",
-      employeeDetails: n.empleadosData,
-    }));
+    return nominasFromApi.map((n: any) => {
+      // Transform empleadosData from DB format to EmployeePayrollDetail format
+      const employeeDetails: EmployeePayrollDetail[] = (n.empleadosData || []).map((e: any) => ({
+        id: e.empleadoId,
+        name: e.nombre || '',
+        rfc: e.rfc || '',
+        department: e.departamento || null,
+        salary: e.salarioBase || 0,
+        baseSalary: e.salarioBase || 0,
+        daysWorked: e.diasTrabajados || 0,
+        periodDays: e.diasPeriodo || 15,
+        absences: 0,
+        incapacities: 0,
+        diasDomingo: 0,
+        diasFestivos: 0,
+        diasVacaciones: 0,
+        primaDominical: 0,
+        pagoFestivos: 0,
+        horasExtra: 0,
+        horasDobles: 0,
+        horasTriples: 0,
+        horasDoblesPago: 0,
+        horasTriplesPago: 0,
+        horasExtraPago: 0,
+        horasExtraExento: 0,
+        horasExtraGravado: 0,
+        vacacionesPago: 0,
+        primaVacacional: 0,
+        horasDescontadas: 0,
+        descuentoHoras: 0,
+        imssTotal: e.imssTotal || 0,
+        imssExcedente3Umas: 0,
+        imssPrestacionesDinero: 0,
+        imssGastosMedicos: 0,
+        imssInvalidezVida: 0,
+        imssCesantiaVejez: 0,
+        isrCausado: 0,
+        subsidioEmpleo: e.subsidioEmpleo || 0,
+        isrRetenido: e.isrRetenido || 0,
+        isrTasa: 0,
+        sbcDiario: 0,
+        sdiDiario: 0,
+        earnings: (e.percepciones || []).reduce((sum: number, p: any) => sum + (p.monto || 0), 0),
+        deductions: (e.deducciones || []).reduce((sum: number, d: any) => sum + (d.monto || 0), 0) + (e.imssTotal || 0) + (e.isrRetenido || 0),
+        netPay: e.netoAPagar || 0,
+        percepciones: (e.percepciones || []).map((p: any) => ({
+          id: p.conceptoId || p.id || '',
+          name: p.nombre || '',
+          amount: p.monto || 0,
+        })),
+        deducciones: (e.deducciones || []).map((d: any) => ({
+          id: d.conceptoId || d.id || '',
+          name: d.nombre || '',
+          amount: d.monto || 0,
+        })),
+      }));
+
+      // Calculate totals from employee details
+      const totalEarnings = employeeDetails.reduce((sum, e) => sum + e.earnings, 0);
+      const totalDeductions = employeeDetails.reduce((sum, e) => sum + e.deductions, 0);
+      const totalSalary = employeeDetails.reduce((sum, e) => sum + e.baseSalary, 0);
+
+      return {
+        id: n.id,
+        type: n.tipo as "ordinaria" | "extraordinaria",
+        period: n.periodo,
+        frequency: n.frecuencia,
+        extraordinaryType: n.tipoExtraordinario,
+        employeeIds: (n.empleadosData || []).map((e: any) => e.empleadoId),
+        status: n.status as "draft" | "pre_nomina" | "approved" | "paid",
+        createdAt: new Date(n.createdAt),
+        totalNet: parseFloat(n.totalNeto) || 0,
+        totalEarnings,
+        totalDeductions,
+        totalSalary,
+        employeeCount: n.totalEmpleados || 0,
+        editable: n.status === "pre_nomina",
+        employeeDetails,
+      };
+    });
   }, [nominasFromApi]);
   
   // State for viewing nomina detail modal
