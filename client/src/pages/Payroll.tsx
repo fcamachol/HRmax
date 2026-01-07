@@ -1436,22 +1436,22 @@ export default function Payroll() {
     }
   };
 
-  const getStatusBadge = (status: Nomina["status"]) => {
-    const variants = {
-      draft: "secondary" as const,
-      pre_nomina: "outline" as const,
-      approved: "default" as const,
-      paid: "default" as const,
+  const getStatusBadge = (status: string) => {
+    const variants: Record<string, "secondary" | "outline" | "default"> = {
+      draft: "secondary",
+      pre_nomina: "outline",
+      approved: "default",
+      paid: "default",
     };
 
-    const labels = {
+    const labels: Record<string, string> = {
       draft: "Borrador",
       pre_nomina: "Pre-Nómina",
       approved: "Aprobada",
       paid: "Pagada",
     };
 
-    return <Badge variant={variants[status]}>{labels[status]}</Badge>;
+    return <Badge variant={variants[status] || "secondary"}>{labels[status] || status}</Badge>;
   };
 
   // Function to view nomina details
