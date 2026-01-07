@@ -159,7 +159,8 @@ export function generateSantanderLayout(
       clabe + 
       importe + 
       nombre + 
-      referencia;
+      referencia +
+      descripcion;
     lines.push(detail);
     totalAmount += emp.netoAPagar;
   });
