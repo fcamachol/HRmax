@@ -3076,7 +3076,7 @@ export default function Payroll() {
           ) : (
             <Button 
               onClick={createPreNomina} 
-              disabled={isCreatingNomina || selectedEmployeesData.length === 0}
+              disabled={isCreatingNomina}
               data-testid="button-create-pre-nomina"
             >
               {isCreatingNomina ? (
