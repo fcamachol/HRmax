@@ -2133,9 +2133,28 @@ export default function Payroll() {
                           Layout Santander
                         </Button>
                       </div>
-                      <Button variant="outline" onClick={() => setIsNominaDetailOpen(false)}>
-                        Cerrar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={async () => {
+                            try {
+                              await apiRequest("POST", `/api/nominas/${selectedNominaToView.id}/pagar`, {});
+                              await refetchNominas();
+                              setIsNominaDetailOpen(false);
+                              setSelectedNominaToView(null);
+                              toast({ title: "Nómina pagada", description: "La nómina ha sido marcada como pagada exitosamente." });
+                            } catch (error: any) {
+                              toast({ title: "Error", description: error.message, variant: "destructive" });
+                            }
+                          }}
+                          data-testid="button-mark-paid"
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-2" />
+                          Pagado
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsNominaDetailOpen(false)}>
+                          Cerrar
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </DialogFooter>
