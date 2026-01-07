@@ -22,6 +22,7 @@ import {
   Trash2, 
   Upload, 
   FileSpreadsheet,
+  FileText,
   ArrowRight,
   ArrowLeft,
   CheckCircle2,
@@ -2150,6 +2151,94 @@ export default function Payroll() {
                         >
                           <CheckCircle2 className="h-4 w-4 mr-2" />
                           Pagado
+                        </Button>
+                        <Button variant="outline" onClick={() => setIsNominaDetailOpen(false)}>
+                          Cerrar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {selectedNominaToView.status === "paid" && (
+                    <div className="flex flex-wrap gap-2 w-full justify-between">
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`/api/nominas/${selectedNominaToView.id}/layout-bancario/bbva`, {
+                                credentials: 'include'
+                              });
+                              if (!response.ok) throw new Error('Error al generar layout');
+                              const blob = await response.blob();
+                              const disposition = response.headers.get('Content-Disposition');
+                              const filenameMatch = disposition?.match(/filename="(.+)"/);
+                              const filename = filenameMatch ? filenameMatch[1] : 'DISPERSION_BBVA.txt';
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              a.remove();
+                              toast({ title: "Layout descargado", description: `Archivo ${filename} generado` });
+                            } catch (error: any) {
+                              toast({ title: "Error", description: error.message, variant: "destructive" });
+                            }
+                          }}
+                          data-testid="button-download-layout-bbva-paid"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Layout BBVA
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(`/api/nominas/${selectedNominaToView.id}/layout-bancario/santander`, {
+                                credentials: 'include'
+                              });
+                              if (!response.ok) throw new Error('Error al generar layout');
+                              const blob = await response.blob();
+                              const disposition = response.headers.get('Content-Disposition');
+                              const filenameMatch = disposition?.match(/filename="(.+)"/);
+                              const filename = filenameMatch ? filenameMatch[1] : 'DISPERSION_SANTANDER.txt';
+                              const url = window.URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = filename;
+                              document.body.appendChild(a);
+                              a.click();
+                              window.URL.revokeObjectURL(url);
+                              a.remove();
+                              toast({ title: "Layout descargado", description: `Archivo ${filename} generado` });
+                            } catch (error: any) {
+                              toast({ title: "Error", description: error.message, variant: "destructive" });
+                            }
+                          }}
+                          data-testid="button-download-layout-santander-paid"
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          Layout Santander
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={async () => {
+                            try {
+                              await apiRequest("POST", `/api/nominas/${selectedNominaToView.id}/timbrar`, {});
+                              await refetchNominas();
+                              setIsNominaDetailOpen(false);
+                              setSelectedNominaToView(null);
+                              toast({ title: "Recibos timbrados", description: "Los recibos de nómina han sido timbrados exitosamente." });
+                            } catch (error: any) {
+                              toast({ title: "Error", description: error.message, variant: "destructive" });
+                            }
+                          }}
+                          data-testid="button-timbrar"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Timbrar Recibos
                         </Button>
                         <Button variant="outline" onClick={() => setIsNominaDetailOpen(false)}>
                           Cerrar

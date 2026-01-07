@@ -2391,6 +2391,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Mark nomina as stamped (timbrada)
+  app.post("/api/nominas/:id/timbrar", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { timbradoPor } = req.body;
+      
+      const nomina = await storage.getNomina(id);
+      if (!nomina) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      
+      if (nomina.status !== "paid") {
+        return res.status(400).json({ message: "La nómina debe estar pagada antes de timbrar los recibos" });
+      }
+      
+      const nominaActualizada = await storage.updateNominaStatus(id, "stamped", timbradoPor);
+      
+      res.json({
+        success: true,
+        message: "Recibos timbrados exitosamente",
+        nomina: nominaActualizada
+      });
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
   app.patch("/api/nominas/:id/status", async (req, res) => {
     try {
       const { id } = req.params;
