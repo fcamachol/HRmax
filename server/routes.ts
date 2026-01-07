@@ -1614,10 +1614,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Grupos de Nómina
   app.post("/api/grupos-nomina", async (req, res) => {
     try {
+      const user = req.user as any;
+      if (!user) {
+        return res.status(401).json({ message: "No autenticado" });
+      }
+      
       const validatedData = insertGrupoNominaSchema.parse(req.body);
       const { employeeIds, ...grupoData } = validatedData;
       
-      const grupo = await storage.createGrupoNomina(grupoData);
+      // Get clienteId from user session
+      const clienteId = user.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Usuario no tiene cliente asignado" });
+      }
+      
+      // Get first empresa for this cliente if not provided
+      let empresaId = grupoData.empresaId;
+      if (!empresaId) {
+        const empresas = await storage.getEmpresasByCliente(clienteId);
+        if (empresas.length === 0) {
+          return res.status(400).json({ message: "No hay empresas configuradas para este cliente" });
+        }
+        empresaId = empresas[0].id;
+      }
+      
+      const grupo = await storage.createGrupoNomina({
+        ...grupoData,
+        clienteId,
+        empresaId,
+      });
       
       // Generar automáticamente periodos de pago para año actual y próximo
       const currentYear = new Date().getFullYear();

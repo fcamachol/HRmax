@@ -814,6 +814,8 @@ export const insertGrupoNominaSchema = createInsertSchema(gruposNomina).omit({
 }).extend({
   tipoPeriodo: z.enum(tiposPeriodoNomina),
   employeeIds: z.array(z.string()).optional(), // Array de IDs de empleados a asignar al grupo
+  clienteId: z.string().optional(), // Optional - backend will inject from session
+  empresaId: z.string().optional(), // Optional - backend will inject from session
 });
 
 export const updateGrupoNominaSchema = insertGrupoNominaSchema.partial();
