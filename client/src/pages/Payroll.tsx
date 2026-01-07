@@ -336,6 +336,7 @@ export default function Payroll() {
     rfc: emp.rfc || '',
     department: emp.departamento,
     salary: parseFloat(emp.salarioBrutoMensual || '0'),
+    grupoNominaId: emp.grupoNominaId || null,
   }));
 
   // Fetch existing nominas from API
@@ -1095,9 +1096,11 @@ export default function Payroll() {
     };
   };
 
-  const filteredEmployees = allEmployees.filter(emp => 
-    departmentFilter === "all" || emp.department === departmentFilter
-  );
+  const filteredEmployees = allEmployees.filter(emp => {
+    const matchesDepartment = departmentFilter === "all" || emp.department === departmentFilter;
+    const matchesGroup = !selectedGroup || emp.grupoNominaId === selectedGroup;
+    return matchesDepartment && matchesGroup;
+  });
 
   const employeesToShow = filteredEmployees.map(emp => ({
     ...emp,
@@ -1150,9 +1153,12 @@ export default function Payroll() {
     const group = gruposNomina.find((g: GrupoNomina) => g.id === groupId);
     if (group) {
       setSelectedGroup(groupId);
+      // Pre-select all employees that belong to this group
+      const groupEmployees = allEmployees.filter(emp => emp.grupoNominaId === groupId);
+      setSelectedEmployees(new Set(groupEmployees.map(emp => emp.id)));
       toast({
         title: "Grupo cargado",
-        description: `Grupo "${group.nombre}" seleccionado para nómina`,
+        description: `Grupo "${group.nombre}" seleccionado - ${groupEmployees.length} empleados encontrados`,
       });
     }
   };
