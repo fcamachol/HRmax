@@ -2479,6 +2479,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Direct BBVA/Santander layout generation endpoint
+  app.get("/api/nominas/:nominaId/layout-bancario/:banco", async (req, res) => {
+    try {
+      const { nominaId, banco } = req.params;
+      
+      if (banco !== 'bbva' && banco !== 'santander') {
+        return res.status(400).json({ message: "Banco no soportado. Use 'bbva' o 'santander'" });
+      }
+
+      const nomina = await storage.getNomina(nominaId);
+      if (!nomina) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+
+      if (nomina.status !== "approved") {
+        return res.status(400).json({ message: "La nómina debe estar aprobada para generar layouts bancarios" });
+      }
+
+      const empleadosData = nomina.empleadosData as any[];
+      if (!empleadosData || empleadosData.length === 0) {
+        return res.status(400).json({ message: "La nómina no tiene empleados" });
+      }
+
+      // Get empresa info for the layout
+      const empresa = await storage.getEmpresa(nomina.empresaId);
+      const empresaNombre = empresa?.razonSocial || 'EMPRESA';
+      const empresaRfc = empresa?.rfc || 'XXXXXXXXXXX';
+
+      // Import the bank layout service
+      const { generateBankLayout } = await import("./services/bankLayoutService");
+
+      // Transform employee data for the layout
+      const employees = empleadosData.map((emp: any) => ({
+        nombre: emp.nombreCompleto || `${emp.apellidoPaterno || ''} ${emp.apellidoMaterno || ''} ${emp.nombre || ''}`.trim() || emp.nombre || 'EMPLEADO',
+        rfc: emp.rfc || '',
+        clabe: emp.clabe || emp.cuentaBancaria || '000000000000000000',
+        numeroCuenta: emp.cuentaBancaria,
+        banco: emp.banco,
+        netoAPagar: emp.netoAPagar || 0,
+        referencia: `NOM${nominaId.substring(0, 8)}`,
+      }));
+
+      const config = {
+        empresaNombre,
+        empresaRfc,
+        convenio: empresa?.convenioDispersion || undefined,
+        fechaPago: new Date(),
+        secuencia: 1,
+      };
+
+      const { content, filename, mimeType } = generateBankLayout(banco, employees, config);
+
+      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(content);
+    } catch (error: any) {
+      console.error("[LAYOUT BANCARIO] Error:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============================================================================
   // REPSE - Clientes
   // ============================================================================
