@@ -162,6 +162,7 @@ export default function Payroll() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<"list" | "create">("list");
   const [currentStep, setCurrentStep] = useState(0);
+  const [isCreatingNomina, setIsCreatingNomina] = useState(false);
   
   // Fetch grupos de nómina from API
   const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
@@ -1107,7 +1108,16 @@ export default function Payroll() {
     ...calculateEmployeePayroll(emp.id),
   }));
 
-  const selectedEmployeesData = employeesToShow.filter(emp => selectedEmployees.has(emp.id));
+  // For display in step 0, filter by current filters
+  const selectedEmployeesDisplayData = employeesToShow.filter(emp => selectedEmployees.has(emp.id));
+  
+  // For steps 1 and 2 (and submission), use ALL selected employees regardless of current filters
+  const selectedEmployeesData = allEmployees
+    .filter(emp => selectedEmployees.has(emp.id))
+    .map(emp => ({
+      ...emp,
+      ...calculateEmployeePayroll(emp.id),
+    }));
 
   const totalSalary = selectedEmployeesData.reduce((sum, emp) => sum + emp.salary, 0);
   
@@ -1343,6 +1353,8 @@ export default function Payroll() {
   };
 
   const createPreNomina = async () => {
+    if (isCreatingNomina) return;
+    
     if (!currentEmpresa) {
       toast({
         title: "Error",
@@ -1352,47 +1364,58 @@ export default function Payroll() {
       return;
     }
 
-    // Build employee details for API (simplified format for storage)
-    const empleadosData = selectedEmployeesData.map(emp => {
-      const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
-      return {
-        empleadoId: emp.id,
-        nombre: emp.name,
-        rfc: emp.rfc,
-        departamento: emp.department,
-        salarioBase: emp.baseSalary,
-        diasTrabajados: emp.daysWorked,
-        percepciones: breakdown.percepciones.map(p => ({
-          conceptoId: p.id,
-          nombre: p.name,
-          monto: p.amount,
-        })),
-        deducciones: breakdown.deducciones.map(d => ({
-          conceptoId: d.id,
-          nombre: d.name,
-          monto: d.amount,
-        })),
-        imssTotal: emp.imssTotal,
-        isrRetenido: emp.isrRetenido,
-        subsidioEmpleo: emp.subsidioEmpleo,
-        netoAPagar: emp.netPay,
-      };
-    });
+    if (selectedEmployeesData.length === 0) {
+      toast({
+        title: "Error",
+        description: "No hay empleados seleccionados",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const nominaPayload = {
-      clienteId: currentEmpresa.clienteId,
-      empresaId: currentEmpresa.id,
-      tipo: nominaType,
-      periodo: nominaType === "ordinaria" ? selectedPeriod : extraordinaryType,
-      frecuencia: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
-      tipoExtraordinario: nominaType === "extraordinaria" ? extraordinaryType : null,
-      status: "pre_nomina",
-      totalNeto: totalNetPay,
-      totalEmpleados: selectedEmployees.size,
-      empleadosData: empleadosData,
-    };
+    setIsCreatingNomina(true);
 
     try {
+      // Build employee details for API (simplified format for storage)
+      const empleadosData = selectedEmployeesData.map(emp => {
+        const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
+        return {
+          empleadoId: emp.id,
+          nombre: emp.name,
+          rfc: emp.rfc,
+          departamento: emp.department,
+          salarioBase: emp.baseSalary,
+          diasTrabajados: emp.daysWorked,
+          percepciones: breakdown.percepciones.map(p => ({
+            conceptoId: p.id,
+            nombre: p.name,
+            monto: p.amount,
+          })),
+          deducciones: breakdown.deducciones.map(d => ({
+            conceptoId: d.id,
+            nombre: d.name,
+            monto: d.amount,
+          })),
+          imssTotal: emp.imssTotal,
+          isrRetenido: emp.isrRetenido,
+          subsidioEmpleo: emp.subsidioEmpleo,
+          netoAPagar: emp.netPay,
+        };
+      });
+
+      const nominaPayload = {
+        clienteId: currentEmpresa.clienteId,
+        empresaId: currentEmpresa.id,
+        tipo: nominaType,
+        periodo: nominaType === "ordinaria" ? selectedPeriod : extraordinaryType,
+        frecuencia: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
+        tipoExtraordinario: nominaType === "extraordinaria" ? extraordinaryType : null,
+        status: "pre_nomina",
+        totalNeto: totalNetPay,
+        totalEmpleados: selectedEmployees.size,
+        empleadosData: empleadosData,
+      };
+
       await apiRequest("POST", "/api/nominas", nominaPayload);
       await refetchNominas();
       queryClient.invalidateQueries({ queryKey: ["/api/nominas"] });
@@ -1410,6 +1433,8 @@ export default function Payroll() {
         description: error.message || "No se pudo guardar la pre-nómina",
         variant: "destructive",
       });
+    } finally {
+      setIsCreatingNomina(false);
     }
   };
 
@@ -3052,9 +3077,22 @@ export default function Payroll() {
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           ) : (
-            <Button onClick={createPreNomina} data-testid="button-create-pre-nomina">
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Crear Pre-Nómina
+            <Button 
+              onClick={createPreNomina} 
+              disabled={isCreatingNomina || selectedEmployeesData.length === 0}
+              data-testid="button-create-pre-nomina"
+            >
+              {isCreatingNomina ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Crear Pre-Nómina
+                </>
+              )}
             </Button>
           )}
         </div>
