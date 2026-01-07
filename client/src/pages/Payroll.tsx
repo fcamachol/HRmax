@@ -1108,10 +1108,7 @@ export default function Payroll() {
     ...calculateEmployeePayroll(emp.id),
   }));
 
-  // For display in step 0, filter by current filters
-  const selectedEmployeesDisplayData = employeesToShow.filter(emp => selectedEmployees.has(emp.id));
-  
-  // For steps 1 and 2 (and submission), use ALL selected employees regardless of current filters
+  // For steps 1, 2 and submission, use ALL selected employees regardless of current filters
   const selectedEmployeesData = allEmployees
     .filter(emp => selectedEmployees.has(emp.id))
     .map(emp => ({
