@@ -1941,7 +1941,7 @@ export default function Payroll() {
                                       )}
                                       
                                       <div className="space-y-1 pt-2">
-                                        <div className="font-medium text-foreground">ISR - Tasa {employee.isrTasa.toFixed(2)}%:</div>
+                                        <div className="font-medium text-foreground">ISR - Tasa {(employee.isrTasa ?? 0).toFixed(2)}%:</div>
                                         <div className="flex justify-between pl-3">
                                           <span className="text-muted-foreground">ISR Causado</span>
                                           <span className="font-mono text-destructive">{formatCurrency(employee.isrCausado)}</span>
@@ -2712,7 +2712,7 @@ export default function Payroll() {
                                   
                                   {/* ISR */}
                                   <div className="space-y-1 pt-2">
-                                    <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta) - Tasa {employee.isrTasa.toFixed(2)}%:</div>
+                                    <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta) - Tasa {(employee.isrTasa ?? 0).toFixed(2)}%:</div>
                                     <div className="flex justify-between pl-3">
                                       <span className="text-muted-foreground">ISR Causado</span>
                                       <span className="font-mono text-destructive">{formatCurrency(employee.isrCausado)}</span>
