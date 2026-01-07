@@ -15,7 +15,6 @@ import {
   ChevronRight,
   LayoutList,
   MapPin,
-  ClipboardCheck,
   CreditCard,
   Briefcase,
   UserSearch,
@@ -222,11 +221,6 @@ const mainMenuItems = [
     title: "Dashboard",
     url: "/",
     icon: LayoutDashboard,
-  },
-  {
-    title: "Auditoría HR",
-    url: "/onboarding",
-    icon: ClipboardCheck,
   },
   {
     title: "Reportes",
