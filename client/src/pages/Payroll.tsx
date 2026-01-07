@@ -335,8 +335,31 @@ export default function Payroll() {
     salary: parseFloat(emp.salarioBrutoMensual || '0'),
   }));
 
-  // Existing nominas (will be populated from API in the future)
-  const [nominas, setNominas] = useState<Nomina[]>([]);
+  // Fetch existing nominas from API
+  const { data: nominasFromApi = [], refetch: refetchNominas } = useQuery<any[]>({
+    queryKey: ["/api/nominas"],
+  });
+
+  // Transform API nominas to local format
+  const nominas: Nomina[] = useMemo(() => {
+    return nominasFromApi.map((n: any) => ({
+      id: n.id,
+      type: n.tipo as "ordinaria" | "extraordinaria",
+      period: n.periodo,
+      frequency: n.frecuencia,
+      extraordinaryType: n.tipoExtraordinario,
+      employeeIds: (n.empleadosData || []).map((e: any) => e.empleadoId),
+      status: n.status as "draft" | "pre_nomina" | "approved" | "paid",
+      createdAt: new Date(n.createdAt),
+      totalNet: parseFloat(n.totalNeto) || 0,
+      totalEarnings: 0, // Will be calculated from empleadosData
+      totalDeductions: 0,
+      totalSalary: 0,
+      employeeCount: n.totalEmpleados || 0,
+      editable: n.status === "pre_nomina",
+      employeeDetails: n.empleadosData,
+    }));
+  }, [nominasFromApi]);
   
   // State for viewing nomina detail modal
   const [selectedNominaToView, setSelectedNominaToView] = useState<Nomina | null>(null);
@@ -1247,85 +1270,75 @@ export default function Payroll() {
     setSelectedPeriod("");
   };
 
-  const createPreNomina = () => {
-    // Build employee details with all calculation data
-    const employeeDetails: EmployeePayrollDetail[] = selectedEmployeesData.map(emp => {
+  const createPreNomina = async () => {
+    if (!currentEmpresa) {
+      toast({
+        title: "Error",
+        description: "No se encontró la empresa actual",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Build employee details for API (simplified format for storage)
+    const empleadosData = selectedEmployeesData.map(emp => {
       const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
       return {
-        id: emp.id,
-        name: emp.name,
+        empleadoId: emp.id,
+        nombre: emp.name,
         rfc: emp.rfc,
-        department: emp.department,
-        salary: emp.salary,
-        baseSalary: emp.baseSalary,
-        daysWorked: emp.daysWorked,
-        periodDays: emp.periodDays,
-        absences: emp.absences,
-        incapacities: emp.incapacities,
-        diasDomingo: emp.diasDomingo,
-        diasFestivos: emp.diasFestivos,
-        diasVacaciones: emp.diasVacaciones,
-        primaDominical: emp.primaDominical,
-        pagoFestivos: emp.pagoFestivos,
-        horasExtra: emp.horasExtra,
-        horasDobles: emp.horasDobles,
-        horasTriples: emp.horasTriples,
-        horasDoblesPago: emp.horasDoblesPago,
-        horasTriplesPago: emp.horasTriplesPago,
-        horasExtraPago: emp.horasExtraPago,
-        horasExtraExento: emp.horasExtraExento,
-        horasExtraGravado: emp.horasExtraGravado,
-        vacacionesPago: emp.vacacionesPago,
-        primaVacacional: emp.primaVacacional,
-        horasDescontadas: emp.horasDescontadas,
-        descuentoHoras: emp.descuentoHoras,
+        departamento: emp.department,
+        salarioBase: emp.baseSalary,
+        diasTrabajados: emp.daysWorked,
+        percepciones: breakdown.percepciones.map(p => ({
+          conceptoId: p.id,
+          nombre: p.name,
+          monto: p.amount,
+        })),
+        deducciones: breakdown.deducciones.map(d => ({
+          conceptoId: d.id,
+          nombre: d.name,
+          monto: d.amount,
+        })),
         imssTotal: emp.imssTotal,
-        imssExcedente3Umas: emp.imssExcedente3Umas,
-        imssPrestacionesDinero: emp.imssPrestacionesDinero,
-        imssGastosMedicos: emp.imssGastosMedicos,
-        imssInvalidezVida: emp.imssInvalidezVida,
-        imssCesantiaVejez: emp.imssCesantiaVejez,
-        isrCausado: emp.isrCausado,
-        subsidioEmpleo: emp.subsidioEmpleo,
         isrRetenido: emp.isrRetenido,
-        isrTasa: emp.isrTasa,
-        sbcDiario: emp.sbcDiario,
-        sdiDiario: emp.sdiDiario,
-        earnings: emp.earnings,
-        deductions: emp.deductions,
-        netPay: emp.netPay,
-        percepciones: breakdown.percepciones,
-        deducciones: breakdown.deducciones,
+        subsidioEmpleo: emp.subsidioEmpleo,
+        netoAPagar: emp.netPay,
       };
     });
 
-    const newNomina: Nomina = {
-      id: Date.now().toString(),
-      type: nominaType,
-      period: nominaType === "ordinaria" ? selectedPeriod : extraordinaryType,
-      frequency: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
-      extraordinaryType: nominaType === "extraordinaria" ? extraordinaryType : undefined,
-      employeeIds: Array.from(selectedEmployees),
+    const nominaPayload = {
+      clienteId: currentEmpresa.clienteId,
+      empresaId: currentEmpresa.id,
+      tipo: nominaType,
+      periodo: nominaType === "ordinaria" ? selectedPeriod : extraordinaryType,
+      frecuencia: nominaType === "ordinaria" ? selectedFrequency : "extraordinaria",
+      tipoExtraordinario: nominaType === "extraordinaria" ? extraordinaryType : null,
       status: "pre_nomina",
-      createdAt: new Date(),
-      totalNet: totalNetPay,
-      totalEarnings: totalEarnings,
-      totalDeductions: totalDeductions,
-      totalSalary: totalSalary,
-      employeeCount: selectedEmployees.size,
-      editable: true,
-      employeeDetails: employeeDetails,
-      periodRange: { ...queryPeriodRange },
+      totalNeto: totalNetPay,
+      totalEmpleados: selectedEmployees.size,
+      empleadosData: empleadosData,
     };
 
-    setNominas([newNomina, ...nominas]);
-    setViewMode("list");
-    setCurrentStep(0);
-    
-    toast({
-      title: "Pre-Nómina creada",
-      description: `Pre-nómina ${nominaType} para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}. Requiere aprobación.`,
-    });
+    try {
+      await apiRequest("POST", "/api/nominas", nominaPayload);
+      await refetchNominas();
+      queryClient.invalidateQueries({ queryKey: ["/api/nominas"] });
+      
+      setViewMode("list");
+      setCurrentStep(0);
+      
+      toast({
+        title: "Pre-Nómina creada",
+        description: `Pre-nómina ${nominaType} para ${selectedEmployees.size} empleados - ${formatCurrency(totalNetPay)}. Requiere aprobación.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error al guardar",
+        description: error.message || "No se pudo guardar la pre-nómina",
+        variant: "destructive",
+      });
+    }
   };
 
   const nextStep = () => {
@@ -1384,22 +1397,27 @@ export default function Payroll() {
   };
 
   // Function to approve nomina
-  const approveNomina = (nominaId: string) => {
-    setNominas(nominas.map(n => 
-      n.id === nominaId 
-        ? { ...n, status: "approved" as const, editable: false }
-        : n
-    ));
-    setIsNominaDetailOpen(false);
-    setSelectedNominaToView(null);
-    toast({
-      title: "Nómina aprobada",
-      description: "La nómina ha sido aprobada exitosamente y está lista para pago.",
-    });
+  const approveNomina = async (nominaId: string) => {
+    try {
+      await apiRequest("POST", `/api/nominas/${nominaId}/aprobar`, {});
+      await refetchNominas();
+      setIsNominaDetailOpen(false);
+      setSelectedNominaToView(null);
+      toast({
+        title: "Nómina aprobada",
+        description: "La nómina ha sido aprobada exitosamente y está lista para pago.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error al aprobar",
+        description: error.message || "No se pudo aprobar la nómina",
+        variant: "destructive",
+      });
+    }
   };
 
   // Function to make changes - go back to wizard with data preloaded
-  const makeChangesToNomina = (nomina: Nomina) => {
+  const makeChangesToNomina = async (nomina: Nomina) => {
     // Set up the wizard with the nomina's data
     setNominaType(nomina.type);
     setSelectedFrequency(nomina.frequency);
@@ -1413,8 +1431,13 @@ export default function Payroll() {
     setViewMode("create");
     setCurrentStep(1); // Go directly to incidencias step
     
-    // Remove the old nomina since we're editing it
-    setNominas(nominas.filter(n => n.id !== nomina.id));
+    // Delete the old nomina from the backend since we're editing it
+    try {
+      await apiRequest("DELETE", `/api/nominas/${nomina.id}`);
+      await refetchNominas();
+    } catch (error) {
+      console.error("Error deleting nomina for editing:", error);
+    }
     
     toast({
       title: "Editando nómina",
