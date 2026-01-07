@@ -3885,7 +3885,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   app.post("/api/vacaciones", async (req, res) => {
     try {
-      const validated = insertSolicitudVacacionesSchema.parse(req.body);
+      // Auto-inject clienteId and empresaId from user session
+      const user = (req as any).user;
+      if (!user?.clienteId) {
+        return res.status(401).json({ message: "Usuario no autenticado o sin cliente asignado" });
+      }
+      
+      // Get empresaId from user's assigned empresa or first available
+      let empresaId = user.empresaId;
+      if (!empresaId) {
+        const empresas = await storage.getEmpresas(user.clienteId);
+        if (empresas.length === 0) {
+          return res.status(400).json({ message: "No hay empresas disponibles para este cliente" });
+        }
+        empresaId = empresas[0].id;
+      }
+      
+      const dataWithTenant = {
+        ...req.body,
+        clienteId: user.clienteId,
+        empresaId: empresaId,
+      };
+      
+      const validated = insertSolicitudVacacionesSchema.parse(dataWithTenant);
       
       // Check for overlapping vacation requests
       const overlaps = await storage.checkVacacionesOverlap(
