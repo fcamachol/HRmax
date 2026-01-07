@@ -154,6 +154,8 @@ interface Nomina {
   editable?: boolean;
   employeeDetails?: EmployeePayrollDetail[];
   periodRange?: { start: string; end: string };
+  fechaTimbrado?: Date | null;
+  timbradoPor?: string | null;
 }
 
 export default function Payroll() {
@@ -1567,9 +1569,17 @@ export default function Payroll() {
                       {formatCurrency(nomina.totalNet)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(nomina.status)}
-                        {getStatusBadge(nomina.status)}
+                      <div className="flex flex-col items-start gap-1">
+                        {nomina.status === "paid" && nomina.fechaTimbrado ? (
+                          <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-xs font-medium">Timbrada</span>
+                          </div>
+                        ) : null}
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(nomina.status)}
+                          {getStatusBadge(nomina.status)}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
@@ -1603,7 +1613,15 @@ export default function Payroll() {
                     <Badge variant={selectedNominaToView.type === "extraordinaria" ? "default" : "outline"}>
                       {selectedNominaToView.type === "extraordinaria" ? "Extraordinaria" : "Ordinaria"}
                     </Badge>
-                    {getStatusBadge(selectedNominaToView.status)}
+                    <div className="flex flex-col items-start gap-1">
+                      {selectedNominaToView.status === "paid" && selectedNominaToView.fechaTimbrado ? (
+                        <div className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                          <CheckCircle2 className="h-4 w-4" />
+                          <span className="text-xs font-medium">Timbrada</span>
+                        </div>
+                      ) : null}
+                      {getStatusBadge(selectedNominaToView.status)}
+                    </div>
                   </DialogTitle>
                   <DialogDescription>
                     Periodo: {selectedNominaToView.period} ({selectedNominaToView.frequency})
