@@ -732,6 +732,7 @@ export interface IStorage {
   getNominasByStatus(status: string): Promise<Nomina[]>;
   getNominasByPeriodo(periodo: string): Promise<Nomina[]>;
   updateNominaStatus(id: string, status: string, aprobadoPor?: string): Promise<Nomina>;
+  updateNominaTimbrado(id: string, timbradoPor?: string): Promise<Nomina>;
   updateNomina(id: string, updates: Partial<InsertNomina>): Promise<Nomina>;
   deleteNomina(id: string): Promise<void>;
 
@@ -4283,6 +4284,24 @@ export class DatabaseStorage implements IStorage {
     if (aprobadoPor) {
       updates.aprobadoPor = aprobadoPor;
       updates.fechaAprobacion = new Date();
+    }
+    
+    const [result] = await db
+      .update(nominas)
+      .set(updates)
+      .where(eq(nominas.id, id))
+      .returning();
+    return result;
+  }
+
+  async updateNominaTimbrado(id: string, timbradoPor?: string): Promise<Nomina> {
+    const updates: any = {
+      fechaTimbrado: new Date(),
+      updatedAt: new Date()
+    };
+    
+    if (timbradoPor) {
+      updates.timbradoPor = timbradoPor;
     }
     
     const [result] = await db

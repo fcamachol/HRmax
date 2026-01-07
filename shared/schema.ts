@@ -2962,6 +2962,10 @@ export const nominas = pgTable("nominas", {
   aprobadoPor: varchar("aprobado_por"), // Usuario que aprobó
   fechaAprobacion: timestamp("fecha_aprobacion"),
   
+  // Timbrado CFDI (separado del status)
+  fechaTimbrado: timestamp("fecha_timbrado"), // null = no timbrada, fecha = timbrada
+  timbradoPor: varchar("timbrado_por"), // Usuario que timbró
+  
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 }, (table) => ({

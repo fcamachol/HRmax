@@ -2391,7 +2391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Mark nomina as stamped (timbrada)
+  // Mark nomina as stamped (timbrada) - sets fechaTimbrado without changing status
   app.post("/api/nominas/:id/timbrar", async (req, res) => {
     try {
       const { id } = req.params;
@@ -2406,7 +2406,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "La nómina debe estar pagada antes de timbrar los recibos" });
       }
       
-      const nominaActualizada = await storage.updateNominaStatus(id, "stamped", timbradoPor);
+      // Update fechaTimbrado without changing status
+      const nominaActualizada = await storage.updateNominaTimbrado(id, timbradoPor);
       
       res.json({
         success: true,
