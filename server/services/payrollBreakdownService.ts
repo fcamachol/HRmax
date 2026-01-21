@@ -528,12 +528,12 @@ export async function generarDesgloseNomina(
 
   // 8. Calcular neto a pagar
   const netoBp = restarBp(totalPercepcionesBp, totalDeduccionesBp);
-  
-  // Agregar subsidio si ISR es menor que subsidio
-  let netoFinal = bpToPesos(netoBp);
-  if (subsidioEmpleo > isrAntesSubsidio) {
-    netoFinal += (subsidioEmpleo - isrAntesSubsidio);
-  }
+
+  // IMPORTANTE 2025: El subsidio al empleo ya NO se entrega al trabajador
+  // si excede el ISR causado (DOF 31/12/2024, Art. Décimo Transitorio).
+  // El subsidio solo reduce el ISR a $0, sin entregar diferencia.
+  // Por lo tanto, NO se suma nada adicional al neto.
+  const netoFinal = bpToPesos(netoBp);
 
   // 9. Costo total empresa
   const costoTotalEmpresa = bpToPesos(totalPercepcionesBp) + resultadoIMSS.totalPatronal;

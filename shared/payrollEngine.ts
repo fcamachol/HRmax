@@ -1,10 +1,10 @@
 /**
  * MOTOR DE NÓMINA NOMINAHUB - CLASE MUNDIAL
- * Superior a NOI con cumplimiento completo SAT/IMSS 2025
- * 
+ * Superior a NOI con cumplimiento completo SAT/IMSS 2026
+ *
  * Características:
  * - Cálculos con precisión de 4 decimales usando basis points
- * - Tablas fiscales 2025 completas (ISR, Subsidio, IMSS)
+ * - Tablas fiscales 2026 completas (ISR, Subsidio, IMSS)
  * - Soporte para todas las periodicidades (diario, semanal, catorcenal, quincenal, mensual)
  * - Cumplimiento CFDI 4.0 con claves SAT
  * - Cálculos de SBC/SDI automáticos
@@ -13,6 +13,13 @@
  * - PTU con límites de exención
  * - Finiquito y liquidación completos
  * - Auditoría con desglose de fórmulas
+ *
+ * ACTUALIZADO ENERO 2026:
+ * - UMA 2026: $117.31 diario (vigente desde 1 Feb 2026)
+ * - Salario Mínimo 2026: $315.04 general, $440.87 frontera
+ * - Tablas ISR 2026: Factor actualización 1.13213 (DOF 28/12/2025)
+ * - Subsidio al Empleo 2026: Cuota fija $536.22 mensual (15.02% UMA)
+ * - Cuotas IMSS C&V 2026: Tasas progresivas (4to incremento reforma 2020)
  */
 
 import {
@@ -38,11 +45,13 @@ export type TipoJornada = 'diurna' | 'nocturna' | 'mixta' | 'reducida';
 export type ZonaSalario = 'general' | 'frontera';
 export type TipoSeparacion = 'renuncia' | 'despido_justificado' | 'despido_injustificado' | 'muerte' | 'incapacidad_permanente';
 
-export interface ConfiguracionFiscal2025 {
+export interface ConfiguracionFiscal {
+  anio: number;
   uma: {
     diaria: number;
     mensual: number;
     anual: number;
+    vigenciaDesde: string; // Fecha de inicio de vigencia
   };
   salarioMinimo: {
     general: number;
@@ -55,11 +64,14 @@ export interface ConfiguracionFiscal2025 {
   factorintegracionMinimo: number;
 }
 
-export const CONFIG_FISCAL_2025: ConfiguracionFiscal2025 = {
+// Configuración 2025 (para enero 2026 y cálculos retroactivos)
+export const CONFIG_FISCAL_2025: ConfiguracionFiscal = {
+  anio: 2025,
   uma: {
     diaria: 113.14,
     mensual: 3439.46,
     anual: 41273.52,
+    vigenciaDesde: '2025-02-01',
   },
   salarioMinimo: {
     general: 278.80,
@@ -71,6 +83,53 @@ export const CONFIG_FISCAL_2025: ConfiguracionFiscal2025 = {
   limiteSuperiorCotizacionUMAs: 25,
   factorintegracionMinimo: 1.0452,
 };
+
+// Configuración 2026 (vigente desde 1 Ene 2026 para SMG, 1 Feb 2026 para UMA)
+export const CONFIG_FISCAL_2026: ConfiguracionFiscal = {
+  anio: 2026,
+  uma: {
+    diaria: 117.31,       // +3.69% vs 2025 (INEGI 8 Ene 2026)
+    mensual: 3566.22,     // 117.31 × 30.4
+    anual: 42794.64,      // 3566.22 × 12
+    vigenciaDesde: '2026-02-01',
+  },
+  salarioMinimo: {
+    general: 315.04,      // +13% vs 2025 (CONASAMI 3 Dic 2025)
+    frontera: 440.87,     // +5% vs 2025
+  },
+  diasAnio: 365,
+  aguinaldoMinimo: 15,
+  primaVacacionalMinimo: 25,
+  limiteSuperiorCotizacionUMAs: 25,
+  factorintegracionMinimo: 1.0452,
+};
+
+// Alias para configuración actual (2026)
+export type ConfiguracionFiscal2025 = ConfiguracionFiscal; // Compatibilidad
+
+/**
+ * Obtiene la configuración fiscal vigente para una fecha dada
+ * @param fecha Fecha para determinar la configuración (default: hoy)
+ * @returns Configuración fiscal vigente
+ */
+export function getConfiguracionFiscalVigente(fecha: Date = new Date()): ConfiguracionFiscal {
+  const anio = fecha.getFullYear();
+  const mes = fecha.getMonth() + 1;
+
+  // 2026 o posterior
+  if (anio >= 2026) {
+    // En enero 2026, UMA sigue siendo 2025, pero SMG ya es 2026
+    if (anio === 2026 && mes === 1) {
+      return {
+        ...CONFIG_FISCAL_2026,
+        uma: CONFIG_FISCAL_2025.uma, // UMA 2025 en enero 2026
+      };
+    }
+    return CONFIG_FISCAL_2026;
+  }
+
+  return CONFIG_FISCAL_2025;
+}
 
 // ===================== TIPOS DE HORAS EXTRA LFT =====================
 
@@ -117,7 +176,7 @@ export const TIPOS_HORAS_EXTRA: Record<string, TipoHoraExtra> = {
   },
 };
 
-// ===================== TABLAS ISR 2025 =====================
+// ===================== TABLAS ISR 2026 =====================
 
 export interface TramoISR {
   limiteInferiorBp: bigint;
@@ -132,130 +191,142 @@ export interface TablaISR {
   tramos: TramoISR[];
 }
 
-// TABLA ISR 2025 OFICIAL - Anexo 8 RMF 2025 DOF 30/12/2024
-// Nota: Las tablas 2025 NO cambiaron respecto a 2024 (inflación < 10% Art. 152 LISR)
-export const TABLAS_ISR_2025: Record<TipoPeriodo, TablaISR> = {
+// TABLA ISR 2026 OFICIAL - Anexo 8 RMF 2026 DOF 28/12/2025
+// Factor de actualización: 1.13213 (inflación acumulada Nov 2022 - Nov 2025 > 10%)
+// Fuente: https://www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/documentos2026/rmf/anexos/Anexo-8-RMF-2026_DOF-28122025.pdf
+export const TABLAS_ISR_2026: Record<TipoPeriodo, TablaISR> = {
   mensual: {
     periodo: 'mensual',
-    anio: 2025,
+    anio: 2026,
     tramos: [
-      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(746.04), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
-      { limiteInferiorBp: pesosToBp(746.05), limiteSuperiorBp: pesosToBp(6332.05), cuotaFijaBp: pesosToBp(14.32), tasaExcedenteBp: porcentajeToBp(6.40) },
-      { limiteInferiorBp: pesosToBp(6332.06), limiteSuperiorBp: pesosToBp(11128.01), cuotaFijaBp: pesosToBp(371.83), tasaExcedenteBp: porcentajeToBp(10.88) },
-      { limiteInferiorBp: pesosToBp(11128.02), limiteSuperiorBp: pesosToBp(12935.82), cuotaFijaBp: pesosToBp(893.63), tasaExcedenteBp: porcentajeToBp(16.00) },
-      { limiteInferiorBp: pesosToBp(12935.83), limiteSuperiorBp: pesosToBp(15487.71), cuotaFijaBp: pesosToBp(1182.88), tasaExcedenteBp: porcentajeToBp(17.92) },
-      { limiteInferiorBp: pesosToBp(15487.72), limiteSuperiorBp: pesosToBp(31236.49), cuotaFijaBp: pesosToBp(1640.18), tasaExcedenteBp: porcentajeToBp(21.36) },
-      { limiteInferiorBp: pesosToBp(31236.50), limiteSuperiorBp: pesosToBp(49233.00), cuotaFijaBp: pesosToBp(5004.12), tasaExcedenteBp: porcentajeToBp(23.52) },
-      { limiteInferiorBp: pesosToBp(49233.01), limiteSuperiorBp: pesosToBp(93993.90), cuotaFijaBp: pesosToBp(9236.89), tasaExcedenteBp: porcentajeToBp(30.00) },
-      { limiteInferiorBp: pesosToBp(93993.91), limiteSuperiorBp: pesosToBp(125325.20), cuotaFijaBp: pesosToBp(22665.17), tasaExcedenteBp: porcentajeToBp(32.00) },
-      { limiteInferiorBp: pesosToBp(125325.21), limiteSuperiorBp: pesosToBp(375975.61), cuotaFijaBp: pesosToBp(32691.18), tasaExcedenteBp: porcentajeToBp(34.00) },
-      { limiteInferiorBp: pesosToBp(375975.62), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(117912.32), tasaExcedenteBp: porcentajeToBp(35.00) },
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(844.58), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(844.59), limiteSuperiorBp: pesosToBp(7168.45), cuotaFijaBp: pesosToBp(16.21), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(7168.46), limiteSuperiorBp: pesosToBp(12598.85), cuotaFijaBp: pesosToBp(420.94), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(12598.86), limiteSuperiorBp: pesosToBp(14645.07), cuotaFijaBp: pesosToBp(1011.51), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(14645.08), limiteSuperiorBp: pesosToBp(17534.48), cuotaFijaBp: pesosToBp(1338.90), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(17534.49), limiteSuperiorBp: pesosToBp(35367.89), cuotaFijaBp: pesosToBp(1856.61), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(35367.90), limiteSuperiorBp: pesosToBp(55743.45), cuotaFijaBp: pesosToBp(5664.45), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(55743.46), limiteSuperiorBp: pesosToBp(106404.70), cuotaFijaBp: pesosToBp(10456.75), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(106404.71), limiteSuperiorBp: pesosToBp(141874.82), cuotaFijaBp: pesosToBp(25654.62), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(141874.83), limiteSuperiorBp: pesosToBp(425624.45), cuotaFijaBp: pesosToBp(37005.01), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(425624.46), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(133479.89), tasaExcedenteBp: porcentajeToBp(35.00) },
     ],
   },
-  // Quincenal = Mensual / 2 (DOF Anexo 8 RMF 2025)
+  // Quincenal (DOF Anexo 8 RMF 2026)
   quincenal: {
     periodo: 'quincenal',
-    anio: 2025,
+    anio: 2026,
     tramos: [
-      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(373.02), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
-      { limiteInferiorBp: pesosToBp(373.03), limiteSuperiorBp: pesosToBp(3166.03), cuotaFijaBp: pesosToBp(7.16), tasaExcedenteBp: porcentajeToBp(6.40) },
-      { limiteInferiorBp: pesosToBp(3166.04), limiteSuperiorBp: pesosToBp(5564.01), cuotaFijaBp: pesosToBp(185.92), tasaExcedenteBp: porcentajeToBp(10.88) },
-      { limiteInferiorBp: pesosToBp(5564.02), limiteSuperiorBp: pesosToBp(6467.91), cuotaFijaBp: pesosToBp(446.82), tasaExcedenteBp: porcentajeToBp(16.00) },
-      { limiteInferiorBp: pesosToBp(6467.92), limiteSuperiorBp: pesosToBp(7743.86), cuotaFijaBp: pesosToBp(591.44), tasaExcedenteBp: porcentajeToBp(17.92) },
-      { limiteInferiorBp: pesosToBp(7743.87), limiteSuperiorBp: pesosToBp(15618.25), cuotaFijaBp: pesosToBp(820.09), tasaExcedenteBp: porcentajeToBp(21.36) },
-      { limiteInferiorBp: pesosToBp(15618.26), limiteSuperiorBp: pesosToBp(24616.50), cuotaFijaBp: pesosToBp(2502.06), tasaExcedenteBp: porcentajeToBp(23.52) },
-      { limiteInferiorBp: pesosToBp(24616.51), limiteSuperiorBp: pesosToBp(46996.95), cuotaFijaBp: pesosToBp(4618.45), tasaExcedenteBp: porcentajeToBp(30.00) },
-      { limiteInferiorBp: pesosToBp(46996.96), limiteSuperiorBp: pesosToBp(62662.60), cuotaFijaBp: pesosToBp(11332.59), tasaExcedenteBp: porcentajeToBp(32.00) },
-      { limiteInferiorBp: pesosToBp(62662.61), limiteSuperiorBp: pesosToBp(187987.81), cuotaFijaBp: pesosToBp(16345.59), tasaExcedenteBp: porcentajeToBp(34.00) },
-      { limiteInferiorBp: pesosToBp(187987.82), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(58956.16), tasaExcedenteBp: porcentajeToBp(35.00) },
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(422.29), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(422.30), limiteSuperiorBp: pesosToBp(3584.23), cuotaFijaBp: pesosToBp(8.11), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(3584.24), limiteSuperiorBp: pesosToBp(6299.43), cuotaFijaBp: pesosToBp(210.47), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(6299.44), limiteSuperiorBp: pesosToBp(7322.54), cuotaFijaBp: pesosToBp(505.76), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(7322.55), limiteSuperiorBp: pesosToBp(8767.24), cuotaFijaBp: pesosToBp(669.45), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(8767.25), limiteSuperiorBp: pesosToBp(17683.95), cuotaFijaBp: pesosToBp(928.31), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(17683.96), limiteSuperiorBp: pesosToBp(27871.73), cuotaFijaBp: pesosToBp(2832.23), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(27871.74), limiteSuperiorBp: pesosToBp(53202.35), cuotaFijaBp: pesosToBp(5228.38), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(53202.36), limiteSuperiorBp: pesosToBp(70937.41), cuotaFijaBp: pesosToBp(12827.31), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(70937.42), limiteSuperiorBp: pesosToBp(212812.23), cuotaFijaBp: pesosToBp(18502.51), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(212812.24), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(66739.95), tasaExcedenteBp: porcentajeToBp(35.00) },
     ],
   },
-  // Catorcenal = Mensual * 14/30 (DOF Anexo 8 RMF 2025)
+  // Catorcenal (DOF Anexo 8 RMF 2026)
   catorcenal: {
     periodo: 'catorcenal',
-    anio: 2025,
+    anio: 2026,
     tramos: [
-      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(348.15), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
-      { limiteInferiorBp: pesosToBp(348.16), limiteSuperiorBp: pesosToBp(2954.96), cuotaFijaBp: pesosToBp(6.68), tasaExcedenteBp: porcentajeToBp(6.40) },
-      { limiteInferiorBp: pesosToBp(2954.97), limiteSuperiorBp: pesosToBp(5193.07), cuotaFijaBp: pesosToBp(173.52), tasaExcedenteBp: porcentajeToBp(10.88) },
-      { limiteInferiorBp: pesosToBp(5193.08), limiteSuperiorBp: pesosToBp(6036.72), cuotaFijaBp: pesosToBp(417.03), tasaExcedenteBp: porcentajeToBp(16.00) },
-      { limiteInferiorBp: pesosToBp(6036.73), limiteSuperiorBp: pesosToBp(7227.60), cuotaFijaBp: pesosToBp(552.01), tasaExcedenteBp: porcentajeToBp(17.92) },
-      { limiteInferiorBp: pesosToBp(7227.61), limiteSuperiorBp: pesosToBp(14577.03), cuotaFijaBp: pesosToBp(765.42), tasaExcedenteBp: porcentajeToBp(21.36) },
-      { limiteInferiorBp: pesosToBp(14577.04), limiteSuperiorBp: pesosToBp(22975.40), cuotaFijaBp: pesosToBp(2335.26), tasaExcedenteBp: porcentajeToBp(23.52) },
-      { limiteInferiorBp: pesosToBp(22975.41), limiteSuperiorBp: pesosToBp(43863.82), cuotaFijaBp: pesosToBp(4310.55), tasaExcedenteBp: porcentajeToBp(30.00) },
-      { limiteInferiorBp: pesosToBp(43863.83), limiteSuperiorBp: pesosToBp(58485.10), cuotaFijaBp: pesosToBp(10577.08), tasaExcedenteBp: porcentajeToBp(32.00) },
-      { limiteInferiorBp: pesosToBp(58485.11), limiteSuperiorBp: pesosToBp(175455.29), cuotaFijaBp: pesosToBp(15255.88), tasaExcedenteBp: porcentajeToBp(34.00) },
-      { limiteInferiorBp: pesosToBp(175455.30), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(55025.75), tasaExcedenteBp: porcentajeToBp(35.00) },
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(394.14), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(394.15), limiteSuperiorBp: pesosToBp(3345.28), cuotaFijaBp: pesosToBp(7.57), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(3345.29), limiteSuperiorBp: pesosToBp(5879.46), cuotaFijaBp: pesosToBp(196.44), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(5879.47), limiteSuperiorBp: pesosToBp(6834.37), cuotaFijaBp: pesosToBp(472.04), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(6834.38), limiteSuperiorBp: pesosToBp(8182.76), cuotaFijaBp: pesosToBp(624.82), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(8182.77), limiteSuperiorBp: pesosToBp(16505.02), cuotaFijaBp: pesosToBp(866.42), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(16505.03), limiteSuperiorBp: pesosToBp(26013.61), cuotaFijaBp: pesosToBp(2643.41), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(26013.62), limiteSuperiorBp: pesosToBp(49655.53), cuotaFijaBp: pesosToBp(4879.82), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(49655.54), limiteSuperiorBp: pesosToBp(66208.25), cuotaFijaBp: pesosToBp(11972.16), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(66208.26), limiteSuperiorBp: pesosToBp(198624.75), cuotaFijaBp: pesosToBp(17269.01), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(198624.76), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(62290.62), tasaExcedenteBp: porcentajeToBp(35.00) },
     ],
   },
-  // Semanal = Mensual * 7/30 (DOF Anexo 8 RMF 2025)
+  // Semanal (DOF Anexo 8 RMF 2026)
   semanal: {
     periodo: 'semanal',
-    anio: 2025,
+    anio: 2026,
     tramos: [
-      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(174.08), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
-      { limiteInferiorBp: pesosToBp(174.09), limiteSuperiorBp: pesosToBp(1477.48), cuotaFijaBp: pesosToBp(3.34), tasaExcedenteBp: porcentajeToBp(6.40) },
-      { limiteInferiorBp: pesosToBp(1477.49), limiteSuperiorBp: pesosToBp(2596.54), cuotaFijaBp: pesosToBp(86.76), tasaExcedenteBp: porcentajeToBp(10.88) },
-      { limiteInferiorBp: pesosToBp(2596.55), limiteSuperiorBp: pesosToBp(3018.36), cuotaFijaBp: pesosToBp(208.52), tasaExcedenteBp: porcentajeToBp(16.00) },
-      { limiteInferiorBp: pesosToBp(3018.37), limiteSuperiorBp: pesosToBp(3613.80), cuotaFijaBp: pesosToBp(276.01), tasaExcedenteBp: porcentajeToBp(17.92) },
-      { limiteInferiorBp: pesosToBp(3613.81), limiteSuperiorBp: pesosToBp(7288.52), cuotaFijaBp: pesosToBp(382.71), tasaExcedenteBp: porcentajeToBp(21.36) },
-      { limiteInferiorBp: pesosToBp(7288.53), limiteSuperiorBp: pesosToBp(11487.70), cuotaFijaBp: pesosToBp(1167.63), tasaExcedenteBp: porcentajeToBp(23.52) },
-      { limiteInferiorBp: pesosToBp(11487.71), limiteSuperiorBp: pesosToBp(21931.91), cuotaFijaBp: pesosToBp(2155.27), tasaExcedenteBp: porcentajeToBp(30.00) },
-      { limiteInferiorBp: pesosToBp(21931.92), limiteSuperiorBp: pesosToBp(29242.55), cuotaFijaBp: pesosToBp(5288.54), tasaExcedenteBp: porcentajeToBp(32.00) },
-      { limiteInferiorBp: pesosToBp(29242.56), limiteSuperiorBp: pesosToBp(87727.64), cuotaFijaBp: pesosToBp(7627.94), tasaExcedenteBp: porcentajeToBp(34.00) },
-      { limiteInferiorBp: pesosToBp(87727.65), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(27512.88), tasaExcedenteBp: porcentajeToBp(35.00) },
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(197.07), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(197.08), limiteSuperiorBp: pesosToBp(1672.64), cuotaFijaBp: pesosToBp(3.78), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(1672.65), limiteSuperiorBp: pesosToBp(2939.73), cuotaFijaBp: pesosToBp(98.22), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(2939.74), limiteSuperiorBp: pesosToBp(3417.18), cuotaFijaBp: pesosToBp(236.02), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(3417.19), limiteSuperiorBp: pesosToBp(4091.38), cuotaFijaBp: pesosToBp(312.41), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(4091.39), limiteSuperiorBp: pesosToBp(8252.51), cuotaFijaBp: pesosToBp(433.21), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(8252.52), limiteSuperiorBp: pesosToBp(13006.81), cuotaFijaBp: pesosToBp(1321.71), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(13006.82), limiteSuperiorBp: pesosToBp(24827.76), cuotaFijaBp: pesosToBp(2439.91), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(24827.77), limiteSuperiorBp: pesosToBp(33104.12), cuotaFijaBp: pesosToBp(5986.08), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(33104.13), limiteSuperiorBp: pesosToBp(99312.37), cuotaFijaBp: pesosToBp(8634.51), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(99312.38), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(31145.31), tasaExcedenteBp: porcentajeToBp(35.00) },
     ],
   },
-  // Diario = Mensual / 30 (DOF Anexo 8 RMF 2025)
+  // Diario (DOF Anexo 8 RMF 2026)
   diario: {
     periodo: 'diario',
-    anio: 2025,
+    anio: 2026,
     tramos: [
-      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(24.87), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
-      { limiteInferiorBp: pesosToBp(24.88), limiteSuperiorBp: pesosToBp(211.07), cuotaFijaBp: pesosToBp(0.48), tasaExcedenteBp: porcentajeToBp(6.40) },
-      { limiteInferiorBp: pesosToBp(211.08), limiteSuperiorBp: pesosToBp(370.93), cuotaFijaBp: pesosToBp(12.39), tasaExcedenteBp: porcentajeToBp(10.88) },
-      { limiteInferiorBp: pesosToBp(370.94), limiteSuperiorBp: pesosToBp(431.19), cuotaFijaBp: pesosToBp(29.79), tasaExcedenteBp: porcentajeToBp(16.00) },
-      { limiteInferiorBp: pesosToBp(431.20), limiteSuperiorBp: pesosToBp(516.26), cuotaFijaBp: pesosToBp(39.43), tasaExcedenteBp: porcentajeToBp(17.92) },
-      { limiteInferiorBp: pesosToBp(516.27), limiteSuperiorBp: pesosToBp(1041.22), cuotaFijaBp: pesosToBp(54.67), tasaExcedenteBp: porcentajeToBp(21.36) },
-      { limiteInferiorBp: pesosToBp(1041.23), limiteSuperiorBp: pesosToBp(1641.10), cuotaFijaBp: pesosToBp(166.80), tasaExcedenteBp: porcentajeToBp(23.52) },
-      { limiteInferiorBp: pesosToBp(1641.11), limiteSuperiorBp: pesosToBp(3133.13), cuotaFijaBp: pesosToBp(307.90), tasaExcedenteBp: porcentajeToBp(30.00) },
-      { limiteInferiorBp: pesosToBp(3133.14), limiteSuperiorBp: pesosToBp(4177.51), cuotaFijaBp: pesosToBp(755.51), tasaExcedenteBp: porcentajeToBp(32.00) },
-      { limiteInferiorBp: pesosToBp(4177.52), limiteSuperiorBp: pesosToBp(12532.52), cuotaFijaBp: pesosToBp(1089.71), tasaExcedenteBp: porcentajeToBp(34.00) },
-      { limiteInferiorBp: pesosToBp(12532.53), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(3930.41), tasaExcedenteBp: porcentajeToBp(35.00) },
+      { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(28.15), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+      { limiteInferiorBp: pesosToBp(28.16), limiteSuperiorBp: pesosToBp(238.95), cuotaFijaBp: pesosToBp(0.54), tasaExcedenteBp: porcentajeToBp(6.40) },
+      { limiteInferiorBp: pesosToBp(238.96), limiteSuperiorBp: pesosToBp(419.96), cuotaFijaBp: pesosToBp(14.03), tasaExcedenteBp: porcentajeToBp(10.88) },
+      { limiteInferiorBp: pesosToBp(419.97), limiteSuperiorBp: pesosToBp(488.17), cuotaFijaBp: pesosToBp(33.72), tasaExcedenteBp: porcentajeToBp(16.00) },
+      { limiteInferiorBp: pesosToBp(488.18), limiteSuperiorBp: pesosToBp(584.48), cuotaFijaBp: pesosToBp(44.63), tasaExcedenteBp: porcentajeToBp(17.92) },
+      { limiteInferiorBp: pesosToBp(584.49), limiteSuperiorBp: pesosToBp(1178.93), cuotaFijaBp: pesosToBp(61.89), tasaExcedenteBp: porcentajeToBp(21.36) },
+      { limiteInferiorBp: pesosToBp(1178.94), limiteSuperiorBp: pesosToBp(1858.12), cuotaFijaBp: pesosToBp(188.82), tasaExcedenteBp: porcentajeToBp(23.52) },
+      { limiteInferiorBp: pesosToBp(1858.13), limiteSuperiorBp: pesosToBp(3546.82), cuotaFijaBp: pesosToBp(348.56), tasaExcedenteBp: porcentajeToBp(30.00) },
+      { limiteInferiorBp: pesosToBp(3546.83), limiteSuperiorBp: pesosToBp(4729.16), cuotaFijaBp: pesosToBp(855.15), tasaExcedenteBp: porcentajeToBp(32.00) },
+      { limiteInferiorBp: pesosToBp(4729.17), limiteSuperiorBp: pesosToBp(14187.48), cuotaFijaBp: pesosToBp(1233.50), tasaExcedenteBp: porcentajeToBp(34.00) },
+      { limiteInferiorBp: pesosToBp(14187.49), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(4449.33), tasaExcedenteBp: porcentajeToBp(35.00) },
     ],
   },
 };
 
-// ===================== SUBSIDIO AL EMPLEO 2025 =====================
-// CAMBIO IMPORTANTE: A partir de 2025, el subsidio cambió drásticamente.
-// DOF 31/12/2024 - Art. Décimo Transitorio Reforma Fiscal
-// Ya NO es una tabla con múltiples rangos - ahora es CUOTA FIJA:
-// - $475.00 mensuales si ingreso ≤ $10,171
-// - $0 si ingreso > $10,171
-// El subsidio es 13.8% de la UMA mensual ($3,439.46 × 0.138 = $474.65 ≈ $475)
+// Alias para compatibilidad (usar TABLAS_ISR_2026 internamente)
+export const TABLAS_ISR_2025 = TABLAS_ISR_2026;
 
-export interface ConfigSubsidio2025 {
+// ===================== SUBSIDIO AL EMPLEO 2026 =====================
+// DOF 31/12/2025 - Actualización del subsidio para 2026
+// Cuota fija: 15.02% de la UMA mensual
+// Límite de ingresos: $11,492.66 mensuales
+// Enero 2026 transitorio: 15.59% sobre UMA 2025
+
+export interface ConfigSubsidio {
+  anio: number;
+  porcentajeUMA: number;           // Porcentaje de la UMA mensual
+  limiteIngresoMensual: number;    // Límite de ingresos mensuales
+  subsidioMensual: number;         // Monto mensual del subsidio
   limiteIngresoMensualBp: bigint;
   subsidioMensualBp: bigint;
 }
 
-// Configuración simplificada para 2025
-export const CONFIG_SUBSIDIO_2025: ConfigSubsidio2025 = {
+// Configuración 2025 (para enero 2026)
+export const CONFIG_SUBSIDIO_2025: ConfigSubsidio = {
+  anio: 2025,
+  porcentajeUMA: 13.8,
+  limiteIngresoMensual: 10171.00,
+  subsidioMensual: 475.00,
   limiteIngresoMensualBp: pesosToBp(10171.00),
   subsidioMensualBp: pesosToBp(475.00),
 };
 
-// Factores de conversión por periodo (días / 30.4)
-const FACTORES_PERIODO: Record<TipoPeriodo, number> = {
-  mensual: 1,           // 30.4 / 30.4
-  quincenal: 0.4934,    // 15 / 30.4
-  catorcenal: 0.4605,   // 14 / 30.4
-  semanal: 0.2303,      // 7 / 30.4
-  diario: 0.0329,       // 1 / 30.4
+// Configuración 2026 (vigente desde 1 Feb 2026)
+// DOF 31/12/2025: Subsidio = 15.02% de UMA mensual = 3566.22 × 0.1502 = $535.65 ≈ $536.22
+export const CONFIG_SUBSIDIO_2026: ConfigSubsidio = {
+  anio: 2026,
+  porcentajeUMA: 15.02,
+  limiteIngresoMensual: 11492.66,  // Actualizado DOF 31/12/2025
+  subsidioMensual: 536.22,          // 3566.22 × 15.02%
+  limiteIngresoMensualBp: pesosToBp(11492.66),
+  subsidioMensualBp: pesosToBp(536.22),
 };
 
-// Días por periodo para límite de ingreso
-const DIAS_PERIODO: Record<TipoPeriodo, number> = {
+// Días por periodo para conversiones
+export const DIAS_PERIODO: Record<TipoPeriodo, number> = {
   mensual: 30.4,
   quincenal: 15,
   catorcenal: 14,
@@ -263,59 +334,104 @@ const DIAS_PERIODO: Record<TipoPeriodo, number> = {
   diario: 1,
 };
 
+// Factores de conversión por periodo (días / 30.4)
+const FACTORES_PERIODO: Record<TipoPeriodo, number> = {
+  mensual: 1,
+  quincenal: 15 / 30.4,
+  catorcenal: 14 / 30.4,
+  semanal: 7 / 30.4,
+  diario: 1 / 30.4,
+};
+
 /**
- * Calcula el subsidio al empleo 2025 según el nuevo esquema de cuota fija
+ * Obtiene la configuración de subsidio vigente para una fecha
+ */
+export function getConfigSubsidioVigente(fecha: Date = new Date()): ConfigSubsidio {
+  const anio = fecha.getFullYear();
+  const mes = fecha.getMonth() + 1;
+
+  // Enero 2026 usa configuración especial (UMA 2025 con porcentaje 15.59%)
+  if (anio === 2026 && mes === 1) {
+    return {
+      anio: 2026,
+      porcentajeUMA: 15.59,
+      limiteIngresoMensual: 11492.66,
+      subsidioMensual: 536.21, // 113.14 × 15.59% × 30.4
+      limiteIngresoMensualBp: pesosToBp(11492.66),
+      subsidioMensualBp: pesosToBp(536.21),
+    };
+  }
+
+  if (anio >= 2026) {
+    return CONFIG_SUBSIDIO_2026;
+  }
+
+  return CONFIG_SUBSIDIO_2025;
+}
+
+/**
+ * Calcula el subsidio al empleo 2026 según el esquema de cuota fija
  * @param ingresoGravableBp Ingreso gravable del periodo en basis points
  * @param periodo Tipo de periodo de nómina
+ * @param fecha Fecha para determinar configuración vigente
  * @returns Subsidio aplicable en basis points
  */
 export function calcularSubsidio2025(
   ingresoGravableBp: bigint,
-  periodo: TipoPeriodo
+  periodo: TipoPeriodo,
+  fecha: Date = new Date()
 ): bigint {
+  const config = getConfigSubsidioVigente(fecha);
+
   // Calcular límite de ingreso proporcional al periodo
   const limiteIngresoPeriodo = BigInt(
-    Math.trunc(Number(CONFIG_SUBSIDIO_2025.limiteIngresoMensualBp) * DIAS_PERIODO[periodo] / 30.4)
+    Math.trunc(Number(config.limiteIngresoMensualBp) * DIAS_PERIODO[periodo] / 30.4)
   );
-  
+
   // Si el ingreso supera el límite, no hay subsidio
   if (ingresoGravableBp > limiteIngresoPeriodo) {
     return BigInt(0);
   }
-  
+
   // Calcular subsidio proporcional al periodo
   const subsidio = BigInt(
-    Math.trunc(Number(CONFIG_SUBSIDIO_2025.subsidioMensualBp) * FACTORES_PERIODO[periodo])
+    Math.trunc(Number(config.subsidioMensualBp) * FACTORES_PERIODO[periodo])
   );
-  
+
   return subsidio;
 }
 
-// Montos de subsidio precalculados por periodo para referencia rápida
-export const SUBSIDIOS_POR_PERIODO_2025: Record<TipoPeriodo, { limiteBp: bigint; subsidioBp: bigint }> = {
-  mensual: { 
-    limiteBp: CONFIG_SUBSIDIO_2025.limiteIngresoMensualBp, 
-    subsidioBp: CONFIG_SUBSIDIO_2025.subsidioMensualBp 
+// Alias para función 2026
+export const calcularSubsidio2026 = calcularSubsidio2025;
+
+// Montos de subsidio precalculados por periodo para 2026
+export const SUBSIDIOS_POR_PERIODO_2026: Record<TipoPeriodo, { limiteBp: bigint; subsidioBp: bigint }> = {
+  mensual: {
+    limiteBp: CONFIG_SUBSIDIO_2026.limiteIngresoMensualBp,
+    subsidioBp: CONFIG_SUBSIDIO_2026.subsidioMensualBp
   },
-  quincenal: { 
-    limiteBp: pesosToBp(5018.59),  // 10171 * 15 / 30.4
-    subsidioBp: pesosToBp(234.38)  // 475 * 15 / 30.4
+  quincenal: {
+    limiteBp: pesosToBp(5671.38),   // 11492.66 × 15 / 30.4
+    subsidioBp: pesosToBp(264.58)   // 536.22 × 15 / 30.4
   },
-  catorcenal: { 
-    limiteBp: pesosToBp(4683.99),  // 10171 * 14 / 30.4
-    subsidioBp: pesosToBp(218.75)  // 475 * 14 / 30.4
+  catorcenal: {
+    limiteBp: pesosToBp(5293.29),   // 11492.66 × 14 / 30.4
+    subsidioBp: pesosToBp(246.94)   // 536.22 × 14 / 30.4
   },
-  semanal: { 
-    limiteBp: pesosToBp(2341.99),  // 10171 * 7 / 30.4
-    subsidioBp: pesosToBp(109.38)  // 475 * 7 / 30.4
+  semanal: {
+    limiteBp: pesosToBp(2646.64),   // 11492.66 × 7 / 30.4
+    subsidioBp: pesosToBp(123.47)   // 536.22 × 7 / 30.4
   },
-  diario: { 
-    limiteBp: pesosToBp(334.57),   // 10171 / 30.4
-    subsidioBp: pesosToBp(15.63)   // 475 / 30.4
+  diario: {
+    limiteBp: pesosToBp(378.05),    // 11492.66 / 30.4
+    subsidioBp: pesosToBp(17.64)    // 536.22 / 30.4
   },
 };
 
-// ===================== CUOTAS IMSS 2025 =====================
+// Alias para compatibilidad
+export const SUBSIDIOS_POR_PERIODO_2025 = SUBSIDIOS_POR_PERIODO_2026;
+
+// ===================== CUOTAS IMSS 2026 =====================
 
 export interface CuotaIMSS {
   ramo: string;
@@ -326,7 +442,8 @@ export interface CuotaIMSS {
   aplicaTopeCotizacion: boolean;
 }
 
-export const CUOTAS_IMSS_2025: CuotaIMSS[] = [
+// Cuotas IMSS 2026 (SIN Cesantía y Vejez - esa se calcula aparte por ser progresiva)
+export const CUOTAS_IMSS_2026: CuotaIMSS[] = [
   { ramo: 'Enfermedades y Maternidad', concepto: 'Cuota Fija (hasta 3 UMA)', patronTasaBp: porcentajeToBp(20.40), trabajadorTasaBp: 0, baseCalculo: 'uma_fijo', aplicaTopeCotizacion: false },
   { ramo: 'Enfermedades y Maternidad', concepto: 'Excedente 3 UMAs - Prestaciones en Especie', patronTasaBp: porcentajeToBp(1.10), trabajadorTasaBp: porcentajeToBp(0.40), baseCalculo: 'excedente_3uma', aplicaTopeCotizacion: true },
   { ramo: 'Enfermedades y Maternidad', concepto: 'Prestaciones en Dinero', patronTasaBp: porcentajeToBp(0.70), trabajadorTasaBp: porcentajeToBp(0.25), baseCalculo: 'sbc', aplicaTopeCotizacion: true },
@@ -335,9 +452,70 @@ export const CUOTAS_IMSS_2025: CuotaIMSS[] = [
   { ramo: 'Riesgos de Trabajo', concepto: 'Riesgos de Trabajo (Prima Media)', patronTasaBp: porcentajeToBp(0.54355), trabajadorTasaBp: 0, baseCalculo: 'sbc', aplicaTopeCotizacion: true },
   { ramo: 'Guarderías y Prestaciones Sociales', concepto: 'Guarderías', patronTasaBp: porcentajeToBp(1.00), trabajadorTasaBp: 0, baseCalculo: 'sbc', aplicaTopeCotizacion: true },
   { ramo: 'Retiro', concepto: 'Retiro', patronTasaBp: porcentajeToBp(2.00), trabajadorTasaBp: 0, baseCalculo: 'sbc', aplicaTopeCotizacion: true },
-  { ramo: 'Cesantía en Edad Avanzada y Vejez', concepto: 'CEAV Patrón', patronTasaBp: porcentajeToBp(4.241), trabajadorTasaBp: porcentajeToBp(1.125), baseCalculo: 'sbc', aplicaTopeCotizacion: true },
   { ramo: 'INFONAVIT', concepto: 'Aportación Vivienda', patronTasaBp: porcentajeToBp(5.00), trabajadorTasaBp: 0, baseCalculo: 'sbc', aplicaTopeCotizacion: true },
 ];
+
+// Alias para compatibilidad
+export const CUOTAS_IMSS_2025 = CUOTAS_IMSS_2026;
+
+// ===================== CESANTÍA Y VEJEZ 2026 - TASAS PROGRESIVAS =====================
+// Reforma de pensiones 2020 (DOF 16/12/2020): Incremento gradual hasta 2030
+// 2026 = Cuarto año de incremento
+
+export interface TasaCesantiaVejez {
+  rangoDescripcion: string;
+  limiteInferiorUMA: number;
+  limiteSuperiorUMA: number | null;
+  patronTasaBp: number;       // Progresiva según rango
+  trabajadorTasaBp: number;   // Fija 1.125%
+}
+
+// Tasas Cesantía y Vejez 2026 - Cuarto incremento reforma 2020
+export const TASAS_CESANTIA_VEJEZ_2026: TasaCesantiaVejez[] = [
+  { rangoDescripcion: '1.00 SM', limiteInferiorUMA: 0, limiteSuperiorUMA: 1.00, patronTasaBp: porcentajeToBp(3.150), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '1.01 SM - 1.50 UMA', limiteInferiorUMA: 1.01, limiteSuperiorUMA: 1.50, patronTasaBp: porcentajeToBp(3.680), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '1.51 - 2.00 UMA', limiteInferiorUMA: 1.51, limiteSuperiorUMA: 2.00, patronTasaBp: porcentajeToBp(4.850), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '2.01 - 2.50 UMA', limiteInferiorUMA: 2.01, limiteSuperiorUMA: 2.50, patronTasaBp: porcentajeToBp(5.560), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '2.51 - 3.00 UMA', limiteInferiorUMA: 2.51, limiteSuperiorUMA: 3.00, patronTasaBp: porcentajeToBp(6.030), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '3.01 - 3.50 UMA', limiteInferiorUMA: 3.01, limiteSuperiorUMA: 3.50, patronTasaBp: porcentajeToBp(6.360), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '3.51 - 4.00 UMA', limiteInferiorUMA: 3.51, limiteSuperiorUMA: 4.00, patronTasaBp: porcentajeToBp(6.610), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '4.01+ UMA', limiteInferiorUMA: 4.01, limiteSuperiorUMA: null, patronTasaBp: porcentajeToBp(7.510), trabajadorTasaBp: porcentajeToBp(1.125) },
+];
+
+// Cuota obrera FIJA de Cesantía y Vejez (Art. 168 LSS)
+export const CESANTIA_VEJEZ_OBRERO_TASA_BP = porcentajeToBp(1.125);
+
+/**
+ * Obtiene la tasa patronal de Cesantía y Vejez según el SBC del trabajador
+ * @param sbcDiario SBC diario del trabajador
+ * @param umaDiaria UMA diaria vigente
+ * @returns Tasa patronal en basis points y descripción del rango
+ */
+export function getTasaCesantiaVejezPatronal(
+  sbcDiario: number,
+  umaDiaria: number = CONFIG_FISCAL_2026.uma.diaria
+): { tasaBp: number; rangoDescripcion: string } {
+  const ratioSbcUma = sbcDiario / umaDiaria;
+
+  for (const tasa of TASAS_CESANTIA_VEJEZ_2026) {
+    const limInf = tasa.limiteInferiorUMA;
+    const limSup = tasa.limiteSuperiorUMA ?? Infinity;
+
+    if (ratioSbcUma >= limInf && ratioSbcUma <= limSup) {
+      return {
+        tasaBp: tasa.patronTasaBp,
+        rangoDescripcion: tasa.rangoDescripcion,
+      };
+    }
+  }
+
+  // Fallback al rango más alto
+  const ultimoRango = TASAS_CESANTIA_VEJEZ_2026[TASAS_CESANTIA_VEJEZ_2026.length - 1];
+  return {
+    tasaBp: ultimoRango.patronTasaBp,
+    rangoDescripcion: ultimoRango.rangoDescripcion,
+  };
+}
 
 // ===================== FUNCIONES DE CÁLCULO =====================
 

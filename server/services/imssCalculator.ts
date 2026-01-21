@@ -1,17 +1,22 @@
 /**
- * Motor de Cálculo de Cuotas IMSS 2025
- * 
+ * Motor de Cálculo de Cuotas IMSS 2026
+ *
  * Este servicio implementa el cálculo completo de cuotas obrero-patronales
  * del Instituto Mexicano del Seguro Social, incluyendo:
- * 
- * - Enfermedad y Maternidad (Cuota Fija + Excedente 3 UMAs + Gastos Médicos Pensionados)
+ *
+ * - Enfermedad y Maternidad (Cuota Fija sobre 3 UMAs + Excedente + Gastos Médicos Pensionados)
  * - Riesgo de Trabajo (Prima variable por empresa)
  * - Invalidez y Vida
  * - Retiro
- * - Cesantía y Vejez (Tasas progresivas 2020-2030)
+ * - Cesantía y Vejez (Tasas progresivas 2026 - 4to incremento reforma 2020)
  * - Guarderías y Prestaciones Sociales
  * - Infonavit (5% patronal)
- * 
+ *
+ * ACTUALIZADO 2026:
+ * - UMA 2026: $117.31 diario (vigente desde 1 Feb 2026)
+ * - Tasas C&V 2026: 3.15% - 7.51% patronal según nivel salarial
+ * - Cuota obrera C&V: 1.125% (fija)
+ *
  * Todos los cálculos usan basis points (1 peso = 10,000 bp) para precisión de 4 decimales.
  */
 
@@ -274,8 +279,9 @@ export async function calcularCuotasIMSS(
     : BigInt(0);
   const excedente3UmasPeriodoBp = excedente3UmasDiarioBp * BigInt(diasCotizados);
   
-  // Base UMA para cuota fija EyM
-  const umaBaseEyMBp = umaDiariaBp * BigInt(diasCotizados);
+  // Base UMA para cuota fija EyM (20.40% sobre 3 UMAs - Art. 106 LSS)
+  // IMPORTANTE: La cuota fija patronal se calcula sobre 3 UMAs, NO sobre 1 UMA
+  const umaBaseEyMBp = tresUmasBp * BigInt(diasCotizados);
   
   const cuotasObrero: CuotaCalculada[] = [];
   const cuotasPatronal: CuotaCalculada[] = [];
@@ -351,7 +357,7 @@ export async function calcularCuotasIMSS(
   }
   
   // Agregar Cesantía y Vejez con tasas progresivas
-  // Patronal (tasa progresiva)
+  // Patronal (tasa progresiva según nivel salarial)
   const cesantiaPatronalMontoBp = multiplicarBpPorTasa(sbcTopadoPeriodoBp, cesantiaVejezTasa.tasaBp);
   cuotasPatronal.push({
     ramo: 'cesantia_vejez',
@@ -363,7 +369,22 @@ export async function calcularCuotasIMSS(
     montoBp: cesantiaPatronalMontoBp,
     monto: bpToPesos(cesantiaPatronalMontoBp),
   });
-  
+
+  // Obrero Cesantía y Vejez (tasa FIJA 1.125% - Art. 168 LSS)
+  // IMPORTANTE: La tasa obrero NO es progresiva, siempre es 1.125%
+  const CESANTIA_VEJEZ_OBRERO_TASA_BP = 113; // 1.125% = 112.5 bp, redondeado a 113
+  const cesantiaObreroMontoBp = multiplicarBpPorTasa(sbcTopadoPeriodoBp, CESANTIA_VEJEZ_OBRERO_TASA_BP);
+  cuotasObrero.push({
+    ramo: 'cesantia_vejez',
+    concepto: 'Cesantía y Vejez - Trabajador',
+    base: bpToPesos(sbcTopadoPeriodoBp),
+    baseBp: sbcTopadoPeriodoBp,
+    tasaBp: CESANTIA_VEJEZ_OBRERO_TASA_BP,
+    tasaPorcentaje: CESANTIA_VEJEZ_OBRERO_TASA_BP / 100,
+    montoBp: cesantiaObreroMontoBp,
+    monto: bpToPesos(cesantiaObreroMontoBp),
+  });
+
   // Calcular totales
   const totalObreroBp = cuotasObrero.reduce((sum, c) => sumarBp(sum, c.montoBp), BigInt(0));
   const totalPatronalBp = cuotasPatronal.reduce((sum, c) => sumarBp(sum, c.montoBp), BigInt(0));
