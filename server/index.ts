@@ -14,6 +14,9 @@ import { sessionAuthMiddleware } from "./auth/middleware";
 const app = express();
 const MemoryStoreSession = MemoryStore(session);
 
+// Trust first proxy (required for secure cookies behind Traefik/nginx)
+app.set('trust proxy', 1);
+
 // Health check for Replit Autoscale - responds at root path
 // This intercepts GET / requests that have no Accept header or accept JSON
 // Regular browser requests will fall through to the static file handler
