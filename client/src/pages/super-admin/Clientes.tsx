@@ -3,7 +3,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,10 +22,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Building2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Building2, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Cliente } from "@shared/schema";
 import ClienteForm from "@/components/ClienteForm";
+import { VacationSchemeSelector } from "@/components/VacationSchemeSelector";
 
 export default function Clientes() {
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -182,6 +190,31 @@ export default function Clientes() {
                     <Pencil className="mr-2 h-3 w-3" />
                     Editar
                   </Button>
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid={`button-vacaciones-${cliente.id}`}
+                      >
+                        <CalendarDays className="h-3 w-3" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-lg">
+                      <DialogHeader>
+                        <DialogTitle>Esquema de Vacaciones</DialogTitle>
+                        <DialogDescription>
+                          {cliente.nombreComercial}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <VacationSchemeSelector
+                        entityType="cliente"
+                        entityId={cliente.id}
+                        currentSchemeId={cliente.esquemaPrestacionesId}
+                        entityName={cliente.nombreComercial}
+                      />
+                    </DialogContent>
+                  </Dialog>
                   <Button
                     variant="outline"
                     size="sm"

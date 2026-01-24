@@ -109,6 +109,13 @@ const modulosSeed: ModuloSeed[] = [
     icono: "Settings",
     orden: 14,
   },
+  {
+    codigo: "cursos_capacitaciones",
+    nombre: "Cursos y Capacitaciones",
+    descripcion: "Gestión de cursos, capacitaciones y desarrollo del personal",
+    icono: "GraduationCap",
+    orden: 15,
+  },
 ];
 
 export async function seedModulos() {

@@ -518,8 +518,8 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   
   // Tipo de usuario y relación con cliente
-  tipoUsuario: varchar("tipo_usuario").notNull().default("cliente"), // "maxtalent" | "cliente"
-  clienteId: varchar("cliente_id").references(() => clientes.id), // Solo para tipo "cliente"
+  tipoUsuario: varchar("tipo_usuario").notNull().default("cliente"), // "maxtalent" | "cliente" | "empleado"
+  clienteId: varchar("cliente_id").references(() => clientes.id), // Para tipo "cliente" o "empleado"
   
   // Rol del usuario dentro de su alcance
   // - "user": Usuario normal con permisos granulares
@@ -533,7 +533,17 @@ export const users = pgTable("users", {
   nombre: text("nombre"),
   email: varchar("email"),
   activo: boolean("activo").notNull().default(true),
-  
+
+  // === PORTAL DE EMPLEADOS ===
+  // Vinculación con empleado (solo para tipoUsuario = "empleado")
+  empleadoId: varchar("empleado_id").references(() => employees.id, { onDelete: "set null" }),
+  // Control de acceso al portal
+  portalActivo: boolean("portal_activo").notNull().default(false),
+  // Último acceso al portal (para auditoría)
+  ultimoAccesoPortal: timestamp("ultimo_acceso_portal"),
+  // Requiere cambio de contraseña (para primer login)
+  requiereCambioPassword: boolean("requiere_cambio_password").notNull().default(false),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
@@ -1103,7 +1113,14 @@ export const clientes = pgTable("clientes", {
   
   // Notas
   notas: text("notas"),
-  
+
+  // API Key for MCP/omnichannel integrations
+  apiKey: varchar("api_key", { length: 64 }).unique(),
+  apiKeyCreatedAt: timestamp("api_key_created_at"),
+
+  // Esquema de prestaciones (vacaciones) por defecto para todos los empleados del cliente
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id"),
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 });
@@ -1153,6 +1170,8 @@ export const empresas = pgTable("empresas", {
   notas: text("notas"),
   // Plantilla de nómina favorita/default
   defaultPlantillaNominaId: varchar("default_plantilla_nomina_id"), // FK a plantillas_nomina (validado en app layer por orden de declaración)
+  // Esquema de prestaciones (vacaciones) - sobreescribe el del cliente si se asigna
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id"),
   estatus: varchar("estatus").default("activa"), // activa, suspendida, inactiva
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
@@ -4119,7 +4138,7 @@ export const employeeBankAccounts = pgTable("employee_bank_accounts", {
   empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
   empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
   
-  bancoId: integer("banco_id").references(() => catBancos.id),
+  bancoId: varchar("banco_id").references(() => catBancos.id),
   bancoNombre: varchar("banco_nombre", { length: 100 }),
   clabe: varchar("clabe", { length: 18 }),
   cuenta: varchar("cuenta", { length: 20 }),
@@ -4797,3 +4816,639 @@ export const onboardingAuditSchema = z.object({
 
 export type OnboardingAudit = z.infer<typeof onboardingAuditSchema>;
 export type Section1 = z.infer<typeof onboardingSection1Schema>;
+
+// ============================================================================
+// PORTAL DE EMPLEADOS - Employee Self-Service Portal
+// ============================================================================
+
+// Anuncios (Announcements)
+export const anuncios = pgTable("anuncios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+
+  titulo: varchar("titulo", { length: 200 }).notNull(),
+  contenido: text("contenido").notNull(),
+  tipo: varchar("tipo").notNull().default("informativo"), // informativo, urgente, evento, politica
+  imagenUrl: text("imagen_url"),
+
+  // Visibilidad
+  visibleParaTodos: boolean("visible_para_todos").default(true),
+  departamentosIds: jsonb("departamentos_ids").default(sql`'[]'::jsonb`), // IDs de departamentos específicos
+  centrosTrabajoIds: jsonb("centros_trabajo_ids").default(sql`'[]'::jsonb`), // IDs de centros de trabajo
+
+  // Programación
+  fechaPublicacion: timestamp("fecha_publicacion").notNull().default(sql`now()`),
+  fechaExpiracion: timestamp("fecha_expiracion"),
+
+  // Engagement
+  requiereConfirmacion: boolean("requiere_confirmacion").default(false),
+  fijado: boolean("fijado").default(false), // Pinned al inicio
+
+  // Auditoría
+  publicadoPor: varchar("publicado_por"),
+  estatus: varchar("estatus").default("activo"), // borrador, activo, expirado, archivado
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("anuncios_cliente_idx").on(table.clienteId),
+  fechaPublicacionIdx: index("anuncios_fecha_publicacion_idx").on(table.fechaPublicacion),
+  estatusIdx: index("anuncios_estatus_idx").on(table.estatus),
+}));
+
+export type Anuncio = typeof anuncios.$inferSelect;
+export const insertAnuncioSchema = createInsertSchema(anuncios).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAnuncio = z.infer<typeof insertAnuncioSchema>;
+
+// Anuncios Leídos - Track read/confirmed announcements
+export const anunciosLeidos = pgTable("anuncios_leidos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  anuncioId: varchar("anuncio_id").notNull().references(() => anuncios.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  leidoAt: timestamp("leido_at").notNull().default(sql`now()`),
+  confirmadoAt: timestamp("confirmado_at"), // Si requiereConfirmacion = true
+}, (table) => ({
+  anuncioEmpleadoIdx: uniqueIndex("anuncios_leidos_anuncio_empleado_idx").on(table.anuncioId, table.empleadoId),
+}));
+
+export type AnuncioLeido = typeof anunciosLeidos.$inferSelect;
+
+// Mensajes Internos (Internal Messages)
+export const mensajes = pgTable("mensajes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+
+  // Participantes
+  remitenteId: varchar("remitente_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  destinatarioId: varchar("destinatario_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+
+  // Contenido
+  asunto: varchar("asunto", { length: 200 }).notNull(),
+  contenido: text("contenido").notNull(),
+
+  // Soporte de hilos
+  hiloId: varchar("hilo_id"), // Auto-referencia para hilos de conversación
+  esRespuesta: boolean("es_respuesta").default(false),
+
+  // Estado
+  leidoAt: timestamp("leido_at"),
+  archivadoRemitente: boolean("archivado_remitente").default(false),
+  archivadoDestinatario: boolean("archivado_destinatario").default(false),
+  eliminadoRemitente: boolean("eliminado_remitente").default(false),
+  eliminadoDestinatario: boolean("eliminado_destinatario").default(false),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  remitenteIdx: index("mensajes_remitente_idx").on(table.remitenteId),
+  destinatarioIdx: index("mensajes_destinatario_idx").on(table.destinatarioId),
+  hiloIdx: index("mensajes_hilo_idx").on(table.hiloId),
+}));
+
+export type Mensaje = typeof mensajes.$inferSelect;
+export const insertMensajeSchema = createInsertSchema(mensajes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertMensaje = z.infer<typeof insertMensajeSchema>;
+
+// Documentos de Empleado (Employee Documents)
+export const documentosEmpleado = pgTable("documentos_empleado", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+
+  // Información del documento
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  categoria: varchar("categoria").notNull(), // contrato, recibo_nomina, constancia, identificacion, comprobante_domicilio, otro
+
+  // Almacenamiento
+  archivoUrl: text("archivo_url").notNull(),
+  archivoNombre: varchar("archivo_nombre", { length: 255 }).notNull(),
+  archivoTipo: varchar("archivo_tipo", { length: 100 }), // MIME type
+  archivoTamano: integer("archivo_tamano"), // bytes
+
+  // Control de acceso
+  visibleParaEmpleado: boolean("visible_para_empleado").default(true),
+  subidoPorEmpleado: boolean("subido_por_empleado").default(false),
+
+  // Auditoría
+  subidoPor: varchar("subido_por"),
+  fechaVencimiento: date("fecha_vencimiento"),
+  estatus: varchar("estatus").default("activo"), // activo, vencido, archivado
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("documentos_empleado_empleado_idx").on(table.empleadoId),
+  categoriaIdx: index("documentos_empleado_categoria_idx").on(table.categoria),
+}));
+
+export type DocumentoEmpleado = typeof documentosEmpleado.$inferSelect;
+export const insertDocumentoEmpleadoSchema = createInsertSchema(documentosEmpleado).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertDocumentoEmpleado = z.infer<typeof insertDocumentoEmpleadoSchema>;
+
+// Configuración de Workflows (Workflow Configuration)
+export const workflowConfigurations = pgTable("workflow_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+
+  // A qué tipo de solicitud aplica
+  tipoSolicitud: varchar("tipo_solicitud").notNull(), // vacaciones, permiso, documento, cambio_datos
+
+  // Pasos del workflow (array ordenado de aprobadores)
+  // [{ orden: 1, tipoAprobador: "jefe_directo" | "rh" | "gerencia" | "usuario_especifico", usuarioId?: string }]
+  pasos: jsonb("pasos").notNull(),
+
+  // Condiciones de auto-aprobación
+  autoAprobarDiasMenoresA: integer("auto_aprobar_dias_menores_a"), // Auto-aprobar si < X días
+
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteTipoIdx: uniqueIndex("workflow_config_cliente_tipo_idx").on(table.clienteId, table.empresaId, table.tipoSolicitud),
+}));
+
+export type WorkflowConfiguration = typeof workflowConfigurations.$inferSelect;
+export const insertWorkflowConfigurationSchema = createInsertSchema(workflowConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertWorkflowConfiguration = z.infer<typeof insertWorkflowConfigurationSchema>;
+
+// Aprobaciones (Approval records for any request type)
+export const aprobaciones = pgTable("aprobaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Referencia a la solicitud (polimórfico)
+  tipoSolicitud: varchar("tipo_solicitud").notNull(), // vacaciones, permiso, etc.
+  solicitudId: varchar("solicitud_id").notNull(), // ID de la solicitud
+
+  // Paso del workflow
+  pasoOrden: integer("paso_orden").notNull(),
+
+  // Aprobador
+  aprobadorId: varchar("aprobador_id").notNull().references(() => users.id),
+
+  // Decisión
+  decision: varchar("decision").notNull().default("pendiente"), // pendiente, aprobado, rechazado
+  comentarios: text("comentarios"),
+
+  fechaDecision: timestamp("fecha_decision"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  solicitudIdx: index("aprobaciones_solicitud_idx").on(table.tipoSolicitud, table.solicitudId),
+  aprobadorIdx: index("aprobaciones_aprobador_idx").on(table.aprobadorId),
+  pendientesIdx: index("aprobaciones_pendientes_idx").on(table.aprobadorId, table.decision),
+}));
+
+export type Aprobacion = typeof aprobaciones.$inferSelect;
+export const insertAprobacionSchema = createInsertSchema(aprobaciones).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertAprobacion = z.infer<typeof insertAprobacionSchema>;
+
+// Notificaciones (Notifications)
+export const notificaciones = pgTable("notificaciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  usuarioId: varchar("usuario_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+
+  tipo: varchar("tipo").notNull(), // solicitud_aprobada, solicitud_rechazada, nuevo_anuncio, nuevo_mensaje, recordatorio
+  titulo: varchar("titulo", { length: 200 }).notNull(),
+  contenido: text("contenido"),
+
+  // Referencia a entidad relacionada
+  referenciaId: varchar("referencia_id"),
+  referenciaTipo: varchar("referencia_tipo"), // vacaciones, permiso, anuncio, mensaje
+
+  // Estado
+  leidaAt: timestamp("leida_at"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  usuarioIdx: index("notificaciones_usuario_idx").on(table.usuarioId),
+  noLeidasIdx: index("notificaciones_no_leidas_idx").on(table.usuarioId, table.leidaAt),
+}));
+
+export type Notificacion = typeof notificaciones.$inferSelect;
+export const insertNotificacionSchema = createInsertSchema(notificaciones).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertNotificacion = z.infer<typeof insertNotificacionSchema>;
+
+// =========================================
+// CURSOS Y CAPACITACIONES (Training & Courses LMS)
+// =========================================
+
+// 1. Course Categories
+export const categoriasCursos = pgTable("categorias_cursos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  descripcion: text("descripcion"),
+  color: varchar("color", { length: 7 }), // Hex color code
+  icono: varchar("icono", { length: 50 }), // Lucide icon name
+  orden: integer("orden").default(0),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("categorias_cursos_cliente_idx").on(table.clienteId),
+}));
+
+export type CategoriaCurso = typeof categoriasCursos.$inferSelect;
+export const insertCategoriaCursoSchema = createInsertSchema(categoriasCursos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCategoriaCurso = z.infer<typeof insertCategoriaCursoSchema>;
+
+// 2. Courses (Main course catalog)
+export const cursos = pgTable("cursos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+
+  // Basic info
+  codigo: varchar("codigo", { length: 50 }).notNull(),
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  imagenUrl: varchar("imagen_url", { length: 500 }),
+
+  // Classification
+  categoriaId: varchar("categoria_id").references(() => categoriasCursos.id, { onDelete: "set null" }),
+  dificultad: varchar("dificultad", { length: 20 }), // 'basico', 'intermedio', 'avanzado'
+  duracionEstimadaMinutos: integer("duracion_estimada_minutos"),
+
+  // Course type
+  tipoCapacitacion: varchar("tipo_capacitacion", { length: 30 }).notNull(), // 'obligatoria', 'opcional', 'induccion', 'certificacion'
+  tipoEvaluacion: varchar("tipo_evaluacion", { length: 30 }), // 'quiz', 'assessment', 'certification_exam', 'none'
+  calificacionMinima: integer("calificacion_minima").default(70),
+  intentosMaximos: integer("intentos_maximos"), // null = unlimited
+
+  // Prerequisites
+  prerequisitosCursoIds: jsonb("prerequisitos_curso_ids"), // Array of course IDs
+
+  // Status
+  estatus: varchar("estatus", { length: 20 }).default("borrador"), // 'borrador', 'publicado', 'archivado'
+  fechaPublicacion: timestamp("fecha_publicacion"),
+
+  // Renewal
+  requiereRenovacion: boolean("requiere_renovacion").default(false),
+  periodoRenovacionMeses: integer("periodo_renovacion_meses"),
+
+  // Audit
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("cursos_cliente_idx").on(table.clienteId),
+  estatusIdx: index("cursos_estatus_idx").on(table.estatus),
+  categoriaIdx: index("cursos_categoria_idx").on(table.categoriaId),
+  codigoClienteUnique: unique("cursos_codigo_cliente_unique").on(table.clienteId, table.codigo),
+}));
+
+export type Curso = typeof cursos.$inferSelect;
+export const insertCursoSchema = createInsertSchema(cursos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCurso = z.infer<typeof insertCursoSchema>;
+
+// 3. Course Modules
+export const modulosCurso = pgTable("modulos_curso", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cursoId: varchar("curso_id").notNull().references(() => cursos.id, { onDelete: "cascade" }),
+
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  orden: integer("orden").notNull(),
+  duracionEstimadaMinutos: integer("duracion_estimada_minutos"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  cursoIdx: index("modulos_curso_curso_idx").on(table.cursoId),
+  ordenIdx: index("modulos_curso_orden_idx").on(table.cursoId, table.orden),
+}));
+
+export type ModuloCurso = typeof modulosCurso.$inferSelect;
+export const insertModuloCursoSchema = createInsertSchema(modulosCurso).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertModuloCurso = z.infer<typeof insertModuloCursoSchema>;
+
+// 4. Course Lessons
+export const leccionesCurso = pgTable("lecciones_curso", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  moduloId: varchar("modulo_id").notNull().references(() => modulosCurso.id, { onDelete: "cascade" }),
+
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  orden: integer("orden").notNull(),
+  duracionEstimadaMinutos: integer("duracion_estimada_minutos"),
+
+  // Content type determines which fields are used
+  tipoContenido: varchar("tipo_contenido", { length: 20 }).notNull(), // 'video', 'texto', 'documento', 'link', 'quiz'
+  contenido: jsonb("contenido"), // Flexible content storage
+
+  // For video content
+  videoUrl: varchar("video_url", { length: 500 }),
+  videoProveedor: varchar("video_proveedor", { length: 20 }), // 'youtube', 'vimeo', 'upload'
+
+  // For document/file content
+  archivoUrl: varchar("archivo_url", { length: 500 }),
+  archivoNombre: varchar("archivo_nombre", { length: 255 }),
+  archivoTipo: varchar("archivo_tipo", { length: 100 }), // MIME type
+
+  // For quiz lessons
+  quizId: varchar("quiz_id"), // Will reference quizzesCurso after it's created
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  moduloIdx: index("lecciones_curso_modulo_idx").on(table.moduloId),
+  ordenIdx: index("lecciones_curso_orden_idx").on(table.moduloId, table.orden),
+}));
+
+export type LeccionCurso = typeof leccionesCurso.$inferSelect;
+export const insertLeccionCursoSchema = createInsertSchema(leccionesCurso).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertLeccionCurso = z.infer<typeof insertLeccionCursoSchema>;
+
+// 5. Quizzes
+export const quizzesCurso = pgTable("quizzes_curso", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cursoId: varchar("curso_id").notNull().references(() => cursos.id, { onDelete: "cascade" }),
+  moduloId: varchar("modulo_id").references(() => modulosCurso.id, { onDelete: "cascade" }),
+
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  tipo: varchar("tipo", { length: 30 }).notNull(), // 'quiz', 'assessment', 'certification_exam'
+
+  // Settings
+  tiempoLimiteMinutos: integer("tiempo_limite_minutos"),
+  calificacionMinima: integer("calificacion_minima").default(70),
+  intentosMaximos: integer("intentos_maximos"), // null = unlimited
+  mostrarRespuestasCorrectas: boolean("mostrar_respuestas_correctas").default(true),
+  ordenAleatorio: boolean("orden_aleatorio").default(false),
+  mezclasOpciones: boolean("mezclar_opciones").default(false),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  cursoIdx: index("quizzes_curso_curso_idx").on(table.cursoId),
+  moduloIdx: index("quizzes_curso_modulo_idx").on(table.moduloId),
+}));
+
+export type QuizCurso = typeof quizzesCurso.$inferSelect;
+export const insertQuizCursoSchema = createInsertSchema(quizzesCurso).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertQuizCurso = z.infer<typeof insertQuizCursoSchema>;
+
+// 6. Quiz Questions
+export const preguntasQuiz = pgTable("preguntas_quiz", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  quizId: varchar("quiz_id").notNull().references(() => quizzesCurso.id, { onDelete: "cascade" }),
+
+  tipoPregunta: varchar("tipo_pregunta", { length: 30 }).notNull(), // 'multiple_choice', 'true_false', 'multiple_select', 'free_text'
+  pregunta: text("pregunta").notNull(),
+  explicacion: text("explicacion"), // Shown after answering
+
+  // Options for choice questions - Array of { id: string, texto: string, esCorrecta: boolean }
+  opciones: jsonb("opciones"),
+  puntos: integer("puntos").default(1),
+  orden: integer("orden").notNull(),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  quizIdx: index("preguntas_quiz_quiz_idx").on(table.quizId),
+  ordenIdx: index("preguntas_quiz_orden_idx").on(table.quizId, table.orden),
+}));
+
+export type PreguntaQuiz = typeof preguntasQuiz.$inferSelect;
+export const insertPreguntaQuizSchema = createInsertSchema(preguntasQuiz).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPreguntaQuiz = z.infer<typeof insertPreguntaQuizSchema>;
+
+// 7. Assignment Rules (for auto-assignment)
+export const reglasAsignacionCursos = pgTable("reglas_asignacion_cursos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  cursoId: varchar("curso_id").notNull().references(() => cursos.id, { onDelete: "cascade" }),
+
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+
+  // Trigger type
+  tipoTrigger: varchar("tipo_trigger", { length: 30 }).notNull(), // 'new_hire', 'position_change', 'department_change', 'renewal', 'manual'
+
+  // Target criteria (all optional, combined with AND logic)
+  empresaIds: jsonb("empresa_ids"), // Array of empresa IDs
+  departamentoIds: jsonb("departamento_ids"), // Array of department names
+  puestoIds: jsonb("puesto_ids"), // Array of position names
+  centroTrabajoIds: jsonb("centro_trabajo_ids"), // Array of centro trabajo IDs
+
+  // Timing
+  diasParaCompletar: integer("dias_para_completar"),
+  esObligatorio: boolean("es_obligatorio").default(true),
+
+  // For renewal rules
+  periodoRenovacionMeses: integer("periodo_renovacion_meses"),
+
+  activo: boolean("activo").default(true),
+  prioridad: integer("prioridad").default(0),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("reglas_asignacion_cursos_cliente_idx").on(table.clienteId),
+  cursoIdx: index("reglas_asignacion_cursos_curso_idx").on(table.cursoId),
+  activoIdx: index("reglas_asignacion_cursos_activo_idx").on(table.activo),
+}));
+
+export type ReglaAsignacionCurso = typeof reglasAsignacionCursos.$inferSelect;
+export const insertReglaAsignacionCursoSchema = createInsertSchema(reglasAsignacionCursos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertReglaAsignacionCurso = z.infer<typeof insertReglaAsignacionCursoSchema>;
+
+// 8. Course Assignments (individual employee assignments)
+export const asignacionesCursos = pgTable("asignaciones_cursos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  cursoId: varchar("curso_id").notNull().references(() => cursos.id, { onDelete: "cascade" }),
+
+  // Assignment metadata
+  reglaAsignacionId: varchar("regla_asignacion_id").references(() => reglasAsignacionCursos.id, { onDelete: "set null" }),
+  asignadoPor: varchar("asignado_por"), // User ID who assigned
+  tipoAsignacion: varchar("tipo_asignacion", { length: 30 }).notNull(), // 'manual', 'auto_new_hire', 'auto_renewal', 'auto_position_change', 'auto_department_change'
+  esObligatorio: boolean("es_obligatorio").default(false),
+
+  // Dates
+  fechaAsignacion: timestamp("fecha_asignacion").notNull().default(sql`now()`),
+  fechaVencimiento: date("fecha_vencimiento"),
+  fechaInicio: timestamp("fecha_inicio"),
+  fechaCompletado: timestamp("fecha_completado"),
+
+  // Progress
+  estatus: varchar("estatus", { length: 20 }).default("asignado"), // 'asignado', 'en_progreso', 'completado', 'vencido', 'fallido'
+  porcentajeProgreso: integer("porcentaje_progreso").default(0),
+
+  // Assessment results
+  calificacionFinal: integer("calificacion_final"),
+  aprobado: boolean("aprobado"),
+  intentosRealizados: integer("intentos_realizados").default(0),
+
+  // Certificate
+  certificadoGenerado: boolean("certificado_generado").default(false),
+  certificadoUrl: varchar("certificado_url", { length: 500 }),
+  fechaCertificado: timestamp("fecha_certificado"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("asignaciones_cursos_cliente_idx").on(table.clienteId),
+  empleadoIdx: index("asignaciones_cursos_empleado_idx").on(table.empleadoId),
+  cursoIdx: index("asignaciones_cursos_curso_idx").on(table.cursoId),
+  estatusIdx: index("asignaciones_cursos_estatus_idx").on(table.estatus),
+  vencimientoIdx: index("asignaciones_cursos_vencimiento_idx").on(table.fechaVencimiento),
+}));
+
+export type AsignacionCurso = typeof asignacionesCursos.$inferSelect;
+export const insertAsignacionCursoSchema = createInsertSchema(asignacionesCursos).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertAsignacionCurso = z.infer<typeof insertAsignacionCursoSchema>;
+
+// 9. Lesson Progress (granular tracking)
+export const progresoLecciones = pgTable("progreso_lecciones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  asignacionId: varchar("asignacion_id").notNull().references(() => asignacionesCursos.id, { onDelete: "cascade" }),
+  leccionId: varchar("leccion_id").notNull().references(() => leccionesCurso.id, { onDelete: "cascade" }),
+
+  estatus: varchar("estatus", { length: 20 }).default("pendiente"), // 'pendiente', 'en_progreso', 'completado'
+  porcentajeProgreso: integer("porcentaje_progreso").default(0),
+
+  fechaInicio: timestamp("fecha_inicio"),
+  fechaCompletado: timestamp("fecha_completado"),
+  tiempoInvertidoSegundos: integer("tiempo_invertido_segundos").default(0),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  asignacionIdx: index("progreso_lecciones_asignacion_idx").on(table.asignacionId),
+  leccionIdx: index("progreso_lecciones_leccion_idx").on(table.leccionId),
+  uniqueProgress: unique("progreso_lecciones_unique").on(table.asignacionId, table.leccionId),
+}));
+
+export type ProgresoLeccion = typeof progresoLecciones.$inferSelect;
+export const insertProgresoLeccionSchema = createInsertSchema(progresoLecciones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertProgresoLeccion = z.infer<typeof insertProgresoLeccionSchema>;
+
+// 10. Quiz Attempts
+export const intentosQuiz = pgTable("intentos_quiz", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  asignacionId: varchar("asignacion_id").notNull().references(() => asignacionesCursos.id, { onDelete: "cascade" }),
+  quizId: varchar("quiz_id").notNull().references(() => quizzesCurso.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+
+  numeroIntento: integer("numero_intento").notNull(),
+
+  fechaInicio: timestamp("fecha_inicio").notNull(),
+  fechaFin: timestamp("fecha_fin"),
+  tiempoUtilizadoSegundos: integer("tiempo_utilizado_segundos"),
+
+  // Answers - Array of { preguntaId: string, respuesta: any, esCorrecta: boolean, puntosObtenidos: number }
+  respuestas: jsonb("respuestas"),
+
+  puntosObtenidos: integer("puntos_obtenidos"),
+  puntosMaximos: integer("puntos_maximos"),
+  calificacion: integer("calificacion"), // percentage
+  aprobado: boolean("aprobado"),
+
+  estatus: varchar("estatus", { length: 20 }).default("en_progreso"), // 'en_progreso', 'completado', 'abandonado', 'tiempo_agotado'
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  asignacionIdx: index("intentos_quiz_asignacion_idx").on(table.asignacionId),
+  quizIdx: index("intentos_quiz_quiz_idx").on(table.quizId),
+  empleadoIdx: index("intentos_quiz_empleado_idx").on(table.empleadoId),
+}));
+
+export type IntentoQuiz = typeof intentosQuiz.$inferSelect;
+export const insertIntentoQuizSchema = createInsertSchema(intentosQuiz).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertIntentoQuiz = z.infer<typeof insertIntentoQuizSchema>;
+
+// 11. Certificates
+export const certificadosCursos = pgTable("certificados_cursos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  asignacionId: varchar("asignacion_id").notNull().references(() => asignacionesCursos.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  cursoId: varchar("curso_id").notNull().references(() => cursos.id, { onDelete: "cascade" }),
+
+  codigoCertificado: varchar("codigo_certificado", { length: 50 }).notNull().unique(),
+  fechaEmision: timestamp("fecha_emision").notNull().default(sql`now()`),
+  fechaVencimiento: date("fecha_vencimiento"),
+
+  calificacionObtenida: integer("calificacion_obtenida"),
+  archivoUrl: varchar("archivo_url", { length: 500 }),
+
+  estatus: varchar("estatus", { length: 20 }).default("activo"), // 'activo', 'vencido', 'revocado'
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("certificados_cursos_cliente_idx").on(table.clienteId),
+  empleadoIdx: index("certificados_cursos_empleado_idx").on(table.empleadoId),
+  cursoIdx: index("certificados_cursos_curso_idx").on(table.cursoId),
+  codigoIdx: uniqueIndex("certificados_cursos_codigo_idx").on(table.codigoCertificado),
+}));
+
+export type CertificadoCurso = typeof certificadosCursos.$inferSelect;
+export const insertCertificadoCursoSchema = createInsertSchema(certificadosCursos).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertCertificadoCurso = z.infer<typeof insertCertificadoCursoSchema>;

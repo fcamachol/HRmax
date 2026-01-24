@@ -32,6 +32,7 @@ import {
   CalendarRange,
   LogOut,
   User,
+  GraduationCap,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -251,6 +252,7 @@ export function AppSidebar() {
   const isOrganizacionActive = location.startsWith("/organizacion");
   const isReclutamientoActive = location.startsWith("/reclutamiento");
   const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos") || location.startsWith("/creditos") || location.startsWith("/actas-administrativas");
+  const isCursosActive = location.startsWith("/cursos-capacitaciones");
   const isImssActive = location.startsWith("/imss");
   const isConfiguracionActive = location.startsWith("/configuration");
 
@@ -414,6 +416,19 @@ export function AppSidebar() {
                     </SidebarMenuSub>
                   </CollapsibleContent>
                 </Collapsible>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={isCursosActive}
+                  data-testid="link-cursos-capacitaciones"
+                >
+                  <Link href="/cursos-capacitaciones">
+                    <GraduationCap className="h-4 w-4" />
+                    <span>Cursos y Capacitaciones</span>
+                  </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
 
               <SidebarMenuItem>

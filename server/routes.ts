@@ -90,12 +90,24 @@ import {
   insertCompensacionCalculadaSchema,
   insertExentoCapConfigSchema,
   insertEmployeeExentoCapSchema,
-  insertPayrollExentoLedgerSchema
+  insertPayrollExentoLedgerSchema,
+  // Cursos y Capacitaciones
+  insertCategoriaCursoSchema,
+  insertCursoSchema,
+  insertModuloCursoSchema,
+  insertLeccionCursoSchema,
+  insertQuizCursoSchema,
+  insertPreguntaQuizSchema,
+  insertReglaAsignacionCursoSchema,
+  insertAsignacionCursoSchema,
+  insertProgresoLeccionSchema,
+  insertIntentoQuizSchema,
+  insertCertificadoCursoSchema
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
-import { requireSuperAdmin } from "./auth/middleware";
+import { requireSuperAdmin, requireEmployeeAuth } from "./auth/middleware";
 import bcrypt from "bcrypt";
 import { seedMockEmployees } from "./seeds/mockEmployees";
 
@@ -4585,6 +4597,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== ESQUEMAS DE VACACIONES - ASIGNACIÓN ====================
+
+  // Assign vacation scheme to Cliente
+  app.patch("/api/clientes/:id/esquema-prestaciones", async (req, res) => {
+    try {
+      const { esquemaPrestacionesId } = req.body;
+
+      // Validate scheme exists if provided
+      if (esquemaPrestacionesId) {
+        const esquema = await storage.getEsquemaPresta(esquemaPrestacionesId);
+        if (!esquema) {
+          return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+        }
+      }
+
+      const updated = await storage.updateCliente(req.params.id, {
+        esquemaPrestacionesId: esquemaPrestacionesId || null
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Assign vacation scheme to Empresa
+  app.patch("/api/empresas/:id/esquema-prestaciones", async (req, res) => {
+    try {
+      const { esquemaPrestacionesId } = req.body;
+
+      // Validate scheme exists if provided
+      if (esquemaPrestacionesId) {
+        const esquema = await storage.getEsquemaPresta(esquemaPrestacionesId);
+        if (!esquema) {
+          return res.status(404).json({ message: "Esquema de prestaciones no encontrado" });
+        }
+      }
+
+      const updated = await storage.updateEmpresa(req.params.id, {
+        esquemaPrestacionesId: esquemaPrestacionesId || null
+      });
+      res.json(updated);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  // Diagnostic endpoint: show effective vacation scheme for employee
+  app.get("/api/employees/:id/vacation-scheme", async (req, res) => {
+    try {
+      const employee = await storage.getEmployee(req.params.id);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      if (!employee.fechaIngreso) {
+        return res.status(400).json({ message: "Empleado sin fecha de ingreso" });
+      }
+
+      const fechaIngreso = new Date(employee.fechaIngreso);
+      const aniosAntiguedad = Math.floor(
+        (Date.now() - fechaIngreso.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+      );
+
+      const resolution = await storage.resolveVacationDays(req.params.id, aniosAntiguedad);
+
+      res.json({
+        empleadoId: req.params.id,
+        empleadoNombre: employee.nombre,
+        aniosAntiguedad,
+        diasVacaciones: resolution.diasVacaciones,
+        esquema: resolution.esquema,
+        fuente: resolution.fuente,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ==================== SISTEMA - MÓDULOS ====================
   
   app.get("/api/modulos", async (req, res) => {
@@ -6876,6 +6966,1273 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL DE EMPLEADOS - Employee Self-Service API
+  // ============================================================================
+
+  // Portal Authentication - Login for employees
+  app.post("/api/portal/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ message: "Correo y contraseña son requeridos" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+
+      if (!user) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      // Must be an employee user type
+      if (user.tipoUsuario !== "empleado") {
+        return res.status(403).json({ message: "Este portal es solo para empleados" });
+      }
+
+      if (!user.activo) {
+        return res.status(403).json({ message: "Cuenta desactivada. Contacte a Recursos Humanos." });
+      }
+
+      if (!user.portalActivo) {
+        return res.status(403).json({ message: "Acceso al portal no habilitado. Contacte a Recursos Humanos." });
+      }
+
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+
+      if (!isPasswordValid) {
+        return res.status(401).json({ message: "Credenciales inválidas" });
+      }
+
+      // Get associated employee data
+      let employee = null;
+      if (user.empleadoId) {
+        employee = await storage.getEmployee(user.empleadoId);
+      }
+
+      // Update last portal access
+      await storage.updateUser(user.id, { ultimoAccesoPortal: new Date() });
+
+      // Store user in session with employee info
+      req.session.user = {
+        id: user.id,
+        username: user.username,
+        nombre: user.nombre || employee?.nombre,
+        email: user.email || employee?.email,
+        tipoUsuario: user.tipoUsuario,
+        clienteId: user.clienteId,
+        empleadoId: user.empleadoId,
+        portalActivo: user.portalActivo,
+      };
+
+      const { password: _, ...publicUser } = user;
+      res.json({
+        success: true,
+        user: publicUser,
+        employee: employee ? {
+          id: employee.id,
+          nombre: employee.nombre,
+          apellidoPaterno: employee.apellidoPaterno,
+          apellidoMaterno: employee.apellidoMaterno,
+          numeroEmpleado: employee.numeroEmpleado,
+          email: employee.email || employee.correo,
+          telefono: employee.telefono,
+          puesto: employee.puesto,
+          departamento: employee.departamento,
+          fechaIngreso: employee.fechaIngreso,
+          diasVacacionesDisponibles: employee.diasVacacionesDisponibles,
+        } : null,
+        message: "Login exitoso"
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Auth - Get current user
+  app.get("/api/portal/auth/me", async (req, res) => {
+    if (!req.session?.user) {
+      return res.status(401).json({ message: "No autenticado" });
+    }
+
+    try {
+      const user = await storage.getUser(req.session.user.id);
+      if (!user || user.tipoUsuario !== "empleado") {
+        return res.status(401).json({ message: "Sesión inválida" });
+      }
+
+      let employee = null;
+      if (user.empleadoId) {
+        employee = await storage.getEmployee(user.empleadoId);
+      }
+
+      const { password: _, ...publicUser } = user;
+      res.json({
+        user: publicUser,
+        employee: employee ? {
+          id: employee.id,
+          nombre: employee.nombre,
+          apellidoPaterno: employee.apellidoPaterno,
+          apellidoMaterno: employee.apellidoMaterno,
+          numeroEmpleado: employee.numeroEmpleado,
+          email: employee.email || employee.correo,
+          telefono: employee.telefono,
+          puesto: employee.puesto,
+          departamento: employee.departamento,
+          fechaIngreso: employee.fechaIngreso,
+          diasVacacionesDisponibles: employee.diasVacacionesDisponibles,
+          rfc: employee.rfc,
+          curp: employee.curp,
+          nss: employee.nss,
+          banco: employee.banco,
+          clabe: employee.clabe,
+          calle: employee.calle,
+          numeroExterior: employee.numeroExterior,
+          colonia: employee.colonia,
+          municipio: employee.municipio,
+          estado: employee.estado,
+          codigoPostal: employee.codigoPostal,
+          tipoContrato: employee.tipoContrato,
+          horario: employee.horario,
+        } : null,
+      });
+    } catch (error: any) {
+      res.status(401).json({ message: "Sesión inválida" });
+    }
+  });
+
+  // Portal Auth - Logout
+  app.post("/api/portal/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Error al cerrar sesión" });
+      }
+      res.clearCookie("connect.sid");
+      res.json({ success: true, message: "Sesión cerrada" });
+    });
+  });
+
+  // Portal Dashboard - Get dashboard data for employee
+  app.get("/api/portal/dashboard", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      // Get vacation balance
+      const vacacionesDisponibles = employee.diasVacacionesDisponibles || 0;
+
+      // Get pending requests count (vacaciones + permisos)
+      const vacacionesPendientes = await storage.getVacacionesByEmpleado(empleadoId);
+      const permisosPendientes = await storage.getPermisosByEmpleado(empleadoId);
+      const solicitudesPendientes = [
+        ...vacacionesPendientes.filter(v => v.estatus === "pendiente"),
+        ...permisosPendientes.filter(p => p.estatus === "pendiente"),
+      ].length;
+
+      // TODO: Get latest payslip when nominas endpoint is ready
+      const ultimoRecibo = null;
+
+      // TODO: Get unread announcements count
+      const anunciosPendientes = 0;
+
+      res.json({
+        vacacionesDisponibles,
+        solicitudesPendientes,
+        ultimoRecibo,
+        anunciosPendientes,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Profile - Get employee profile
+  app.get("/api/portal/profile", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      res.json(employee);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Vacaciones - Get employee's vacation requests
+  app.get("/api/portal/vacaciones", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const vacaciones = await storage.getVacacionesByEmpleado(empleadoId);
+      res.json(vacaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Vacaciones - Get vacation balance
+  app.get("/api/portal/vacaciones/saldo", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      res.json({
+        disponibles: employee.diasVacacionesDisponibles || 0,
+        usados: employee.diasVacacionesUsados || 0,
+        anuales: employee.diasVacacionesAnuales || 0,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Vacaciones - Create vacation request
+  app.post("/api/portal/vacaciones", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      const validated = insertSolicitudVacacionesSchema.parse({
+        ...req.body,
+        clienteId: employee.clienteId,
+        empresaId: employee.empresaId,
+        empleadoId: empleadoId,
+        estatus: "pendiente",
+      });
+
+      // Check if employee has enough days
+      const diasDisponibles = employee.diasVacacionesDisponibles || 0;
+      if (validated.diasSolicitados > diasDisponibles) {
+        return res.status(400).json({
+          message: `Solo tienes ${diasDisponibles} días disponibles`
+        });
+      }
+
+      const solicitud = await storage.createSolicitudVacaciones(validated);
+      res.status(201).json(solicitud);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Permisos - Get employee's permission requests
+  app.get("/api/portal/permisos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const permisos = await storage.getPermisosByEmpleado(empleadoId);
+      res.json(permisos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Permisos - Create permission request
+  app.post("/api/portal/permisos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      const validated = insertSolicitudPermisoSchema.parse({
+        ...req.body,
+        clienteId: employee.clienteId,
+        empresaId: employee.empresaId,
+        empleadoId: empleadoId,
+        estatus: "pendiente",
+      });
+
+      const solicitud = await storage.createSolicitudPermiso(validated);
+      res.status(201).json(solicitud);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Incapacidades - Get employee's incapacidades (read-only)
+  app.get("/api/portal/incapacidades", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const incapacidades = await storage.getIncapacidadesByEmpleado(empleadoId);
+      res.json(incapacidades);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Notifications - Get unread count
+  app.get("/api/portal/notificaciones/count", requireEmployeeAuth, async (req, res) => {
+    try {
+      // TODO: Implement when notifications table is ready
+      res.json({ count: 0 });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Solicitudes - Get all requests (vacaciones + permisos)
+  app.get("/api/portal/solicitudes", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const tipo = req.query.tipo as string | undefined;
+
+      let vacaciones: any[] = [];
+      let permisos: any[] = [];
+
+      if (!tipo || tipo === "all" || tipo === "vacaciones") {
+        vacaciones = (await storage.getVacacionesByEmpleado(empleadoId)).map(v => ({
+          ...v,
+          tipo: "vacaciones",
+          dias: v.diasSolicitados,
+        }));
+      }
+
+      if (!tipo || tipo === "all" || tipo === "permisos") {
+        permisos = (await storage.getPermisosByEmpleado(empleadoId)).map(p => ({
+          ...p,
+          tipo: "permiso",
+          dias: Number(p.diasSolicitados),
+        }));
+      }
+
+      // Combine and sort by date
+      const solicitudes = [...vacaciones, ...permisos].sort(
+        (a, b) => new Date(b.fechaSolicitud).getTime() - new Date(a.fechaSolicitud).getTime()
+      );
+
+      res.json(solicitudes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // CURSOS Y CAPACITACIONES (Training & Courses LMS)
+  // ============================================================================
+
+  // --- Course Categories ---
+  app.get("/api/categorias-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const categorias = await storage.getCategoriasCursos(clienteId);
+      res.json(categorias);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/categorias-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const validated = insertCategoriaCursoSchema.parse({ ...req.body, clienteId });
+      const categoria = await storage.createCategoriaCurso(validated);
+      res.status(201).json(categoria);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/categorias-cursos/:id", async (req, res) => {
+    try {
+      const categoria = await storage.updateCategoriaCurso(req.params.id, req.body);
+      res.json(categoria);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/categorias-cursos/:id", async (req, res) => {
+    try {
+      await storage.deleteCategoriaCurso(req.params.id);
+      res.json({ message: "Categoría eliminada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Courses ---
+  app.get("/api/cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const estatus = req.query.estatus as string | undefined;
+      const cursos = await storage.getCursos(clienteId, estatus);
+      res.json(cursos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/cursos/:id", async (req, res) => {
+    try {
+      const curso = await storage.getCurso(req.params.id);
+      if (!curso) {
+        return res.status(404).json({ message: "Curso no encontrado" });
+      }
+      res.json(curso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/cursos/:id/completo", async (req, res) => {
+    try {
+      const cursoCompleto = await storage.getCursoCompleto(req.params.id);
+      if (!cursoCompleto) {
+        return res.status(404).json({ message: "Curso no encontrado" });
+      }
+      res.json(cursoCompleto);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      const userId = req.session?.user?.id;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const validated = insertCursoSchema.parse({
+        ...req.body,
+        clienteId,
+        createdBy: userId
+      });
+      const curso = await storage.createCurso(validated);
+      res.status(201).json(curso);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/cursos/:id", async (req, res) => {
+    try {
+      const curso = await storage.updateCurso(req.params.id, req.body);
+      res.json(curso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/cursos/:id", async (req, res) => {
+    try {
+      await storage.deleteCurso(req.params.id);
+      res.json({ message: "Curso eliminado" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/cursos/:id/publicar", async (req, res) => {
+    try {
+      const curso = await storage.publicarCurso(req.params.id);
+      res.json(curso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/cursos/:id/archivar", async (req, res) => {
+    try {
+      const curso = await storage.archivarCurso(req.params.id);
+      res.json(curso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Course Modules ---
+  app.get("/api/cursos/:cursoId/modulos", async (req, res) => {
+    try {
+      const modulos = await storage.getModulosCurso(req.params.cursoId);
+      res.json(modulos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/cursos/:cursoId/modulos", async (req, res) => {
+    try {
+      const validated = insertModuloCursoSchema.parse({
+        ...req.body,
+        cursoId: req.params.cursoId
+      });
+      const modulo = await storage.createModuloCurso(validated);
+      res.status(201).json(modulo);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/cursos/:cursoId/modulos/:id", async (req, res) => {
+    try {
+      const modulo = await storage.updateModuloCurso(req.params.id, req.body);
+      res.json(modulo);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/cursos/:cursoId/modulos/:id", async (req, res) => {
+    try {
+      await storage.deleteModuloCurso(req.params.id);
+      res.json({ message: "Módulo eliminado" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/cursos/:cursoId/modulos/reordenar", async (req, res) => {
+    try {
+      const { ordenIds } = req.body;
+      if (!Array.isArray(ordenIds)) {
+        return res.status(400).json({ message: "ordenIds debe ser un array" });
+      }
+      await storage.reordenarModulosCurso(req.params.cursoId, ordenIds);
+      res.json({ message: "Módulos reordenados" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Course Lessons ---
+  app.get("/api/modulos/:moduloId/lecciones", async (req, res) => {
+    try {
+      const lecciones = await storage.getLeccionesCurso(req.params.moduloId);
+      res.json(lecciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/modulos/:moduloId/lecciones", async (req, res) => {
+    try {
+      const validated = insertLeccionCursoSchema.parse({
+        ...req.body,
+        moduloId: req.params.moduloId
+      });
+      const leccion = await storage.createLeccionCurso(validated);
+      res.status(201).json(leccion);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/lecciones/:id", async (req, res) => {
+    try {
+      const leccion = await storage.getLeccionCurso(req.params.id);
+      if (!leccion) {
+        return res.status(404).json({ message: "Lección no encontrada" });
+      }
+      res.json(leccion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/lecciones/:id", async (req, res) => {
+    try {
+      const leccion = await storage.updateLeccionCurso(req.params.id, req.body);
+      res.json(leccion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/lecciones/:id", async (req, res) => {
+    try {
+      await storage.deleteLeccionCurso(req.params.id);
+      res.json({ message: "Lección eliminada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Quizzes ---
+  app.get("/api/cursos/:cursoId/quizzes", async (req, res) => {
+    try {
+      const quizzes = await storage.getQuizzesCurso(req.params.cursoId);
+      res.json(quizzes);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/cursos/:cursoId/quizzes", async (req, res) => {
+    try {
+      const validated = insertQuizCursoSchema.parse({
+        ...req.body,
+        cursoId: req.params.cursoId
+      });
+      const quiz = await storage.createQuizCurso(validated);
+      res.status(201).json(quiz);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/quizzes/:id", async (req, res) => {
+    try {
+      const quiz = await storage.getQuizCurso(req.params.id);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz no encontrado" });
+      }
+      res.json(quiz);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/quizzes/:id", async (req, res) => {
+    try {
+      const quiz = await storage.updateQuizCurso(req.params.id, req.body);
+      res.json(quiz);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/quizzes/:id", async (req, res) => {
+    try {
+      await storage.deleteQuizCurso(req.params.id);
+      res.json({ message: "Quiz eliminado" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Quiz Questions ---
+  app.get("/api/quizzes/:quizId/preguntas", async (req, res) => {
+    try {
+      const preguntas = await storage.getPreguntasQuiz(req.params.quizId);
+      res.json(preguntas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/quizzes/:quizId/preguntas", async (req, res) => {
+    try {
+      const validated = insertPreguntaQuizSchema.parse({
+        ...req.body,
+        quizId: req.params.quizId
+      });
+      const pregunta = await storage.createPreguntaQuiz(validated);
+      res.status(201).json(pregunta);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/preguntas/:id", async (req, res) => {
+    try {
+      const pregunta = await storage.updatePreguntaQuiz(req.params.id, req.body);
+      res.json(pregunta);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/preguntas/:id", async (req, res) => {
+    try {
+      await storage.deletePreguntaQuiz(req.params.id);
+      res.json({ message: "Pregunta eliminada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Assignment Rules ---
+  app.get("/api/reglas-asignacion-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const activo = req.query.activo === "true" ? true : req.query.activo === "false" ? false : undefined;
+      const reglas = await storage.getReglasAsignacionCursos(clienteId, activo);
+      res.json(reglas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/cursos/:cursoId/reglas-asignacion", async (req, res) => {
+    try {
+      const reglas = await storage.getReglasAsignacionByCurso(req.params.cursoId);
+      res.json(reglas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/reglas-asignacion-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const validated = insertReglaAsignacionCursoSchema.parse({ ...req.body, clienteId });
+      const regla = await storage.createReglaAsignacionCurso(validated);
+      res.status(201).json(regla);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/reglas-asignacion-cursos/:id", async (req, res) => {
+    try {
+      const regla = await storage.updateReglaAsignacionCurso(req.params.id, req.body);
+      res.json(regla);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/reglas-asignacion-cursos/:id", async (req, res) => {
+    try {
+      await storage.deleteReglaAsignacionCurso(req.params.id);
+      res.json({ message: "Regla eliminada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Course Assignments ---
+  app.get("/api/asignaciones-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const filters = {
+        empleadoId: req.query.empleadoId as string | undefined,
+        cursoId: req.query.cursoId as string | undefined,
+        estatus: req.query.estatus as string | undefined,
+        esObligatorio: req.query.esObligatorio === "true" ? true : req.query.esObligatorio === "false" ? false : undefined
+      };
+      const asignaciones = await storage.getAsignacionesCursos(clienteId, filters);
+      res.json(asignaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/asignaciones-cursos/vencidas", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const asignaciones = await storage.getAsignacionesCursosVencidas(clienteId);
+      res.json(asignaciones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/asignaciones-cursos/:id", async (req, res) => {
+    try {
+      const asignacion = await storage.getAsignacionCurso(req.params.id);
+      if (!asignacion) {
+        return res.status(404).json({ message: "Asignación no encontrada" });
+      }
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/asignaciones-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      const userId = req.session?.user?.id;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const validated = insertAsignacionCursoSchema.parse({
+        ...req.body,
+        clienteId,
+        asignadoPor: userId
+      });
+      const asignacion = await storage.createAsignacionCurso(validated);
+      res.status(201).json(asignacion);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        return res.status(400).json({ message: "Datos inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk assignment
+  app.post("/api/asignaciones-cursos/bulk", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      const userId = req.session?.user?.id;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+
+      const { empleadoIds, cursoIds, empresaId, tipoAsignacion, esObligatorio, diasParaCompletar } = req.body;
+
+      if (!Array.isArray(empleadoIds) || !Array.isArray(cursoIds)) {
+        return res.status(400).json({ message: "empleadoIds y cursoIds deben ser arrays" });
+      }
+
+      const fechaVencimiento = diasParaCompletar
+        ? new Date(Date.now() + diasParaCompletar * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        : null;
+
+      const asignaciones = [];
+      for (const empleadoId of empleadoIds) {
+        for (const cursoId of cursoIds) {
+          asignaciones.push({
+            clienteId,
+            empresaId,
+            empleadoId,
+            cursoId,
+            tipoAsignacion: tipoAsignacion || 'manual',
+            esObligatorio: esObligatorio || false,
+            asignadoPor: userId,
+            fechaVencimiento
+          });
+        }
+      }
+
+      const created = await storage.createAsignacionesCursosBulk(asignaciones);
+      res.status(201).json(created);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/asignaciones-cursos/:id", async (req, res) => {
+    try {
+      const asignacion = await storage.updateAsignacionCurso(req.params.id, req.body);
+      res.json(asignacion);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/asignaciones-cursos/:id", async (req, res) => {
+    try {
+      await storage.deleteAsignacionCurso(req.params.id);
+      res.json({ message: "Asignación eliminada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Certificates ---
+  app.get("/api/certificados-cursos", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+      const filters = {
+        empleadoId: req.query.empleadoId as string | undefined,
+        cursoId: req.query.cursoId as string | undefined,
+        estatus: req.query.estatus as string | undefined
+      };
+      const certificados = await storage.getCertificadosCursos(clienteId, filters);
+      res.json(certificados);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/certificados-cursos/verificar/:codigo", async (req, res) => {
+    try {
+      const certificado = await storage.getCertificadoByCodigo(req.params.codigo);
+      if (!certificado) {
+        return res.status(404).json({ message: "Certificado no encontrado", valido: false });
+      }
+      res.json({ ...certificado, valido: certificado.estatus === 'activo' });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - Cursos y Capacitaciones (Employee Portal)
+  // ============================================================================
+
+  // Get employee's assigned courses
+  app.get("/api/portal/mis-cursos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const asignaciones = await storage.getAsignacionesCursosByEmpleado(empleadoId);
+
+      // Enrich with course details
+      const cursosConDetalles = await Promise.all(
+        asignaciones.map(async (asignacion) => {
+          const curso = await storage.getCurso(asignacion.cursoId);
+          return {
+            ...asignacion,
+            curso
+          };
+        })
+      );
+
+      res.json(cursosConDetalles);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get specific course for player
+  app.get("/api/portal/cursos/:asignacionId", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const asignacion = await storage.getAsignacionCurso(req.params.asignacionId);
+
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(404).json({ message: "Curso no encontrado" });
+      }
+
+      const cursoCompleto = await storage.getCursoCompleto(asignacion.cursoId);
+      const progresos = await storage.getProgresoLeccionesByAsignacion(asignacion.id);
+
+      res.json({
+        asignacion,
+        ...cursoCompleto,
+        progresos
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Start a course
+  app.post("/api/portal/cursos/:asignacionId/iniciar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const asignacion = await storage.getAsignacionCurso(req.params.asignacionId);
+
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(404).json({ message: "Curso no encontrado" });
+      }
+
+      if (asignacion.estatus !== 'asignado') {
+        return res.status(400).json({ message: "El curso ya fue iniciado" });
+      }
+
+      const updated = await storage.iniciarCurso(req.params.asignacionId);
+      res.json(updated);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Mark lesson as complete
+  app.post("/api/portal/lecciones/:leccionId/completar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const { asignacionId, tiempoSegundos } = req.body;
+
+      const asignacion = await storage.getAsignacionCurso(asignacionId);
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      const progreso = await storage.completarLeccion(asignacionId, req.params.leccionId, tiempoSegundos);
+
+      // Update overall course progress
+      const porcentaje = await storage.calcularProgresoCurso(asignacionId);
+      await storage.updateAsignacionCurso(asignacionId, { porcentajeProgreso: porcentaje });
+
+      res.json(progreso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update lesson progress (partial)
+  app.post("/api/portal/lecciones/:leccionId/progreso", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const { asignacionId, porcentajeProgreso, tiempoSegundos } = req.body;
+
+      const asignacion = await storage.getAsignacionCurso(asignacionId);
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      let progreso = await storage.getProgresoLeccion(asignacionId, req.params.leccionId);
+
+      if (progreso) {
+        progreso = await storage.updateProgresoLeccion(progreso.id, {
+          porcentajeProgreso,
+          estatus: porcentajeProgreso >= 100 ? 'completado' : 'en_progreso',
+          tiempoInvertidoSegundos: (progreso.tiempoInvertidoSegundos || 0) + (tiempoSegundos || 0),
+          fechaCompletado: porcentajeProgreso >= 100 ? new Date() : undefined
+        });
+      } else {
+        progreso = await storage.createProgresoLeccion({
+          asignacionId,
+          leccionId: req.params.leccionId,
+          porcentajeProgreso,
+          estatus: porcentajeProgreso >= 100 ? 'completado' : 'en_progreso',
+          fechaInicio: new Date(),
+          tiempoInvertidoSegundos: tiempoSegundos || 0,
+          fechaCompletado: porcentajeProgreso >= 100 ? new Date() : undefined
+        });
+      }
+
+      res.json(progreso);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Start quiz attempt
+  app.post("/api/portal/quizzes/:quizId/iniciar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const { asignacionId } = req.body;
+
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const asignacion = await storage.getAsignacionCurso(asignacionId);
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      const quiz = await storage.getQuizCurso(req.params.quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz no encontrado" });
+      }
+
+      // Check attempt limits
+      const intentosAnteriores = await storage.getIntentosQuiz(asignacionId, req.params.quizId);
+      if (quiz.intentosMaximos && intentosAnteriores.length >= quiz.intentosMaximos) {
+        return res.status(400).json({ message: "Has alcanzado el máximo de intentos permitidos" });
+      }
+
+      const intento = await storage.createIntentoQuiz({
+        asignacionId,
+        quizId: req.params.quizId,
+        empleadoId,
+        numeroIntento: intentosAnteriores.length + 1,
+        fechaInicio: new Date(),
+        estatus: 'en_progreso'
+      });
+
+      // Get questions (optionally shuffled)
+      let preguntas = await storage.getPreguntasQuiz(req.params.quizId);
+      if (quiz.ordenAleatorio) {
+        preguntas = preguntas.sort(() => Math.random() - 0.5);
+      }
+
+      res.status(201).json({
+        intento,
+        preguntas: preguntas.map(p => ({
+          ...p,
+          // Remove correct answers from response
+          opciones: quiz.tipo === 'certification_exam'
+            ? (p.opciones as any[])?.map(o => ({ id: o.id, texto: o.texto }))
+            : p.opciones
+        })),
+        tiempoLimiteMinutos: quiz.tiempoLimiteMinutos
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Submit quiz
+  app.post("/api/portal/intentos/:intentoId/finalizar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const { respuestas } = req.body;
+
+      const intento = await storage.getIntentoQuiz(req.params.intentoId);
+      if (!intento || intento.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      if (intento.estatus !== 'en_progreso') {
+        return res.status(400).json({ message: "Este intento ya fue finalizado" });
+      }
+
+      // Get quiz questions to grade
+      const preguntas = await storage.getPreguntasQuiz(intento.quizId);
+      const quiz = await storage.getQuizCurso(intento.quizId);
+
+      let puntosObtenidos = 0;
+      let puntosMaximos = 0;
+      const respuestasCalificadas = [];
+
+      for (const pregunta of preguntas) {
+        const respuesta = respuestas?.find((r: any) => r.preguntaId === pregunta.id);
+        const puntosPregunta = pregunta.puntos || 1;
+        puntosMaximos += puntosPregunta;
+
+        let esCorrecta = false;
+        if (respuesta && pregunta.opciones) {
+          const opciones = pregunta.opciones as { id: string; texto: string; esCorrecta: boolean }[];
+
+          if (pregunta.tipoPregunta === 'multiple_choice' || pregunta.tipoPregunta === 'true_false') {
+            const opcionCorrecta = opciones.find(o => o.esCorrecta);
+            esCorrecta = opcionCorrecta?.id === respuesta.respuesta;
+          } else if (pregunta.tipoPregunta === 'multiple_select') {
+            const correctasIds = opciones.filter(o => o.esCorrecta).map(o => o.id).sort();
+            const seleccionadasIds = (respuesta.respuesta || []).sort();
+            esCorrecta = JSON.stringify(correctasIds) === JSON.stringify(seleccionadasIds);
+          }
+        }
+
+        if (esCorrecta) {
+          puntosObtenidos += puntosPregunta;
+        }
+
+        respuestasCalificadas.push({
+          preguntaId: pregunta.id,
+          respuesta: respuesta?.respuesta,
+          esCorrecta,
+          puntosObtenidos: esCorrecta ? puntosPregunta : 0
+        });
+      }
+
+      const intentoFinalizado = await storage.finalizarIntentoQuiz(
+        req.params.intentoId,
+        respuestasCalificadas,
+        puntosObtenidos,
+        puntosMaximos
+      );
+
+      // Update assignment if passed
+      if (intentoFinalizado.aprobado) {
+        const asignacion = await storage.getAsignacionCurso(intento.asignacionId);
+        if (asignacion) {
+          await storage.updateAsignacionCurso(intento.asignacionId, {
+            intentosRealizados: (asignacion.intentosRealizados || 0) + 1,
+            calificacionFinal: intentoFinalizado.calificacion ?? undefined,
+            aprobado: true
+          });
+        }
+      }
+
+      // Return result with correct answers if allowed
+      const mostrarRespuestas = quiz?.mostrarRespuestasCorrectas && quiz.tipo !== 'certification_exam';
+
+      res.json({
+        ...intentoFinalizado,
+        respuestasCorrectas: mostrarRespuestas ? respuestasCalificadas : undefined
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get employee's certificates
+  app.get("/api/portal/certificados", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const certificados = await storage.getCertificadosByEmpleado(empleadoId);
+      res.json(certificados);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

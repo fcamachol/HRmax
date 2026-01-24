@@ -259,7 +259,41 @@ import {
   catCodigosPostales,
   catSatTiposPercepcion,
   catSatTiposDeduccion,
-  catSatTiposOtroPago
+  catSatTiposOtroPago,
+  // Cursos y Capacitaciones
+  type CategoriaCurso,
+  type InsertCategoriaCurso,
+  categoriasCursos,
+  type Curso,
+  type InsertCurso,
+  cursos,
+  type ModuloCurso,
+  type InsertModuloCurso,
+  modulosCurso,
+  type LeccionCurso,
+  type InsertLeccionCurso,
+  leccionesCurso,
+  type QuizCurso,
+  type InsertQuizCurso,
+  quizzesCurso,
+  type PreguntaQuiz,
+  type InsertPreguntaQuiz,
+  preguntasQuiz,
+  type ReglaAsignacionCurso,
+  type InsertReglaAsignacionCurso,
+  reglasAsignacionCursos,
+  type AsignacionCurso,
+  type InsertAsignacionCurso,
+  asignacionesCursos,
+  type ProgresoLeccion,
+  type InsertProgresoLeccion,
+  progresoLecciones,
+  type IntentoQuiz,
+  type InsertIntentoQuiz,
+  intentosQuiz,
+  type CertificadoCurso,
+  type InsertCertificadoCurso,
+  certificadosCursos
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -810,7 +844,7 @@ export interface IStorage {
   // Vacaciones helpers
   checkVacacionesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudVacaciones[]>;
   getPendingVacacionesApprovals(): Promise<SolicitudVacaciones[]>;
-  getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{ disponibles: number, usados: number, pendientes: number }>;
+  getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{ disponibles: number, usados: number, pendientes: number, diasLegales: number, esquema?: string, fuente?: string }>;
   
   // Incapacidades helpers - with access control
   checkIncapacidadesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<Incapacidad[]>;
@@ -4070,11 +4104,18 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(solicitudesVacaciones.fechaSolicitud));
   }
 
-  async getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{ disponibles: number, usados: number, pendientes: number }> {
+  async getEmpleadoVacationBalance(empleadoId: string, year: number): Promise<{
+    disponibles: number,
+    usados: number,
+    pendientes: number,
+    diasLegales: number,
+    esquema?: string,
+    fuente?: string
+  }> {
     // Get approved and pending vacation requests for the year
     const startDate = `${year}-01-01`;
     const endDate = `${year}-12-31`;
-    
+
     const solicitudes = await db.select().from(solicitudesVacaciones).where(
       and(
         eq(solicitudesVacaciones.empleadoId, empleadoId),
@@ -4086,37 +4127,51 @@ export class DatabaseStorage implements IStorage {
     const usados = solicitudes
       .filter(s => s.estatus === "aprobada")
       .reduce((sum, s) => sum + Number(s.diasSolicitados), 0);
-    
+
     const pendientes = solicitudes
       .filter(s => s.estatus === "pendiente")
       .reduce((sum, s) => sum + Number(s.diasSolicitados), 0);
 
-    // Get employee info to calculate legal vacation days based on seniority
+    // Get employee info to calculate vacation days using cascade resolution
     const [employee] = await db.select().from(employees).where(eq(employees.id, empleadoId));
-    
-    let disponibles = 12; // Default: 1 year = 12 days per LFT Art 76
-    
+
+    let diasLegales = 12; // Default: 1 year = 12 days per LFT Art 76
+    let esquemaNombre: string | undefined;
+    let fuenteResolucion: string | undefined;
+
     if (employee && employee.fechaIngreso) {
       const ingreso = new Date(employee.fechaIngreso);
       const yearsWorked = year - ingreso.getFullYear();
-      
-      // LFT Art 76 - vacation days based on years of service
-      if (yearsWorked >= 1 && yearsWorked < 2) disponibles = 12;
-      else if (yearsWorked >= 2 && yearsWorked < 3) disponibles = 14;
-      else if (yearsWorked >= 3 && yearsWorked < 4) disponibles = 16;
-      else if (yearsWorked >= 4 && yearsWorked < 5) disponibles = 18;
-      else if (yearsWorked >= 5 && yearsWorked < 10) disponibles = 20;
-      else if (yearsWorked >= 10 && yearsWorked < 15) disponibles = 22;
-      else if (yearsWorked >= 15 && yearsWorked < 20) disponibles = 24;
-      else if (yearsWorked >= 20 && yearsWorked < 25) disponibles = 26;
-      else if (yearsWorked >= 25 && yearsWorked < 30) disponibles = 28;
-      else if (yearsWorked >= 30) disponibles = 30;
+
+      // Use cascading resolution: Employee > Puesto > Empresa > Cliente > LFT
+      try {
+        const resolution = await this.resolveVacationDays(empleadoId, yearsWorked);
+        diasLegales = resolution.diasVacaciones;
+        esquemaNombre = resolution.esquema?.nombre;
+        fuenteResolucion = resolution.fuente;
+      } catch {
+        // Fallback to LFT Art 76 if resolution fails
+        if (yearsWorked >= 1 && yearsWorked < 2) diasLegales = 12;
+        else if (yearsWorked >= 2 && yearsWorked < 3) diasLegales = 14;
+        else if (yearsWorked >= 3 && yearsWorked < 4) diasLegales = 16;
+        else if (yearsWorked >= 4 && yearsWorked < 5) diasLegales = 18;
+        else if (yearsWorked >= 5 && yearsWorked < 10) diasLegales = 20;
+        else if (yearsWorked >= 10 && yearsWorked < 15) diasLegales = 22;
+        else if (yearsWorked >= 15 && yearsWorked < 20) diasLegales = 24;
+        else if (yearsWorked >= 20 && yearsWorked < 25) diasLegales = 26;
+        else if (yearsWorked >= 25 && yearsWorked < 30) diasLegales = 28;
+        else if (yearsWorked >= 30) diasLegales = 30;
+        fuenteResolucion = "lft";
+      }
     }
 
     return {
-      disponibles: disponibles - usados,
+      disponibles: diasLegales - usados - pendientes,
       usados,
       pendientes,
+      diasLegales,
+      esquema: esquemaNombre,
+      fuente: fuenteResolucion,
     };
   }
 
@@ -5096,7 +5151,7 @@ export class DatabaseStorage implements IStorage {
   async resolveVacationDays(empleadoId: string, aniosAntiguedad: number): Promise<{
     diasVacaciones: number;
     esquema: EsquemaPresta | null;
-    fuente: "esquema" | "lft" | "legacy";
+    fuente: "empleado" | "puesto" | "empresa" | "cliente" | "lft" | "legacy";
   }> {
     const employee = await this.getEmployee(empleadoId);
     if (!employee) {
@@ -5105,15 +5160,53 @@ export class DatabaseStorage implements IStorage {
 
     let esquemaId: string | undefined;
     let legacyEsquemaId: string | undefined;
+    let fuente: "empleado" | "puesto" | "empresa" | "cliente" | "lft" | "legacy" = "lft";
 
-    if (employee.puestoId) {
+    // LEVEL 1: Employee override (highest priority)
+    if (employee.esquemaPrestacionesId) {
+      const esquemaCheck = await this.getEsquemaPresta(employee.esquemaPrestacionesId);
+      if (esquemaCheck) {
+        esquemaId = employee.esquemaPrestacionesId;
+        fuente = "empleado";
+      } else {
+        legacyEsquemaId = employee.esquemaPrestacionesId;
+      }
+    }
+
+    // LEVEL 2: Puesto (if no employee override)
+    if (!esquemaId && !legacyEsquemaId && employee.puestoId) {
       const puesto = await this.getPuesto(employee.puestoId);
       if (puesto?.esquemaPrestacionesId) {
         const esquemaCheck = await this.getEsquemaPresta(puesto.esquemaPrestacionesId);
         if (esquemaCheck) {
           esquemaId = puesto.esquemaPrestacionesId;
+          fuente = "puesto";
         } else {
           legacyEsquemaId = puesto.esquemaPrestacionesId;
+        }
+      }
+    }
+
+    // LEVEL 3: Empresa (if no employee/puesto override)
+    if (!esquemaId && !legacyEsquemaId && employee.empresaId) {
+      const empresa = await this.getEmpresa(employee.empresaId);
+      if (empresa?.esquemaPrestacionesId) {
+        const esquemaCheck = await this.getEsquemaPresta(empresa.esquemaPrestacionesId);
+        if (esquemaCheck) {
+          esquemaId = empresa.esquemaPrestacionesId;
+          fuente = "empresa";
+        }
+      }
+    }
+
+    // LEVEL 4: Cliente (if no empresa/puesto/employee override)
+    if (!esquemaId && !legacyEsquemaId && employee.clienteId) {
+      const cliente = await this.getCliente(employee.clienteId);
+      if (cliente?.esquemaPrestacionesId) {
+        const esquemaCheck = await this.getEsquemaPresta(cliente.esquemaPrestacionesId);
+        if (esquemaCheck) {
+          esquemaId = cliente.esquemaPrestacionesId;
+          fuente = "cliente";
         }
       }
     }
@@ -5122,13 +5215,12 @@ export class DatabaseStorage implements IStorage {
 
     let vacaciones: EsquemaVacacionesRow[] = [];
     let esquema: EsquemaPresta | null = null;
-    let fuente: "esquema" | "lft" | "legacy" = "lft";
 
     if (esquemaId) {
       vacaciones = await this.getEsquemaVacaciones(esquemaId);
       if (vacaciones.length > 0) {
         esquema = await this.getEsquemaPresta(esquemaId) || null;
-        fuente = "esquema";
+        // fuente already set from cascade check above
       }
     }
 
@@ -5136,13 +5228,13 @@ export class DatabaseStorage implements IStorage {
       let legacyRows = await db.select().from(catTablasPrestaciones)
         .where(eq(catTablasPrestaciones.id, legacyEsquemaId))
         .limit(1);
-      
+
       if (legacyRows.length === 0) {
         legacyRows = await db.select().from(catTablasPrestaciones)
           .where(eq(catTablasPrestaciones.nombreEsquema, legacyEsquemaId))
           .limit(1);
       }
-      
+
       const legacyRow = legacyRows[0];
       if (legacyRow) {
         const allLegacyRows = await db.select().from(catTablasPrestaciones)
@@ -5938,6 +6030,560 @@ export class DatabaseStorage implements IStorage {
       .where(eq(onboardingAudits.id, id))
       .returning();
     return updated;
+  }
+
+  // ============================================================================
+  // CURSOS Y CAPACITACIONES (Training & Courses LMS)
+  // ============================================================================
+
+  // --- Course Categories ---
+  async createCategoriaCurso(categoria: InsertCategoriaCurso): Promise<CategoriaCurso> {
+    const [created] = await db.insert(categoriasCursos).values(categoria).returning();
+    return created;
+  }
+
+  async getCategoriaCurso(id: string): Promise<CategoriaCurso | undefined> {
+    const [categoria] = await db.select().from(categoriasCursos).where(eq(categoriasCursos.id, id));
+    return categoria || undefined;
+  }
+
+  async getCategoriasCursos(clienteId: string): Promise<CategoriaCurso[]> {
+    return db.select().from(categoriasCursos)
+      .where(eq(categoriasCursos.clienteId, clienteId))
+      .orderBy(categoriasCursos.orden);
+  }
+
+  async updateCategoriaCurso(id: string, updates: Partial<InsertCategoriaCurso>): Promise<CategoriaCurso> {
+    const [updated] = await db.update(categoriasCursos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(categoriasCursos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCategoriaCurso(id: string): Promise<void> {
+    await db.delete(categoriasCursos).where(eq(categoriasCursos.id, id));
+  }
+
+  // --- Courses ---
+  async createCurso(curso: InsertCurso): Promise<Curso> {
+    const [created] = await db.insert(cursos).values(curso).returning();
+    return created;
+  }
+
+  async getCurso(id: string): Promise<Curso | undefined> {
+    const [curso] = await db.select().from(cursos).where(eq(cursos.id, id));
+    return curso || undefined;
+  }
+
+  async getCursos(clienteId: string, estatus?: string): Promise<Curso[]> {
+    const conditions = [eq(cursos.clienteId, clienteId)];
+    if (estatus) {
+      conditions.push(eq(cursos.estatus, estatus));
+    }
+    return db.select().from(cursos)
+      .where(and(...conditions))
+      .orderBy(desc(cursos.createdAt));
+  }
+
+  async getCursosPublicados(clienteId: string): Promise<Curso[]> {
+    return this.getCursos(clienteId, 'publicado');
+  }
+
+  async updateCurso(id: string, updates: Partial<InsertCurso>): Promise<Curso> {
+    const [updated] = await db.update(cursos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(cursos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteCurso(id: string): Promise<void> {
+    await db.delete(cursos).where(eq(cursos.id, id));
+  }
+
+  async publicarCurso(id: string): Promise<Curso> {
+    return this.updateCurso(id, { estatus: 'publicado', fechaPublicacion: new Date() });
+  }
+
+  async archivarCurso(id: string): Promise<Curso> {
+    return this.updateCurso(id, { estatus: 'archivado' });
+  }
+
+  // --- Course Modules ---
+  async createModuloCurso(modulo: InsertModuloCurso): Promise<ModuloCurso> {
+    const [created] = await db.insert(modulosCurso).values(modulo).returning();
+    return created;
+  }
+
+  async getModuloCurso(id: string): Promise<ModuloCurso | undefined> {
+    const [modulo] = await db.select().from(modulosCurso).where(eq(modulosCurso.id, id));
+    return modulo || undefined;
+  }
+
+  async getModulosCurso(cursoId: string): Promise<ModuloCurso[]> {
+    return db.select().from(modulosCurso)
+      .where(eq(modulosCurso.cursoId, cursoId))
+      .orderBy(modulosCurso.orden);
+  }
+
+  async updateModuloCurso(id: string, updates: Partial<InsertModuloCurso>): Promise<ModuloCurso> {
+    const [updated] = await db.update(modulosCurso)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(modulosCurso.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteModuloCurso(id: string): Promise<void> {
+    await db.delete(modulosCurso).where(eq(modulosCurso.id, id));
+  }
+
+  async reordenarModulosCurso(cursoId: string, ordenIds: string[]): Promise<void> {
+    for (let i = 0; i < ordenIds.length; i++) {
+      await db.update(modulosCurso)
+        .set({ orden: i + 1, updatedAt: new Date() })
+        .where(and(eq(modulosCurso.id, ordenIds[i]), eq(modulosCurso.cursoId, cursoId)));
+    }
+  }
+
+  // --- Course Lessons ---
+  async createLeccionCurso(leccion: InsertLeccionCurso): Promise<LeccionCurso> {
+    const [created] = await db.insert(leccionesCurso).values(leccion).returning();
+    return created;
+  }
+
+  async getLeccionCurso(id: string): Promise<LeccionCurso | undefined> {
+    const [leccion] = await db.select().from(leccionesCurso).where(eq(leccionesCurso.id, id));
+    return leccion || undefined;
+  }
+
+  async getLeccionesCurso(moduloId: string): Promise<LeccionCurso[]> {
+    return db.select().from(leccionesCurso)
+      .where(eq(leccionesCurso.moduloId, moduloId))
+      .orderBy(leccionesCurso.orden);
+  }
+
+  async getLeccionesByCurso(cursoId: string): Promise<LeccionCurso[]> {
+    const modulos = await this.getModulosCurso(cursoId);
+    const moduloIds = modulos.map(m => m.id);
+    if (moduloIds.length === 0) return [];
+
+    return db.select().from(leccionesCurso)
+      .where(inArray(leccionesCurso.moduloId, moduloIds))
+      .orderBy(leccionesCurso.orden);
+  }
+
+  async updateLeccionCurso(id: string, updates: Partial<InsertLeccionCurso>): Promise<LeccionCurso> {
+    const [updated] = await db.update(leccionesCurso)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(leccionesCurso.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteLeccionCurso(id: string): Promise<void> {
+    await db.delete(leccionesCurso).where(eq(leccionesCurso.id, id));
+  }
+
+  // --- Quizzes ---
+  async createQuizCurso(quiz: InsertQuizCurso): Promise<QuizCurso> {
+    const [created] = await db.insert(quizzesCurso).values(quiz).returning();
+    return created;
+  }
+
+  async getQuizCurso(id: string): Promise<QuizCurso | undefined> {
+    const [quiz] = await db.select().from(quizzesCurso).where(eq(quizzesCurso.id, id));
+    return quiz || undefined;
+  }
+
+  async getQuizzesCurso(cursoId: string): Promise<QuizCurso[]> {
+    return db.select().from(quizzesCurso)
+      .where(eq(quizzesCurso.cursoId, cursoId))
+      .orderBy(quizzesCurso.createdAt);
+  }
+
+  async updateQuizCurso(id: string, updates: Partial<InsertQuizCurso>): Promise<QuizCurso> {
+    const [updated] = await db.update(quizzesCurso)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(quizzesCurso.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteQuizCurso(id: string): Promise<void> {
+    await db.delete(quizzesCurso).where(eq(quizzesCurso.id, id));
+  }
+
+  // --- Quiz Questions ---
+  async createPreguntaQuiz(pregunta: InsertPreguntaQuiz): Promise<PreguntaQuiz> {
+    const [created] = await db.insert(preguntasQuiz).values(pregunta).returning();
+    return created;
+  }
+
+  async getPreguntaQuiz(id: string): Promise<PreguntaQuiz | undefined> {
+    const [pregunta] = await db.select().from(preguntasQuiz).where(eq(preguntasQuiz.id, id));
+    return pregunta || undefined;
+  }
+
+  async getPreguntasQuiz(quizId: string): Promise<PreguntaQuiz[]> {
+    return db.select().from(preguntasQuiz)
+      .where(eq(preguntasQuiz.quizId, quizId))
+      .orderBy(preguntasQuiz.orden);
+  }
+
+  async updatePreguntaQuiz(id: string, updates: Partial<InsertPreguntaQuiz>): Promise<PreguntaQuiz> {
+    const [updated] = await db.update(preguntasQuiz)
+      .set(updates)
+      .where(eq(preguntasQuiz.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deletePreguntaQuiz(id: string): Promise<void> {
+    await db.delete(preguntasQuiz).where(eq(preguntasQuiz.id, id));
+  }
+
+  // --- Assignment Rules ---
+  async createReglaAsignacionCurso(regla: InsertReglaAsignacionCurso): Promise<ReglaAsignacionCurso> {
+    const [created] = await db.insert(reglasAsignacionCursos).values(regla).returning();
+    return created;
+  }
+
+  async getReglaAsignacionCurso(id: string): Promise<ReglaAsignacionCurso | undefined> {
+    const [regla] = await db.select().from(reglasAsignacionCursos).where(eq(reglasAsignacionCursos.id, id));
+    return regla || undefined;
+  }
+
+  async getReglasAsignacionCursos(clienteId: string, activo?: boolean): Promise<ReglaAsignacionCurso[]> {
+    const conditions = [eq(reglasAsignacionCursos.clienteId, clienteId)];
+    if (activo !== undefined) {
+      conditions.push(eq(reglasAsignacionCursos.activo, activo));
+    }
+    return db.select().from(reglasAsignacionCursos)
+      .where(and(...conditions))
+      .orderBy(desc(reglasAsignacionCursos.prioridad));
+  }
+
+  async getReglasAsignacionByCurso(cursoId: string): Promise<ReglaAsignacionCurso[]> {
+    return db.select().from(reglasAsignacionCursos)
+      .where(eq(reglasAsignacionCursos.cursoId, cursoId))
+      .orderBy(desc(reglasAsignacionCursos.prioridad));
+  }
+
+  async getReglasAsignacionByTrigger(clienteId: string, tipoTrigger: string): Promise<ReglaAsignacionCurso[]> {
+    return db.select().from(reglasAsignacionCursos)
+      .where(and(
+        eq(reglasAsignacionCursos.clienteId, clienteId),
+        eq(reglasAsignacionCursos.tipoTrigger, tipoTrigger),
+        eq(reglasAsignacionCursos.activo, true)
+      ))
+      .orderBy(desc(reglasAsignacionCursos.prioridad));
+  }
+
+  async updateReglaAsignacionCurso(id: string, updates: Partial<InsertReglaAsignacionCurso>): Promise<ReglaAsignacionCurso> {
+    const [updated] = await db.update(reglasAsignacionCursos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(reglasAsignacionCursos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteReglaAsignacionCurso(id: string): Promise<void> {
+    await db.delete(reglasAsignacionCursos).where(eq(reglasAsignacionCursos.id, id));
+  }
+
+  // --- Course Assignments ---
+  async createAsignacionCurso(asignacion: InsertAsignacionCurso): Promise<AsignacionCurso> {
+    const [created] = await db.insert(asignacionesCursos).values(asignacion).returning();
+    return created;
+  }
+
+  async createAsignacionesCursosBulk(asignaciones: InsertAsignacionCurso[]): Promise<AsignacionCurso[]> {
+    if (asignaciones.length === 0) return [];
+    return db.insert(asignacionesCursos).values(asignaciones).returning();
+  }
+
+  async getAsignacionCurso(id: string): Promise<AsignacionCurso | undefined> {
+    const [asignacion] = await db.select().from(asignacionesCursos).where(eq(asignacionesCursos.id, id));
+    return asignacion || undefined;
+  }
+
+  async getAsignacionesCursos(clienteId: string, filters?: {
+    empleadoId?: string;
+    cursoId?: string;
+    estatus?: string;
+    esObligatorio?: boolean;
+  }): Promise<AsignacionCurso[]> {
+    const conditions = [eq(asignacionesCursos.clienteId, clienteId)];
+
+    if (filters?.empleadoId) {
+      conditions.push(eq(asignacionesCursos.empleadoId, filters.empleadoId));
+    }
+    if (filters?.cursoId) {
+      conditions.push(eq(asignacionesCursos.cursoId, filters.cursoId));
+    }
+    if (filters?.estatus) {
+      conditions.push(eq(asignacionesCursos.estatus, filters.estatus));
+    }
+    if (filters?.esObligatorio !== undefined) {
+      conditions.push(eq(asignacionesCursos.esObligatorio, filters.esObligatorio));
+    }
+
+    return db.select().from(asignacionesCursos)
+      .where(and(...conditions))
+      .orderBy(desc(asignacionesCursos.fechaAsignacion));
+  }
+
+  async getAsignacionesCursosByEmpleado(empleadoId: string): Promise<AsignacionCurso[]> {
+    return db.select().from(asignacionesCursos)
+      .where(eq(asignacionesCursos.empleadoId, empleadoId))
+      .orderBy(desc(asignacionesCursos.fechaAsignacion));
+  }
+
+  async getAsignacionesCursosVencidas(clienteId: string): Promise<AsignacionCurso[]> {
+    const today = new Date().toISOString().split('T')[0];
+    return db.select().from(asignacionesCursos)
+      .where(and(
+        eq(asignacionesCursos.clienteId, clienteId),
+        not(eq(asignacionesCursos.estatus, 'completado')),
+        lte(asignacionesCursos.fechaVencimiento, today)
+      ))
+      .orderBy(asignacionesCursos.fechaVencimiento);
+  }
+
+  async updateAsignacionCurso(id: string, updates: Partial<InsertAsignacionCurso>): Promise<AsignacionCurso> {
+    const [updated] = await db.update(asignacionesCursos)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(asignacionesCursos.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteAsignacionCurso(id: string): Promise<void> {
+    await db.delete(asignacionesCursos).where(eq(asignacionesCursos.id, id));
+  }
+
+  async iniciarCurso(asignacionId: string): Promise<AsignacionCurso> {
+    return this.updateAsignacionCurso(asignacionId, {
+      estatus: 'en_progreso',
+      fechaInicio: new Date()
+    });
+  }
+
+  async completarCurso(asignacionId: string, calificacion?: number, aprobado?: boolean): Promise<AsignacionCurso> {
+    return this.updateAsignacionCurso(asignacionId, {
+      estatus: 'completado',
+      fechaCompletado: new Date(),
+      porcentajeProgreso: 100,
+      calificacionFinal: calificacion,
+      aprobado: aprobado
+    });
+  }
+
+  // --- Lesson Progress ---
+  async createProgresoLeccion(progreso: InsertProgresoLeccion): Promise<ProgresoLeccion> {
+    const [created] = await db.insert(progresoLecciones).values(progreso).returning();
+    return created;
+  }
+
+  async getProgresoLeccion(asignacionId: string, leccionId: string): Promise<ProgresoLeccion | undefined> {
+    const [progreso] = await db.select().from(progresoLecciones)
+      .where(and(
+        eq(progresoLecciones.asignacionId, asignacionId),
+        eq(progresoLecciones.leccionId, leccionId)
+      ));
+    return progreso || undefined;
+  }
+
+  async getProgresoLeccionesByAsignacion(asignacionId: string): Promise<ProgresoLeccion[]> {
+    return db.select().from(progresoLecciones)
+      .where(eq(progresoLecciones.asignacionId, asignacionId));
+  }
+
+  async updateProgresoLeccion(id: string, updates: Partial<InsertProgresoLeccion>): Promise<ProgresoLeccion> {
+    const [updated] = await db.update(progresoLecciones)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(progresoLecciones.id, id))
+      .returning();
+    return updated;
+  }
+
+  async completarLeccion(asignacionId: string, leccionId: string, tiempoSegundos?: number): Promise<ProgresoLeccion> {
+    const existente = await this.getProgresoLeccion(asignacionId, leccionId);
+
+    if (existente) {
+      return this.updateProgresoLeccion(existente.id, {
+        estatus: 'completado',
+        porcentajeProgreso: 100,
+        fechaCompletado: new Date(),
+        tiempoInvertidoSegundos: (existente.tiempoInvertidoSegundos || 0) + (tiempoSegundos || 0)
+      });
+    } else {
+      return this.createProgresoLeccion({
+        asignacionId,
+        leccionId,
+        estatus: 'completado',
+        porcentajeProgreso: 100,
+        fechaInicio: new Date(),
+        fechaCompletado: new Date(),
+        tiempoInvertidoSegundos: tiempoSegundos || 0
+      });
+    }
+  }
+
+  // --- Quiz Attempts ---
+  async createIntentoQuiz(intento: InsertIntentoQuiz): Promise<IntentoQuiz> {
+    const [created] = await db.insert(intentosQuiz).values(intento).returning();
+    return created;
+  }
+
+  async getIntentoQuiz(id: string): Promise<IntentoQuiz | undefined> {
+    const [intento] = await db.select().from(intentosQuiz).where(eq(intentosQuiz.id, id));
+    return intento || undefined;
+  }
+
+  async getIntentosQuiz(asignacionId: string, quizId: string): Promise<IntentoQuiz[]> {
+    return db.select().from(intentosQuiz)
+      .where(and(
+        eq(intentosQuiz.asignacionId, asignacionId),
+        eq(intentosQuiz.quizId, quizId)
+      ))
+      .orderBy(intentosQuiz.numeroIntento);
+  }
+
+  async getUltimoIntentoQuiz(asignacionId: string, quizId: string): Promise<IntentoQuiz | undefined> {
+    const [intento] = await db.select().from(intentosQuiz)
+      .where(and(
+        eq(intentosQuiz.asignacionId, asignacionId),
+        eq(intentosQuiz.quizId, quizId)
+      ))
+      .orderBy(desc(intentosQuiz.numeroIntento))
+      .limit(1);
+    return intento || undefined;
+  }
+
+  async updateIntentoQuiz(id: string, updates: Partial<InsertIntentoQuiz>): Promise<IntentoQuiz> {
+    const [updated] = await db.update(intentosQuiz)
+      .set(updates)
+      .where(eq(intentosQuiz.id, id))
+      .returning();
+    return updated;
+  }
+
+  async finalizarIntentoQuiz(id: string, respuestas: any[], puntosObtenidos: number, puntosMaximos: number): Promise<IntentoQuiz> {
+    const calificacion = puntosMaximos > 0 ? Math.round((puntosObtenidos / puntosMaximos) * 100) : 0;
+    const quiz = await this.getIntentoQuiz(id);
+    const quizConfig = quiz ? await this.getQuizCurso(quiz.quizId) : null;
+    const aprobado = calificacion >= (quizConfig?.calificacionMinima || 70);
+
+    const now = new Date();
+    const fechaInicio = quiz?.fechaInicio || now;
+    const tiempoUtilizado = Math.round((now.getTime() - new Date(fechaInicio).getTime()) / 1000);
+
+    return this.updateIntentoQuiz(id, {
+      respuestas,
+      puntosObtenidos,
+      puntosMaximos,
+      calificacion,
+      aprobado,
+      fechaFin: now,
+      tiempoUtilizadoSegundos: tiempoUtilizado,
+      estatus: 'completado'
+    });
+  }
+
+  // --- Certificates ---
+  async createCertificadoCurso(certificado: InsertCertificadoCurso): Promise<CertificadoCurso> {
+    const [created] = await db.insert(certificadosCursos).values(certificado).returning();
+    return created;
+  }
+
+  async getCertificadoCurso(id: string): Promise<CertificadoCurso | undefined> {
+    const [certificado] = await db.select().from(certificadosCursos).where(eq(certificadosCursos.id, id));
+    return certificado || undefined;
+  }
+
+  async getCertificadoByCodigo(codigoCertificado: string): Promise<CertificadoCurso | undefined> {
+    const [certificado] = await db.select().from(certificadosCursos)
+      .where(eq(certificadosCursos.codigoCertificado, codigoCertificado));
+    return certificado || undefined;
+  }
+
+  async getCertificadosCursos(clienteId: string, filters?: {
+    empleadoId?: string;
+    cursoId?: string;
+    estatus?: string;
+  }): Promise<CertificadoCurso[]> {
+    const conditions = [eq(certificadosCursos.clienteId, clienteId)];
+
+    if (filters?.empleadoId) {
+      conditions.push(eq(certificadosCursos.empleadoId, filters.empleadoId));
+    }
+    if (filters?.cursoId) {
+      conditions.push(eq(certificadosCursos.cursoId, filters.cursoId));
+    }
+    if (filters?.estatus) {
+      conditions.push(eq(certificadosCursos.estatus, filters.estatus));
+    }
+
+    return db.select().from(certificadosCursos)
+      .where(and(...conditions))
+      .orderBy(desc(certificadosCursos.fechaEmision));
+  }
+
+  async getCertificadosByEmpleado(empleadoId: string): Promise<CertificadoCurso[]> {
+    return db.select().from(certificadosCursos)
+      .where(eq(certificadosCursos.empleadoId, empleadoId))
+      .orderBy(desc(certificadosCursos.fechaEmision));
+  }
+
+  async updateCertificadoCurso(id: string, updates: Partial<InsertCertificadoCurso>): Promise<CertificadoCurso> {
+    const [updated] = await db.update(certificadosCursos)
+      .set(updates)
+      .where(eq(certificadosCursos.id, id))
+      .returning();
+    return updated;
+  }
+
+  // --- Helper: Get full course with structure ---
+  async getCursoCompleto(cursoId: string): Promise<{
+    curso: Curso;
+    modulos: (ModuloCurso & { lecciones: LeccionCurso[] })[];
+    quizzes: QuizCurso[];
+  } | undefined> {
+    const curso = await this.getCurso(cursoId);
+    if (!curso) return undefined;
+
+    const modulos = await this.getModulosCurso(cursoId);
+    const modulosConLecciones = await Promise.all(
+      modulos.map(async (modulo) => ({
+        ...modulo,
+        lecciones: await this.getLeccionesCurso(modulo.id)
+      }))
+    );
+
+    const quizzes = await this.getQuizzesCurso(cursoId);
+
+    return {
+      curso,
+      modulos: modulosConLecciones,
+      quizzes
+    };
+  }
+
+  // --- Helper: Calculate course progress ---
+  async calcularProgresoCurso(asignacionId: string): Promise<number> {
+    const asignacion = await this.getAsignacionCurso(asignacionId);
+    if (!asignacion) return 0;
+
+    const lecciones = await this.getLeccionesByCurso(asignacion.cursoId);
+    if (lecciones.length === 0) return 0;
+
+    const progresos = await this.getProgresoLeccionesByAsignacion(asignacionId);
+    const leccionesCompletadas = progresos.filter(p => p.estatus === 'completado').length;
+
+    return Math.round((leccionesCompletadas / lecciones.length) * 100);
   }
 }
 

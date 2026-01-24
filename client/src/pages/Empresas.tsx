@@ -30,6 +30,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import EmpresaForm from "@/components/EmpresaForm";
 import RegistroPatronalManager from "@/components/RegistroPatronalManager";
 import CredencialesManager from "@/components/CredencialesManager";
+import { VacationSchemeSelector } from "@/components/VacationSchemeSelector";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function Empresas() {
@@ -182,9 +183,10 @@ export default function Empresas() {
                         </DialogDescription>
                       </DialogHeader>
                       <Tabs defaultValue="registros" className="w-full">
-                        <TabsList className="grid w-full grid-cols-3">
+                        <TabsList className="grid w-full grid-cols-4">
                           <TabsTrigger value="registros">Registros Patronales</TabsTrigger>
                           <TabsTrigger value="credenciales">Credenciales</TabsTrigger>
+                          <TabsTrigger value="vacaciones">Vacaciones</TabsTrigger>
                           <TabsTrigger value="info">Información</TabsTrigger>
                         </TabsList>
                         <TabsContent value="registros" className="mt-4">
@@ -192,6 +194,14 @@ export default function Empresas() {
                         </TabsContent>
                         <TabsContent value="credenciales" className="mt-4">
                           <CredencialesManager empresaId={empresa.id!} />
+                        </TabsContent>
+                        <TabsContent value="vacaciones" className="mt-4">
+                          <VacationSchemeSelector
+                            entityType="empresa"
+                            entityId={empresa.id!}
+                            currentSchemeId={empresa.esquemaPrestacionesId}
+                            entityName={empresa.razonSocial}
+                          />
                         </TabsContent>
                         <TabsContent value="info" className="mt-4 space-y-4">
                           <div className="grid gap-4 md:grid-cols-2">

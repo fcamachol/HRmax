@@ -12,6 +12,9 @@ declare module "express-session" {
       clienteId?: string | null;
       role?: string;
       isSuperAdmin?: boolean;
+      // Portal de empleados
+      empleadoId?: string | null;
+      portalActivo?: boolean;
     };
   }
 }
@@ -25,6 +28,9 @@ declare module "express-serve-static-core" {
       clienteId?: string | null;
       role?: string;
       isSuperAdmin?: boolean;
+      // Portal de empleados
+      empleadoId?: string | null;
+      portalActivo?: boolean;
     };
   }
 }
@@ -109,6 +115,9 @@ export function sessionAuthMiddleware(
       clienteId: req.session.user.clienteId,
       role: req.session.user.role,
       isSuperAdmin: req.session.user.isSuperAdmin,
+      // Portal de empleados
+      empleadoId: req.session.user.empleadoId,
+      portalActivo: req.session.user.portalActivo,
     };
     return next();
   }
@@ -201,6 +210,53 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
   if (!req.user.isSuperAdmin) {
     return res.status(403).json({
       message: "Acceso denegado. Esta acción requiere privilegios de Super Admin.",
+    });
+  }
+
+  next();
+}
+
+// ============================================================================
+// PORTAL DE EMPLEADOS - Employee Portal Authentication
+// ============================================================================
+
+/**
+ * Middleware to require employee portal authentication.
+ * Only allows users with tipoUsuario = "empleado" and portalActivo = true.
+ */
+export function requireEmployeeAuth(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      message: "No autenticado. Inicie sesión para continuar.",
+    });
+  }
+
+  // Must be an employee user type
+  if (req.user.tipoUsuario !== "empleado") {
+    return res.status(403).json({
+      message: "Acceso restringido al portal de empleados.",
+    });
+  }
+
+  next();
+}
+
+/**
+ * Middleware to allow either admin users OR employee users (for shared endpoints).
+ * Use this for endpoints that both admin and employees can access with different data scopes.
+ */
+export function requireAuthOrEmployee(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      message: "No autenticado. Inicie sesión para continuar.",
+    });
+  }
+
+  // Allow maxtalent, cliente admins, and empleados
+  const allowedTypes = ["maxtalent", "cliente", "empleado"];
+  if (!allowedTypes.includes(req.user.tipoUsuario || "")) {
+    return res.status(403).json({
+      message: "Tipo de usuario no autorizado.",
     });
   }
 

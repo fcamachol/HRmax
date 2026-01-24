@@ -258,7 +258,7 @@ export function calcularISR(
   config: ConfiguracionNomina = configuracionDefault
 ): { isr: number; subsidioEmpleo: number; isrRetenido: number } {
   const tabla = config.isrTablas[periodicidad];
-  
+
   // Buscar el tramo ISR correspondiente
   const tramo = tabla.tramos.find(
     (t) =>
@@ -302,7 +302,7 @@ export function calcularIMSSTrabajador(
 ): number {
   const umaDiaria = config.uma.diaria;
   const limiteExcedente = 3 * umaDiaria; // 3 UMAs
-  
+
   let totalIMSS = 0;
 
   config.imssCuotas.forEach((cuota) => {
@@ -357,23 +357,23 @@ function validarFormula(formula: string, variables: Record<string, number>): { v
     .replace(/\bROUND\b/gi, 'round')
     .replace(/\bCEIL\b/gi, 'ceil')
     .replace(/\bFLOOR\b/gi, 'floor');
-  
+
   const variablesEnFormula = normalizada.match(/[a-zA-Z_][a-zA-Z0-9_]*/g) || [];
-  
+
   for (const varName of variablesEnFormula) {
     const isAllowedFunction = ALLOWED_FUNCTIONS.includes(varName.toLowerCase());
     const isAllowedVariable = ALLOWED_FORMULA_VARIABLES.has(varName) || variables[varName] !== undefined;
-    
+
     if (!isAllowedFunction && !isAllowedVariable) {
       return { valid: false, error: `Variable o función no permitida: ${varName}` };
     }
   }
-  
+
   const patronPermitido = /^[\d\s+\-*/().,%a-zA-Z_]+$/;
   if (!patronPermitido.test(normalizada)) {
     return { valid: false, error: 'Caracteres no permitidos en la fórmula' };
   }
-  
+
   return { valid: true };
 }
 
@@ -395,8 +395,8 @@ export function evaluarFormula(
     UMA_DIARIA: config.uma.diaria,
     UMA_MENSUAL: config.uma.mensual,
     UMA_ANUAL: config.uma.anual,
-    SALARIO_MINIMO: empleado.zona === 'frontera' 
-      ? config.salarioMinimo.zonaFrontera 
+    SALARIO_MINIMO: empleado.zona === 'frontera'
+      ? config.salarioMinimo.zonaFrontera
       : config.salarioMinimo.zonaGeneral,
     salario_base: empleado.salarioBase,
     salario_diario: empleado.salarioDiario,
@@ -405,8 +405,8 @@ export function evaluarFormula(
     uma_diaria: config.uma.diaria,
     uma_mensual: config.uma.mensual,
     uma_anual: config.uma.anual,
-    salario_minimo: empleado.zona === 'frontera' 
-      ? config.salarioMinimo.zonaFrontera 
+    salario_minimo: empleado.zona === 'frontera'
+      ? config.salarioMinimo.zonaFrontera
       : config.salarioMinimo.zonaGeneral,
   };
 
@@ -428,15 +428,15 @@ export function evaluarFormula(
 
   try {
     const parser = new Parser();
-    
+
     const expr = parser.parse(formulaNormalizada);
     const resultado = expr.evaluate(variables);
-    
+
     if (typeof resultado !== 'number' || isNaN(resultado) || !isFinite(resultado)) {
       console.error('Resultado de fórmula inválido:', formula, resultado);
       return 0;
     }
-    
+
     return Math.round(resultado * 100) / 100;
   } catch (error) {
     console.error('Error evaluando fórmula:', formula, error);
