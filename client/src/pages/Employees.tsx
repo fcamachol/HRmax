@@ -25,6 +25,7 @@ export default function Employees() {
   const [isCSVDialogOpen, setIsCSVDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
     queryKey: ["/api/employees"],
@@ -59,6 +60,25 @@ export default function Employees() {
   const handleCloseViews = () => {
     setViewMode("list");
     setSelectedEmployeeId(null);
+    setIsEditing(false);
+  };
+
+  const handleEditEmployee = (id: string) => {
+    setSelectedEmployeeId(id);
+    setViewMode("detail");
+    setIsEditing(true);
+  };
+
+  const handleStartEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleEditSuccess = () => {
+    setIsEditing(false);
   };
 
   return (
@@ -102,8 +122,7 @@ export default function Employees() {
                 <DialogTitle>Agregar Nuevo Empleado</DialogTitle>
               </DialogHeader>
               <EmployeeForm
-                onSubmit={(data) => {
-                  console.log("Employee created:", data);
+                onSuccess={() => {
                   setIsDialogOpen(false);
                 }}
               />
@@ -120,7 +139,7 @@ export default function Employees() {
       <EmployeeTable
         employees={filteredEmployees}
         onView={handleViewEmployee}
-        onEdit={(id) => console.log("Edit employee:", id)}
+        onEdit={handleEditEmployee}
         onDelete={(id) => console.log("Delete employee:", id)}
       />
 
@@ -138,7 +157,10 @@ export default function Employees() {
         <EmployeeDetailView
           employee={selectedEmployee}
           onBack={handleBackToQuickView}
-          onEdit={() => console.log("Edit employee:", selectedEmployee.id)}
+          onEdit={handleStartEdit}
+          isEditing={isEditing}
+          onCancelEdit={handleCancelEdit}
+          onSaveSuccess={handleEditSuccess}
         />
       )}
     </div>

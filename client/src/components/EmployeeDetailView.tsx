@@ -9,11 +9,15 @@ import { X, ChevronLeft, Edit } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { EmployeeForm } from "./EmployeeForm";
 
 interface EmployeeDetailViewProps {
   employee: Employee;
   onBack: () => void;
   onEdit?: () => void;
+  isEditing?: boolean;
+  onCancelEdit?: () => void;
+  onSaveSuccess?: () => void;
 }
 
 interface FieldDisplayProps {
@@ -62,7 +66,7 @@ function FieldDisplay({ label, value, type = "text" }: FieldDisplayProps) {
   );
 }
 
-export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailViewProps) {
+export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCancelEdit, onSaveSuccess }: EmployeeDetailViewProps) {
   const [activeTab, setActiveTab] = useState("personal");
 
   const getInitials = (nombre: string, apellidoPaterno: string) => {
@@ -106,7 +110,7 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {onEdit && (
+            {!isEditing && onEdit && (
               <Button
                 variant="outline"
                 size="sm"
@@ -117,10 +121,20 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
                 Editar
               </Button>
             )}
+            {isEditing && onCancelEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCancelEdit}
+                data-testid="button-cancel-edit"
+              >
+                Cancelar
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
-              onClick={onBack}
+              onClick={isEditing ? onCancelEdit : onBack}
               data-testid="button-close-detail-view"
             >
               <X className="h-4 w-4" />
@@ -129,6 +143,32 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
         </CardHeader>
 
         <div className="flex-1 overflow-y-auto">
+          {isEditing ? (
+            <div className="p-6">
+              <EmployeeForm
+                defaultValues={{
+                  id: employee.id,
+                  numeroEmpleado: employee.numeroEmpleado,
+                  nombre: employee.nombre,
+                  apellidoPaterno: employee.apellidoPaterno,
+                  apellidoMaterno: employee.apellidoMaterno || "",
+                  rfc: employee.rfc || "",
+                  curp: employee.curp || "",
+                  nss: employee.nss || "",
+                  email: employee.email,
+                  telefono: employee.telefono,
+                  departamento: employee.departamento,
+                  puesto: employee.puesto,
+                  salarioBrutoMensual: employee.salarioBrutoMensual || "",
+                  tipoContrato: employee.tipoContrato || "indeterminado",
+                  fechaIngreso: employee.fechaIngreso || "",
+                  puestoId: employee.puestoId,
+                  esquemaPrestacionesId: employee.esquemaPrestacionesId,
+                }}
+                onSuccess={onSaveSuccess}
+              />
+            </div>
+          ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="p-6">
             <TabsList className="grid w-full grid-cols-6 mb-6">
               <TabsTrigger value="personal" data-testid="tab-personal">
@@ -318,8 +358,10 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
               </div>
             </TabsContent>
           </Tabs>
+          )}
         </div>
 
+        {!isEditing && (
         <div className="border-t p-4 flex justify-start flex-shrink-0">
           <Button
             variant="outline"
@@ -330,6 +372,7 @@ export function EmployeeDetailView({ employee, onBack, onEdit }: EmployeeDetailV
             Volver al Resumen
           </Button>
         </div>
+        )}
       </Card>
     </div>
   );

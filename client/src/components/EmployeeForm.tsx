@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { insertEmployeeSchema } from "@shared/schema";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   Form,
   FormControl,
@@ -34,13 +37,46 @@ interface EmployeeFormDefaultValues extends Partial<EmployeeFormValues> {
 }
 
 interface EmployeeFormProps {
-  onSubmit: (data: EmployeeFormValues) => void;
+  onSuccess?: () => void;
   defaultValues?: EmployeeFormDefaultValues;
 }
 
-export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
+export function EmployeeForm({ onSuccess, defaultValues }: EmployeeFormProps) {
   const [prestacionesDialogOpen, setPrestacionesDialogOpen] = useState(false);
   const isEditMode = !!(defaultValues?.id);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (data: EmployeeFormValues) => {
+      if (isEditMode && defaultValues?.id) {
+        return await apiRequest("PATCH", `/api/employees/${defaultValues.id}`, data);
+      } else {
+        return await apiRequest("POST", "/api/employees", data);
+      }
+    },
+    onSuccess: () => {
+      toast({
+        title: isEditMode ? "Empleado actualizado" : "Empleado creado",
+        description: isEditMode
+          ? "El empleado ha sido actualizado correctamente"
+          : "El empleado ha sido creado correctamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      onSuccess?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Ocurrio un error al guardar el empleado",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleFormSubmit = (data: EmployeeFormValues) => {
+    mutation.mutate(data);
+  };
 
   const form = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeFormSchema),
@@ -64,7 +100,7 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           <FormField
             control={form.control}
@@ -334,8 +370,8 @@ export function EmployeeForm({ onSubmit, defaultValues }: EmployeeFormProps) {
             <Button type="button" variant="outline" data-testid="button-cancel">
               Cancelar
             </Button>
-            <Button type="submit" data-testid="button-submit">
-              Guardar Empleado
+            <Button type="submit" disabled={mutation.isPending} data-testid="button-submit">
+              {mutation.isPending ? "Guardando..." : "Guardar Empleado"}
             </Button>
           </div>
         </div>
