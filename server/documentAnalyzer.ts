@@ -3,11 +3,21 @@ import { objectStorageClient } from "./objectStorage";
 import { Buffer } from "node:buffer";
 import { pdfToImg } from "pdftoimg-js";
 
-// This is using Replit's AI Integrations service, which provides OpenAI-compatible API access without requiring your own OpenAI API key
-const openai = new OpenAI({
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY
-});
+// Lazy-load OpenAI client only when needed
+let openai: OpenAI | null = null;
+
+function getOpenAIClient(): OpenAI {
+  if (!openai) {
+    if (!process.env.OPENAI_API_KEY && !process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+      throw new Error("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.");
+    }
+    openai = new OpenAI({
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+    });
+  }
+  return openai;
+}
 
 interface LawsuitDocumentData {
   title: string;
@@ -72,10 +82,9 @@ export async function analyzeLawsuitDocument(documentUrl: string): Promise<Lawsu
       finalMimeType = mimeType;
     }
     
-    // Use GPT-5 with vision to analyze the document
-    // the newest OpenAI model is "gpt-5" which was released August 7, 2025. do not change this unless explicitly requested by the user
-    const response = await openai.chat.completions.create({
-      model: "gpt-5",
+    // Use GPT-4o with vision to analyze the document
+    const response = await getOpenAIClient().chat.completions.create({
+      model: "gpt-4o",
       messages: [
         {
           role: "user",
