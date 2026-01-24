@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
@@ -100,21 +101,21 @@ async function runBackgroundInitialization() {
     log("Skipping background initialization in production mode");
     return;
   }
-  
+
   try {
     // Ejecutar migraciones automáticas
     await migrateLegalCaseStatuses();
     await migrateBajaTypes();
-    
+
     // Seed módulos del sistema
     await seedModulos();
-    
+
     // Seed conceptos legales con fórmulas
     await seedConceptosLegales();
-    
+
     // Seed catálogos base (bancos, UMA/SMG)
     await seedCatalogosBase();
-    
+
     log("Background initialization completed successfully");
   } catch (error) {
     console.error("Error during background initialization:", error);
@@ -149,10 +150,9 @@ async function runBackgroundInitialization() {
   server.listen({
     port,
     host: "0.0.0.0",
-    reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
-    
+
     // Run migrations and seeds in the background AFTER server starts
     // This ensures health checks pass immediately while initialization runs
     runBackgroundInitialization();
