@@ -109,7 +109,6 @@ import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
 import { requireSuperAdmin, requireEmployeeAuth } from "./auth/middleware";
 import bcrypt from "bcrypt";
-import { seedMockEmployees } from "./seeds/mockEmployees";
 
 // Helper function to get the effective clienteId for data filtering
 // Client users are restricted to their own clienteId
@@ -147,17 +146,18 @@ function canAccessCliente(req: Request, targetClienteId: string): boolean {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== SEED MOCK EMPLOYEES (Dev only) ====================
-  app.post("/api/seed/mock-employees", async (req, res) => {
-    try {
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ message: "Seed endpoints disabled in production" });
+  if (process.env.NODE_ENV !== "production") {
+    app.post("/api/seed/mock-employees", async (req, res) => {
+      try {
+        const seedModulePath = ["./seeds", "mockEmployees"].join("/");
+        const { seedMockEmployees } = await import(seedModulePath);
+        await seedMockEmployees();
+        res.json({ message: "20 mock employees created successfully" });
+      } catch (error: any) {
+        res.status(500).json({ message: error.message });
       }
-      await seedMockEmployees();
-      res.json({ message: "20 mock employees created successfully" });
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
+    });
+  }
 
   // Configuration Change Logs
   app.post("/api/configuration/change-log", async (req, res) => {
