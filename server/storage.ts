@@ -781,6 +781,7 @@ export interface IStorage {
   // Clientes
   createCliente(cliente: InsertCliente): Promise<Cliente>;
   getCliente(id: string): Promise<Cliente | undefined>;
+  getClienteByApiKey(apiKey: string): Promise<Cliente | undefined>;
   getClientes(): Promise<Cliente[]>;
   getClientesActivos(): Promise<Cliente[]>;
   updateCliente(id: string, updates: Partial<InsertCliente>): Promise<Cliente>;
@@ -2141,7 +2142,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(incidenciasAsistencia.fecha));
   }
 
-  async getIncidenciasAsistenciaByPeriodo(fechaInicio: string, fechaFin: string, centroTrabajoId?: string): Promise<IncidenciaAsistencia[]> {
+  async getIncidenciasAsistenciaByPeriodo(fechaInicio: string, fechaFin: string, centroTrabajoId?: string, clienteId?: string): Promise<IncidenciaAsistencia[]> {
     const conditions = [
       gte(incidenciasAsistencia.fecha, fechaInicio), // fecha >= fechaInicio
       lte(incidenciasAsistencia.fecha, fechaFin)     // fecha <= fechaFin
@@ -2149,6 +2150,10 @@ export class DatabaseStorage implements IStorage {
 
     if (centroTrabajoId) {
       conditions.push(eq(incidenciasAsistencia.centroTrabajoId, centroTrabajoId));
+    }
+
+    if (clienteId) {
+      conditions.push(eq(incidenciasAsistencia.clienteId, clienteId));
     }
 
     return await db
@@ -4515,6 +4520,11 @@ export class DatabaseStorage implements IStorage {
 
   async getCliente(id: string): Promise<Cliente | undefined> {
     const [result] = await db.select().from(clientes).where(eq(clientes.id, id));
+    return result || undefined;
+  }
+
+  async getClienteByApiKey(apiKey: string): Promise<Cliente | undefined> {
+    const [result] = await db.select().from(clientes).where(eq(clientes.apiKey, apiKey));
     return result || undefined;
   }
 

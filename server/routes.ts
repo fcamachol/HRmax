@@ -97,6 +97,7 @@ import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
 import { requireSuperAdmin } from "./auth/middleware";
 import bcrypt from "bcrypt";
+import { seedMockEmployees } from "./seeds/mockEmployees";
 
 // Helper function to get the effective clienteId for data filtering
 // Client users are restricted to their own clienteId
@@ -133,6 +134,19 @@ function canAccessCliente(req: Request, targetClienteId: string): boolean {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // ==================== SEED MOCK EMPLOYEES (Dev only) ====================
+  app.post("/api/seed/mock-employees", async (req, res) => {
+    try {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: "Seed endpoints disabled in production" });
+      }
+      await seedMockEmployees();
+      res.json({ message: "20 mock employees created successfully" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Configuration Change Logs
   app.post("/api/configuration/change-log", async (req, res) => {
     try {
@@ -1557,22 +1571,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/incidencias-asistencia", async (req, res) => {
     try {
+      const effectiveClienteId = getEffectiveClienteId(req);
       const { fechaInicio, fechaFin, centroTrabajoId, empleadoId } = req.query;
-      
+
       if (fechaInicio && fechaFin) {
         const incidencias = await storage.getIncidenciasAsistenciaByPeriodo(
-          fechaInicio as string, 
-          fechaFin as string, 
-          centroTrabajoId as string | undefined
+          fechaInicio as string,
+          fechaFin as string,
+          centroTrabajoId as string | undefined,
+          effectiveClienteId || undefined
         );
         return res.json(incidencias);
       }
-      
+
       if (empleadoId) {
         const incidencias = await storage.getIncidenciasAsistenciaByEmpleado(empleadoId as string);
         return res.json(incidencias);
       }
-      
+
       const incidencias = await storage.getIncidenciasAsistencia();
       res.json(incidencias);
     } catch (error: any) {
@@ -3882,10 +3898,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ==================== MÓDULO DE VACACIONES ====================
-  
+
+  // API Key middleware for MCP/omnichannel integrations
+  const apiKeyAuth = async (req: Request, res: any, next: any) => {
+    const apiKey = req.headers['x-api-key'] as string;
+    if (apiKey) {
+      const cliente = await storage.getClienteByApiKey(apiKey);
+      if (cliente) {
+        // Inject clienteId from API key lookup
+        (req as any).user = {
+          ...(req as any).user,
+          clienteId: cliente.id,
+          apiKeyAuth: true, // Flag to indicate API key authentication
+        };
+      }
+    }
+    next();
+  };
+
+  // Apply API key middleware to all vacation routes
+  app.use("/api/vacaciones", apiKeyAuth);
+
   app.post("/api/vacaciones", async (req, res) => {
     try {
-      // Auto-inject clienteId and empresaId from user session
+      // Auto-inject clienteId and empresaId from user session or API key
       const user = (req as any).user;
       if (!user?.clienteId) {
         return res.status(401).json({ message: "Usuario no autenticado o sin cliente asignado" });
