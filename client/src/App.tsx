@@ -57,6 +57,11 @@ import NotFound from "@/pages/not-found";
 // Cursos y Capacitaciones
 import Cursos from "@/pages/cursos-capacitaciones/Cursos";
 import CursoBuilder from "@/pages/cursos-capacitaciones/CursoBuilder";
+import Asignaciones from "@/pages/cursos-capacitaciones/Asignaciones";
+import ReglasAsignacion from "@/pages/cursos-capacitaciones/ReglasAsignacion";
+import ReportesCursos from "@/pages/cursos-capacitaciones/Reportes";
+import CertificadosCursos from "@/pages/cursos-capacitaciones/Certificados";
+import CursoPreview from "@/pages/cursos-capacitaciones/CursoPreview";
 
 // Portal (Employee Self-Service) Pages
 import PortalLogin from "@/pages/portal/Login";
@@ -65,6 +70,8 @@ import PortalSolicitudes from "@/pages/portal/Solicitudes";
 import PortalRecibos from "@/pages/portal/Recibos";
 import PortalMas from "@/pages/portal/Mas";
 import PortalProfile from "@/pages/portal/Profile";
+import PortalMisCursos from "@/pages/portal/MisCursos";
+import PortalCursoPlayer from "@/pages/portal/CursoPlayer";
 
 function Router() {
   return (
@@ -104,6 +111,11 @@ function Router() {
       <Route path="/empresas" component={Empresas} />
       <Route path="/cursos-capacitaciones" component={Cursos} />
       <Route path="/cursos-capacitaciones/:id/editar" component={CursoBuilder} />
+      <Route path="/cursos-capacitaciones/:id/preview" component={CursoPreview} />
+      <Route path="/cursos-capacitaciones/asignaciones" component={Asignaciones} />
+      <Route path="/cursos-capacitaciones/reglas" component={ReglasAsignacion} />
+      <Route path="/cursos-capacitaciones/reportes" component={ReportesCursos} />
+      <Route path="/cursos-capacitaciones/certificados" component={CertificadosCursos} />
       <Route path="/settings" component={Settings} />
       <Route component={NotFound} />
     </Switch>
@@ -169,6 +181,24 @@ export default function App() {
                   <PortalAuthProvider>
                     <RequirePortalAuth>
                       <PortalProfile />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/cursos/:asignacionId">
+                {() => (
+                  <PortalAuthProvider>
+                    <RequirePortalAuth>
+                      <PortalCursoPlayer />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/cursos">
+                {() => (
+                  <PortalAuthProvider>
+                    <RequirePortalAuth>
+                      <PortalMisCursos />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
