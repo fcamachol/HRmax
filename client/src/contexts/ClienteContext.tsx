@@ -29,34 +29,50 @@ export function ClienteProvider({ children }: { children: ReactNode }) {
   const isClientUser = user?.tipoUsuario === "cliente" && !!user?.clienteId;
   const canChangeCliente = !isClientUser;
 
-  const { data: clienteData } = useQuery<Cliente>({
+  const { data: clienteData, error: clienteError, isLoading: clienteLoading } = useQuery<Cliente>({
     queryKey: ["/api/clientes", user?.clienteId],
     enabled: isClientUser && !!user?.clienteId,
   });
 
+  // Debug logging for client user issues
+  if (isClientUser && (clienteError || (!clienteLoading && !clienteData))) {
+    console.error("[ClienteContext] Client user but failed to load cliente:", {
+      userId: user?.id,
+      clienteId: user?.clienteId,
+      error: clienteError,
+      isLoading: clienteLoading,
+      hasData: !!clienteData
+    });
+  }
+
   useEffect(() => {
-    if (isClientUser && clienteData) {
-      setSelectedClienteState(clienteData);
+    if (isClientUser) {
+      // Client users should not use localStorage selection - clear it
+      localStorage.removeItem(STORAGE_KEY);
+
+      if (clienteData) {
+        setSelectedClienteState(clienteData);
+        setIsAgencyView(false);
+      }
       return;
     }
 
-    if (!isClientUser) {
-      const savedCliente = localStorage.getItem(STORAGE_KEY);
-      if (savedCliente) {
-        try {
-          setSelectedClienteState(JSON.parse(savedCliente));
-        } catch {
-          localStorage.removeItem(STORAGE_KEY);
-        }
+    // Non-client users (maxtalent) can load from localStorage
+    const savedCliente = localStorage.getItem(STORAGE_KEY);
+    if (savedCliente) {
+      try {
+        setSelectedClienteState(JSON.parse(savedCliente));
+      } catch {
+        localStorage.removeItem(STORAGE_KEY);
       }
+    }
 
-      const savedRecent = localStorage.getItem(RECENT_KEY);
-      if (savedRecent) {
-        try {
-          setRecentClientes(JSON.parse(savedRecent));
-        } catch {
-          localStorage.removeItem(RECENT_KEY);
-        }
+    const savedRecent = localStorage.getItem(RECENT_KEY);
+    if (savedRecent) {
+      try {
+        setRecentClientes(JSON.parse(savedRecent));
+      } catch {
+        localStorage.removeItem(RECENT_KEY);
       }
     }
   }, [isClientUser, clienteData, isAuthenticated]);
