@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Plus, Building2, FileKey, Pencil, Trash2, AlertCircle, Shield } from "lucide-react";
+import { useCliente } from "@/contexts/ClienteContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -37,9 +38,18 @@ export default function Empresas() {
   const [selectedEmpresa, setSelectedEmpresa] = useState<Empresa | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const { toast } = useToast();
+  const { selectedCliente } = useCliente();
 
   const { data: empresas = [], isLoading } = useQuery<Empresa[]>({
-    queryKey: ["/api/empresas"],
+    queryKey: ["/api/empresas", { clienteId: selectedCliente?.id }],
+    queryFn: async () => {
+      const url = selectedCliente?.id
+        ? `/api/empresas?clienteId=${selectedCliente.id}`
+        : "/api/empresas";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch empresas");
+      return res.json();
+    },
   });
 
   const deleteEmpresaMutation = useMutation({

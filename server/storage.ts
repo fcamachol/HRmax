@@ -293,10 +293,30 @@ import {
   intentosQuiz,
   type CertificadoCurso,
   type InsertCertificadoCurso,
-  certificadosCursos
+  certificadosCursos,
+  // Document Templates
+  type CategoriaPlantillaDocumento,
+  type InsertCategoriaPlantillaDocumento,
+  categoriasPlantillaDocumento,
+  type PlantillaDocumento,
+  type InsertPlantillaDocumento,
+  plantillasDocumento,
+  type PlantillaDocumentoVersion,
+  type InsertPlantillaDocumentoVersion,
+  plantillasDocumentoVersiones,
+  type PlantillaDocumentoAsset,
+  type InsertPlantillaDocumentoAsset,
+  plantillasDocumentoAssets,
+  type ReglaAsignacionPlantilla,
+  type InsertReglaAsignacionPlantilla,
+  reglasAsignacionPlantilla,
+  type DocumentoGenerado,
+  type InsertDocumentoGenerado,
+  documentosGenerados
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -317,6 +337,7 @@ export interface IStorage {
   createModificacionPersonal(modificacion: InsertModificacionPersonal): Promise<ModificacionPersonal>;
   getModificacionPersonal(id: string): Promise<ModificacionPersonal | undefined>;
   getModificacionesPersonal(): Promise<ModificacionPersonal[]>;
+  getModificacionesPersonalByCliente(clienteId: string): Promise<ModificacionPersonal[]>;
   getModificacionesPersonalByEmpleado(empleadoId: string): Promise<ModificacionPersonal[]>;
   getModificacionesPersonalByTipo(tipoModificacion: string): Promise<ModificacionPersonal[]>;
   getModificacionesPersonalByEstatus(estatus: string): Promise<ModificacionPersonal[]>;
@@ -447,6 +468,7 @@ export interface IStorage {
   createGrupoNomina(grupo: InsertGrupoNomina): Promise<GrupoNomina>;
   getGrupoNomina(id: string): Promise<GrupoNomina | undefined>;
   getGruposNomina(): Promise<GrupoNomina[]>;
+  getGruposNominaByCliente(clienteId: string): Promise<GrupoNomina[]>;
   updateGrupoNomina(id: string, updates: Partial<InsertGrupoNomina>): Promise<GrupoNomina>;
   deleteGrupoNomina(id: string): Promise<void>;
   assignEmployeesToGrupoNomina(grupoNominaId: string, employeeIds: string[]): Promise<void>;
@@ -774,6 +796,7 @@ export interface IStorage {
   createConceptoNomina(concepto: InsertConceptoNomina): Promise<ConceptoNomina>;
   getConceptoNomina(id: string): Promise<ConceptoNomina | undefined>;
   getConceptosNomina(): Promise<ConceptoNomina[]>;
+  getConceptosNominaByCliente(clienteId: string): Promise<ConceptoNomina[]>;
   getConceptosNominaActivos(): Promise<ConceptoNomina[]>;
   updateConceptoNomina(id: string, updates: Partial<InsertConceptoNomina>): Promise<ConceptoNomina>;
   deleteConceptoNomina(id: string): Promise<void>;
@@ -784,6 +807,7 @@ export interface IStorage {
   getPeriodosNomina(): Promise<PeriodoNomina[]>;
   getPeriodosNominaByGrupo(grupoNominaId: string): Promise<PeriodoNomina[]>;
   getPeriodosNominaByEmpresa(empresaId: string): Promise<PeriodoNomina[]>;
+  getPeriodosNominaByCliente(clienteId: string): Promise<PeriodoNomina[]>;
   updatePeriodoNomina(id: string, updates: Partial<InsertPeriodoNomina>): Promise<PeriodoNomina>;
   deletePeriodoNomina(id: string): Promise<void>;
 
@@ -802,6 +826,7 @@ export interface IStorage {
   getNominaMovimientos(): Promise<NominaMovimiento[]>;
   getNominaMovimientosByPeriodo(periodoNominaId: string): Promise<NominaMovimiento[]>;
   getNominaMovimientosByEmpleado(empleadoId: string): Promise<NominaMovimiento[]>;
+  getNominaMovimientosByCliente(clienteId: string): Promise<NominaMovimiento[]>;
   deleteNominaMovimiento(id: string): Promise<void>;
 
   // Resumen de Nómina (payroll summary per employee)
@@ -1079,6 +1104,22 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(employees)
       .where(eq(employees.id, id));
+    return employee || undefined;
+  }
+
+  async getEmployeesByIds(ids: string[]): Promise<Employee[]> {
+    if (ids.length === 0) return [];
+    return db
+      .select()
+      .from(employees)
+      .where(inArray(employees.id, ids));
+  }
+
+  async getEmployeeByRfc(rfc: string): Promise<Employee | undefined> {
+    const [employee] = await db
+      .select()
+      .from(employees)
+      .where(eq(employees.rfc, rfc.toUpperCase()));
     return employee || undefined;
   }
 
@@ -1379,6 +1420,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(modificacionesPersonal.createdAt));
   }
 
+  async getModificacionesPersonalByCliente(clienteId: string): Promise<ModificacionPersonal[]> {
+    return await db
+      .select()
+      .from(modificacionesPersonal)
+      .where(eq(modificacionesPersonal.clienteId, clienteId))
+      .orderBy(desc(modificacionesPersonal.createdAt));
+  }
+
   async getModificacionesPersonalByEmpleado(empleadoId: string): Promise<ModificacionPersonal[]> {
     return await db
       .select()
@@ -1485,6 +1534,27 @@ export class DatabaseStorage implements IStorage {
         if (valoresNuevos.jefeDirecto !== undefined) {
           empleadoUpdate.jefeDirecto = valoresNuevos.jefeDirecto;
         }
+        break;
+      case 'cuenta_bancaria':
+        if (valoresNuevos.banco !== undefined) empleadoUpdate.banco = valoresNuevos.banco;
+        if (valoresNuevos.clabe !== undefined) empleadoUpdate.clabe = valoresNuevos.clabe;
+        if (valoresNuevos.cuenta !== undefined) empleadoUpdate.cuenta = valoresNuevos.cuenta;
+        if (valoresNuevos.sucursal !== undefined) empleadoUpdate.sucursal = valoresNuevos.sucursal;
+        break;
+      case 'horario':
+        if (valoresNuevos.horario !== undefined) empleadoUpdate.horario = valoresNuevos.horario;
+        if (valoresNuevos.diasLaborales !== undefined) empleadoUpdate.diasLaborales = valoresNuevos.diasLaborales;
+        if (valoresNuevos.tipoJornada !== undefined) empleadoUpdate.tipoJornada = valoresNuevos.tipoJornada;
+        break;
+      case 'registro_patronal':
+        if (valoresNuevos.registroPatronalId !== undefined) empleadoUpdate.registroPatronalId = valoresNuevos.registroPatronalId;
+        break;
+      case 'contrato':
+        if (valoresNuevos.tipoContrato !== undefined) empleadoUpdate.tipoContrato = valoresNuevos.tipoContrato;
+        if (valoresNuevos.esquemaContratacion !== undefined) empleadoUpdate.esquemaContratacion = valoresNuevos.esquemaContratacion;
+        break;
+      case 'estatus':
+        if (valoresNuevos.estatus !== undefined) empleadoUpdate.estatus = valoresNuevos.estatus;
         break;
     }
 
@@ -2241,6 +2311,14 @@ export class DatabaseStorage implements IStorage {
     return await db
       .select()
       .from(gruposNomina)
+      .orderBy(gruposNomina.nombre);
+  }
+
+  async getGruposNominaByCliente(clienteId: string): Promise<GrupoNomina[]> {
+    return await db
+      .select()
+      .from(gruposNomina)
+      .where(eq(gruposNomina.clienteId, clienteId))
       .orderBy(gruposNomina.nombre);
   }
 
@@ -4452,6 +4530,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(periodosNomina.fechaInicio));
   }
 
+  async getPeriodosNominaByCliente(clienteId: string): Promise<PeriodoNomina[]> {
+    return db.select().from(periodosNomina)
+      .where(eq(periodosNomina.clienteId, clienteId))
+      .orderBy(desc(periodosNomina.fechaInicio));
+  }
+
   async updatePeriodoNomina(id: string, updates: Partial<InsertPeriodoNomina>): Promise<PeriodoNomina> {
     const [result] = await db
       .update(periodosNomina)
@@ -4532,6 +4616,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(nominaMovimientos.createdAt));
   }
 
+  async getNominaMovimientosByCliente(clienteId: string): Promise<NominaMovimiento[]> {
+    return db.select().from(nominaMovimientos)
+      .where(eq(nominaMovimientos.clienteId, clienteId))
+      .orderBy(desc(nominaMovimientos.createdAt));
+  }
+
   async deleteNominaMovimiento(id: string): Promise<void> {
     await db.delete(nominaMovimientos).where(eq(nominaMovimientos.id, id));
   }
@@ -4569,7 +4659,11 @@ export class DatabaseStorage implements IStorage {
 
   // Clientes
   async createCliente(cliente: InsertCliente): Promise<Cliente> {
-    const [result] = await db.insert(clientes).values(cliente).returning();
+    // Generate short ID (10 chars) for new clients instead of UUID
+    const [result] = await db.insert(clientes).values({
+      ...cliente,
+      id: nanoid(10),
+    }).returning();
     return result;
   }
 
@@ -6564,11 +6658,17 @@ export class DatabaseStorage implements IStorage {
     );
 
     const quizzes = await this.getQuizzesCurso(cursoId);
+    const quizzesConPreguntas = await Promise.all(
+      quizzes.map(async (quiz) => ({
+        ...quiz,
+        preguntas: await this.getPreguntasQuiz(quiz.id)
+      }))
+    );
 
     return {
       curso,
       modulos: modulosConLecciones,
-      quizzes
+      quizzes: quizzesConPreguntas
     };
   }
 
@@ -6584,6 +6684,402 @@ export class DatabaseStorage implements IStorage {
     const leccionesCompletadas = progresos.filter(p => p.estatus === 'completado').length;
 
     return Math.round((leccionesCompletadas / lecciones.length) * 100);
+  }
+
+  // ============================================================================
+  // DOCUMENT TEMPLATES - Plantillas de Documentos
+  // ============================================================================
+
+  // --- Template Categories ---
+  async getCategoriasPlantillaDocumento(clienteId: string): Promise<CategoriaPlantillaDocumento[]> {
+    return db.select()
+      .from(categoriasPlantillaDocumento)
+      .where(and(
+        eq(categoriasPlantillaDocumento.clienteId, clienteId),
+        eq(categoriasPlantillaDocumento.activo, true)
+      ))
+      .orderBy(categoriasPlantillaDocumento.orden);
+  }
+
+  async getCategoriaPlantillaDocumento(id: string): Promise<CategoriaPlantillaDocumento | undefined> {
+    const [result] = await db.select()
+      .from(categoriasPlantillaDocumento)
+      .where(eq(categoriasPlantillaDocumento.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async createCategoriaPlantillaDocumento(categoria: InsertCategoriaPlantillaDocumento): Promise<CategoriaPlantillaDocumento> {
+    const [result] = await db.insert(categoriasPlantillaDocumento)
+      .values(categoria)
+      .returning();
+    return result;
+  }
+
+  async updateCategoriaPlantillaDocumento(id: string, updates: Partial<InsertCategoriaPlantillaDocumento>): Promise<CategoriaPlantillaDocumento> {
+    const [result] = await db.update(categoriasPlantillaDocumento)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(categoriasPlantillaDocumento.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCategoriaPlantillaDocumento(id: string): Promise<void> {
+    await db.update(categoriasPlantillaDocumento)
+      .set({ activo: false, updatedAt: new Date() })
+      .where(eq(categoriasPlantillaDocumento.id, id));
+  }
+
+  // --- Document Templates ---
+  async getPlantillasDocumento(clienteId: string, tipoDocumento?: string): Promise<PlantillaDocumento[]> {
+    const conditions = [eq(plantillasDocumento.clienteId, clienteId)];
+    if (tipoDocumento) {
+      conditions.push(eq(plantillasDocumento.tipoDocumento, tipoDocumento));
+    }
+    return db.select()
+      .from(plantillasDocumento)
+      .where(and(...conditions))
+      .orderBy(desc(plantillasDocumento.updatedAt));
+  }
+
+  async getPlantillaDocumentoById(id: string): Promise<PlantillaDocumento | undefined> {
+    const [result] = await db.select()
+      .from(plantillasDocumento)
+      .where(eq(plantillasDocumento.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async getPlantillaDocumentoByCodigo(clienteId: string, codigo: string): Promise<PlantillaDocumento | undefined> {
+    const [result] = await db.select()
+      .from(plantillasDocumento)
+      .where(and(
+        eq(plantillasDocumento.clienteId, clienteId),
+        eq(plantillasDocumento.codigo, codigo)
+      ))
+      .limit(1);
+    return result;
+  }
+
+  async createPlantillaDocumento(plantilla: InsertPlantillaDocumento): Promise<PlantillaDocumento> {
+    const [result] = await db.insert(plantillasDocumento)
+      .values(plantilla)
+      .returning();
+
+    // Create initial version
+    await this.createPlantillaDocumentoVersion({
+      plantillaId: result.id,
+      version: 1,
+      contenido: plantilla.contenido,
+      encabezado: plantilla.encabezado,
+      piePagina: plantilla.piePagina,
+      margenes: plantilla.margenes,
+      tamanioPapel: plantilla.tamanioPapel,
+      orientacion: plantilla.orientacion,
+      variablesUsadas: plantilla.variablesUsadas,
+      variablesCustomDefinidas: plantilla.variablesCustomDefinidas,
+      cambios: 'Versión inicial',
+      creadoPor: plantilla.createdBy,
+    });
+
+    return result;
+  }
+
+  async updatePlantillaDocumento(id: string, updates: Partial<InsertPlantillaDocumento>): Promise<PlantillaDocumento> {
+    // Get current version
+    const current = await this.getPlantillaDocumentoById(id);
+    const newVersion = (current?.version || 0) + 1;
+
+    // Update the template with new version number
+    const [result] = await db.update(plantillasDocumento)
+      .set({
+        ...updates,
+        version: newVersion,
+        updatedAt: new Date()
+      })
+      .where(eq(plantillasDocumento.id, id))
+      .returning();
+
+    // Create new version snapshot if content changed
+    if (updates.contenido || updates.encabezado || updates.piePagina) {
+      await this.createPlantillaDocumentoVersion({
+        plantillaId: id,
+        version: newVersion,
+        contenido: updates.contenido || current?.contenido,
+        encabezado: updates.encabezado || current?.encabezado,
+        piePagina: updates.piePagina || current?.piePagina,
+        margenes: updates.margenes || current?.margenes,
+        tamanioPapel: updates.tamanioPapel || current?.tamanioPapel,
+        orientacion: updates.orientacion || current?.orientacion,
+        variablesUsadas: updates.variablesUsadas || current?.variablesUsadas,
+        variablesCustomDefinidas: updates.variablesCustomDefinidas || current?.variablesCustomDefinidas,
+        cambios: 'Actualización de contenido',
+        creadoPor: updates.updatedBy,
+      });
+    }
+
+    return result;
+  }
+
+  async deletePlantillaDocumento(id: string): Promise<void> {
+    // Soft delete by setting status to archived
+    await db.update(plantillasDocumento)
+      .set({ estatus: 'archivada', updatedAt: new Date() })
+      .where(eq(plantillasDocumento.id, id));
+  }
+
+  async hardDeletePlantillaDocumento(id: string): Promise<void> {
+    await db.delete(plantillasDocumento)
+      .where(eq(plantillasDocumento.id, id));
+  }
+
+  // --- Template Versions ---
+  async getPlantillaDocumentoVersiones(plantillaId: string): Promise<PlantillaDocumentoVersion[]> {
+    return db.select()
+      .from(plantillasDocumentoVersiones)
+      .where(eq(plantillasDocumentoVersiones.plantillaId, plantillaId))
+      .orderBy(desc(plantillasDocumentoVersiones.version));
+  }
+
+  async getPlantillaDocumentoVersion(plantillaId: string, version: number): Promise<PlantillaDocumentoVersion | undefined> {
+    const [result] = await db.select()
+      .from(plantillasDocumentoVersiones)
+      .where(and(
+        eq(plantillasDocumentoVersiones.plantillaId, plantillaId),
+        eq(plantillasDocumentoVersiones.version, version)
+      ))
+      .limit(1);
+    return result;
+  }
+
+  async createPlantillaDocumentoVersion(versionData: InsertPlantillaDocumentoVersion): Promise<PlantillaDocumentoVersion> {
+    const [result] = await db.insert(plantillasDocumentoVersiones)
+      .values(versionData)
+      .returning();
+    return result;
+  }
+
+  async restaurarPlantillaDocumentoVersion(plantillaId: string, versionNum: number, userId?: string): Promise<PlantillaDocumento> {
+    // Get the version to restore
+    const versionToRestore = await this.getPlantillaDocumentoVersion(plantillaId, versionNum);
+    if (!versionToRestore) {
+      throw new Error(`Version ${versionNum} not found for template ${plantillaId}`);
+    }
+
+    // Update the template with the old version's content
+    return this.updatePlantillaDocumento(plantillaId, {
+      contenido: versionToRestore.contenido,
+      encabezado: versionToRestore.encabezado,
+      piePagina: versionToRestore.piePagina,
+      margenes: versionToRestore.margenes as any,
+      tamanioPapel: versionToRestore.tamanioPapel,
+      orientacion: versionToRestore.orientacion,
+      variablesUsadas: versionToRestore.variablesUsadas as any,
+      variablesCustomDefinidas: versionToRestore.variablesCustomDefinidas as any,
+      updatedBy: userId,
+    });
+  }
+
+  // --- Template Assets ---
+  async getPlantillaDocumentoAssets(clienteId: string, tipo?: string): Promise<PlantillaDocumentoAsset[]> {
+    const conditions = [
+      eq(plantillasDocumentoAssets.clienteId, clienteId),
+      eq(plantillasDocumentoAssets.activo, true)
+    ];
+    if (tipo) {
+      conditions.push(eq(plantillasDocumentoAssets.tipo, tipo));
+    }
+    return db.select()
+      .from(plantillasDocumentoAssets)
+      .where(and(...conditions))
+      .orderBy(desc(plantillasDocumentoAssets.createdAt));
+  }
+
+  async getPlantillaDocumentoAsset(id: string): Promise<PlantillaDocumentoAsset | undefined> {
+    const [result] = await db.select()
+      .from(plantillasDocumentoAssets)
+      .where(eq(plantillasDocumentoAssets.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async createPlantillaDocumentoAsset(asset: InsertPlantillaDocumentoAsset): Promise<PlantillaDocumentoAsset> {
+    const [result] = await db.insert(plantillasDocumentoAssets)
+      .values(asset)
+      .returning();
+    return result;
+  }
+
+  async deletePlantillaDocumentoAsset(id: string): Promise<void> {
+    await db.update(plantillasDocumentoAssets)
+      .set({ activo: false })
+      .where(eq(plantillasDocumentoAssets.id, id));
+  }
+
+  // --- Assignment Rules ---
+  async getReglasAsignacionPlantilla(clienteId: string, plantillaId?: string): Promise<ReglaAsignacionPlantilla[]> {
+    const conditions = [
+      eq(reglasAsignacionPlantilla.clienteId, clienteId),
+      eq(reglasAsignacionPlantilla.activo, true)
+    ];
+    if (plantillaId) {
+      conditions.push(eq(reglasAsignacionPlantilla.plantillaId, plantillaId));
+    }
+    return db.select()
+      .from(reglasAsignacionPlantilla)
+      .where(and(...conditions))
+      .orderBy(desc(reglasAsignacionPlantilla.prioridad));
+  }
+
+  async getReglaAsignacionPlantilla(id: string): Promise<ReglaAsignacionPlantilla | undefined> {
+    const [result] = await db.select()
+      .from(reglasAsignacionPlantilla)
+      .where(eq(reglasAsignacionPlantilla.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async createReglaAsignacionPlantilla(regla: InsertReglaAsignacionPlantilla): Promise<ReglaAsignacionPlantilla> {
+    const [result] = await db.insert(reglasAsignacionPlantilla)
+      .values(regla)
+      .returning();
+    return result;
+  }
+
+  async updateReglaAsignacionPlantilla(id: string, updates: Partial<InsertReglaAsignacionPlantilla>): Promise<ReglaAsignacionPlantilla> {
+    const [result] = await db.update(reglasAsignacionPlantilla)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(reglasAsignacionPlantilla.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteReglaAsignacionPlantilla(id: string): Promise<void> {
+    await db.update(reglasAsignacionPlantilla)
+      .set({ activo: false, updatedAt: new Date() })
+      .where(eq(reglasAsignacionPlantilla.id, id));
+  }
+
+  // Find matching templates based on context (employee, event type, etc.)
+  async getPlantillasSugeridas(clienteId: string, context: {
+    tipoEvento?: string;
+    empresaId?: string;
+    departamento?: string;
+    puestoId?: string;
+    tipoContrato?: string;
+  }): Promise<PlantillaDocumento[]> {
+    // Get all active rules for this client
+    const reglas = await this.getReglasAsignacionPlantilla(clienteId);
+
+    // Filter rules that match the context
+    const reglasCoincidentes = reglas.filter(regla => {
+      // Check tipo evento
+      if (regla.tipoEvento && context.tipoEvento && regla.tipoEvento !== context.tipoEvento) {
+        return false;
+      }
+
+      // Check empresa
+      if (regla.empresaIds && context.empresaId) {
+        const empresaIds = regla.empresaIds as string[];
+        if (empresaIds.length > 0 && !empresaIds.includes(context.empresaId)) {
+          return false;
+        }
+      }
+
+      // Check departamento
+      if (regla.departamentos && context.departamento) {
+        const deptos = regla.departamentos as string[];
+        if (deptos.length > 0 && !deptos.includes(context.departamento)) {
+          return false;
+        }
+      }
+
+      // Check puesto
+      if (regla.puestoIds && context.puestoId) {
+        const puestos = regla.puestoIds as string[];
+        if (puestos.length > 0 && !puestos.includes(context.puestoId)) {
+          return false;
+        }
+      }
+
+      // Check tipo contrato
+      if (regla.tiposContrato && context.tipoContrato) {
+        const tipos = regla.tiposContrato as string[];
+        if (tipos.length > 0 && !tipos.includes(context.tipoContrato)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    // Get unique plantilla IDs sorted by priority
+    const plantillaIds = [...new Set(
+      reglasCoincidentes
+        .sort((a, b) => (b.prioridad || 0) - (a.prioridad || 0))
+        .map(r => r.plantillaId)
+    )];
+
+    // Fetch the templates
+    const plantillas: PlantillaDocumento[] = [];
+    for (const id of plantillaIds) {
+      const plantilla = await this.getPlantillaDocumentoById(id);
+      if (plantilla && plantilla.estatus === 'publicada') {
+        plantillas.push(plantilla);
+      }
+    }
+
+    return plantillas;
+  }
+
+  // --- Generated Documents ---
+  async getDocumentosGenerados(clienteId: string, filters?: {
+    empleadoId?: string;
+    plantillaId?: string;
+    limit?: number;
+  }): Promise<DocumentoGenerado[]> {
+    const conditions = [eq(documentosGenerados.clienteId, clienteId)];
+
+    if (filters?.empleadoId) {
+      conditions.push(eq(documentosGenerados.empleadoId, filters.empleadoId));
+    }
+    if (filters?.plantillaId) {
+      conditions.push(eq(documentosGenerados.plantillaId, filters.plantillaId));
+    }
+
+    let query = db.select()
+      .from(documentosGenerados)
+      .where(and(...conditions))
+      .orderBy(desc(documentosGenerados.createdAt));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+
+    return query;
+  }
+
+  async getDocumentoGenerado(id: string): Promise<DocumentoGenerado | undefined> {
+    const [result] = await db.select()
+      .from(documentosGenerados)
+      .where(eq(documentosGenerados.id, id))
+      .limit(1);
+    return result;
+  }
+
+  async createDocumentoGenerado(doc: InsertDocumentoGenerado): Promise<DocumentoGenerado> {
+    const [result] = await db.insert(documentosGenerados)
+      .values(doc)
+      .returning();
+    return result;
+  }
+
+  async updateDocumentoGenerado(id: string, updates: Partial<InsertDocumentoGenerado>): Promise<DocumentoGenerado> {
+    const [result] = await db.update(documentosGenerados)
+      .set(updates)
+      .where(eq(documentosGenerados.id, id))
+      .returning();
+    return result;
   }
 }
 

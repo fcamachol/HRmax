@@ -317,6 +317,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return resolved;
       });
 
+      // Get default empresa for this cliente (first one if available)
+      const defaultEmpresaId = clienteEmpresas.length > 0 ? clienteEmpresas[0].id : null;
+
       // Validate each employee with relaxed bulk schema, then apply defaults
       const validatedEmployees = resolvedEmployees.map((emp: any, index: number) => {
         try {
@@ -324,6 +327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // Apply defaults for DB required fields after validation
           return {
             ...validated,
+            empresaId: validated.empresaId || defaultEmpresaId,
             numeroEmpleado: validated.numeroEmpleado || `EMP-${Date.now()}-${index + 1}`,
             telefono: validated.telefono || null,
             email: validated.email || null,
@@ -479,10 +483,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { id } = req.params;
       // Accept any partial updates without strict validation
       // This allows flexibility for salary updates and other modifications
-      const validatedData = req.body as Partial<typeof employees.$inferInsert>;
+      // Remove fields that should not be updated directly
+      const { id: _id, createdAt, updatedAt, ...validatedData } = req.body;
       const updated = await storage.updateEmployee(id, validatedData);
-      res.json(updated);
+      res.json(serializeEmployee(updated));
     } catch (error: any) {
+      console.error("PATCH /api/employees/:id error:", error);
       res.status(400).json({ message: error.message });
     }
   });
@@ -497,11 +503,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fix employees without empresaId - assign them to the first empresa of their cliente
+  app.post("/api/employees/fix-empresa", async (req, res) => {
+    try {
+      const { clienteId, clienteName } = req.body;
+
+      let targetClienteId = clienteId;
+
+      // If clienteName provided, find the cliente by name
+      if (!targetClienteId && clienteName) {
+        const allClientes = await storage.getClientes();
+        const cliente = allClientes.find((c: any) =>
+          c.nombreComercial?.toLowerCase().includes(clienteName.toLowerCase()) ||
+          c.razonSocial?.toLowerCase().includes(clienteName.toLowerCase())
+        );
+        if (cliente) {
+          targetClienteId = cliente.id;
+        }
+      }
+
+      if (!targetClienteId) {
+        return res.status(400).json({ message: "clienteId o clienteName requerido" });
+      }
+
+      // Get first empresa for this cliente
+      const clienteEmpresas = await storage.getEmpresasByCliente(targetClienteId);
+      if (clienteEmpresas.length === 0) {
+        return res.status(400).json({ message: "El cliente no tiene empresas registradas" });
+      }
+      const defaultEmpresaId = clienteEmpresas[0].id;
+
+      // Get all employees for this cliente without empresaId
+      const allEmployees = await storage.getEmployees(targetClienteId);
+      const employeesWithoutEmpresa = allEmployees.filter((e: any) => !e.empresaId);
+
+      // Update each employee
+      let updated = 0;
+      for (const emp of employeesWithoutEmpresa) {
+        await storage.updateEmployee(emp.id, { empresaId: defaultEmpresaId });
+        updated++;
+      }
+
+      res.json({
+        message: `Se actualizaron ${updated} empleados`,
+        clienteId: targetClienteId,
+        empresaAsignada: clienteEmpresas[0].razonSocial || clienteEmpresas[0].nombreComercial,
+        empleadosActualizados: updated
+      });
+    } catch (error: any) {
+      console.error("Error fixing employees empresa:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // Modificaciones de Personal
   app.post("/api/modificaciones-personal", async (req, res) => {
     try {
       const { insertModificacionPersonalSchema } = await import("@shared/schema");
-      const validatedData = insertModificacionPersonalSchema.parse(req.body);
+      // Add createdBy from session if not provided
+      const dataWithCreatedBy = {
+        ...req.body,
+        createdBy: req.body.createdBy || req.session?.user?.id || req.session?.user?.username || "sistema",
+      };
+      const validatedData = insertModificacionPersonalSchema.parse(dataWithCreatedBy);
       const modificacion = await storage.createModificacionPersonal(validatedData);
       res.json(modificacion);
     } catch (error: any) {
@@ -511,23 +575,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/modificaciones-personal", async (req, res) => {
     try {
-      const { empleadoId, tipo, estatus } = req.query;
-      
+      const { empleadoId, tipo, estatus, clienteId } = req.query;
+      const effectiveClienteId = (clienteId as string) || getEffectiveClienteId(req);
+
       if (empleadoId) {
         const modificaciones = await storage.getModificacionesPersonalByEmpleado(empleadoId as string);
         return res.json(modificaciones);
       }
-      
+
       if (tipo) {
         const modificaciones = await storage.getModificacionesPersonalByTipo(tipo as string);
         return res.json(modificaciones);
       }
-      
+
       if (estatus) {
         const modificaciones = await storage.getModificacionesPersonalByEstatus(estatus as string);
         return res.json(modificaciones);
       }
-      
+
+      // Filter by clienteId if available, otherwise return all (for backward compatibility)
+      if (effectiveClienteId) {
+        const modificaciones = await storage.getModificacionesPersonalByCliente(effectiveClienteId);
+        return res.json(modificaciones);
+      }
+
       const modificaciones = await storage.getModificacionesPersonal();
       res.json(modificaciones);
     } catch (error: any) {
@@ -1690,6 +1761,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/grupos-nomina", async (req, res) => {
     try {
+      // For client users, filter by their clienteId
+      const clienteId = getClienteIdFromRequest(req);
+      if (clienteId) {
+        const grupos = await storage.getGruposNominaByCliente(clienteId);
+        return res.json(grupos);
+      }
+      // MaxTalent users can see all
       const grupos = await storage.getGruposNomina();
       res.json(grupos);
     } catch (error: any) {
@@ -1703,6 +1781,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!grupo) {
         return res.status(404).json({ message: "Grupo de nómina no encontrado" });
       }
+      // Verify client access
+      if (grupo.clienteId && !canAccessCliente(req, grupo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
+      }
       res.json(grupo);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1711,16 +1793,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/grupos-nomina/:id", async (req, res) => {
     try {
+      // Verify access before updating
+      const existingGrupo = await storage.getGrupoNomina(req.params.id);
+      if (existingGrupo?.clienteId && !canAccessCliente(req, existingGrupo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
+      }
+
       const validatedData = updateGrupoNominaSchema.parse(req.body);
       const { employeeIds, ...grupoData } = validatedData;
-      
+
       const grupo = await storage.updateGrupoNomina(req.params.id, grupoData);
-      
+
       // Reasignar empleados al grupo si se proporcionaron
       if (employeeIds !== undefined) {
         await storage.assignEmployeesToGrupoNomina(req.params.id, employeeIds);
       }
-      
+
       res.json(grupo);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -1729,6 +1817,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/grupos-nomina/:id", async (req, res) => {
     try {
+      // Verify access before deleting
+      const existingGrupo = await storage.getGrupoNomina(req.params.id);
+      if (existingGrupo?.clienteId && !canAccessCliente(req, existingGrupo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
+      }
       await storage.deleteGrupoNomina(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -2092,9 +2185,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { grupoNominaId } = req.query;
       if (grupoNominaId) {
+        // Verify access to the grupo
+        const grupo = await storage.getGrupoNomina(grupoNominaId as string);
+        if (grupo?.clienteId && !canAccessCliente(req, grupo.clienteId)) {
+          return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
+        }
         const periodos = await storage.getPeriodosNominaByGrupo(grupoNominaId as string);
         return res.json(periodos);
       }
+      // For client users, filter by their clienteId
+      const clienteId = getClienteIdFromRequest(req);
+      if (clienteId) {
+        const periodos = await storage.getPeriodosNominaByCliente(clienteId);
+        return res.json(periodos);
+      }
+      // MaxTalent users can see all
       const periodos = await storage.getPeriodosNomina();
       res.json(periodos);
     } catch (error: any) {
@@ -2108,6 +2213,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!periodo) {
         return res.status(404).json({ message: "Periodo no encontrado" });
       }
+      // Verify client access
+      if (periodo.clienteId && !canAccessCliente(req, periodo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este periodo" });
+      }
       res.json(periodo);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2117,6 +2226,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/periodos-nomina", async (req, res) => {
     try {
       const validatedData = insertPeriodoNominaSchema.parse(req.body);
+      // Verify client access before creating
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a crear periodos para este cliente" });
+      }
       const periodo = await storage.createPeriodoNomina(validatedData);
       res.json(periodo);
     } catch (error: any) {
@@ -2126,6 +2239,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/periodos-nomina/:id", async (req, res) => {
     try {
+      // Verify access before updating
+      const existingPeriodo = await storage.getPeriodoNomina(req.params.id);
+      if (existingPeriodo?.clienteId && !canAccessCliente(req, existingPeriodo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este periodo" });
+      }
       const periodo = await storage.updatePeriodoNomina(req.params.id, req.body);
       res.json(periodo);
     } catch (error: any) {
@@ -2139,6 +2257,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/conceptos-nomina", async (req, res) => {
     try {
+      // For client users, filter by their clienteId
+      const clienteId = getClienteIdFromRequest(req);
+      if (clienteId) {
+        const conceptos = await storage.getConceptosNominaByCliente(clienteId);
+        return res.json(conceptos);
+      }
+      // MaxTalent users can see all
       const conceptos = await storage.getConceptosNomina();
       res.json(conceptos);
     } catch (error: any) {
@@ -2152,6 +2277,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!concepto) {
         return res.status(404).json({ message: "Concepto no encontrado" });
       }
+      // Verify client access
+      if (concepto.clienteId && !canAccessCliente(req, concepto.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este concepto" });
+      }
       res.json(concepto);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -2161,6 +2290,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/conceptos-nomina", async (req, res) => {
     try {
       const validatedData = insertConceptoNominaSchema.parse(req.body);
+      // Verify client access before creating
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a crear conceptos para este cliente" });
+      }
       const concepto = await storage.createConceptoNomina(validatedData);
       res.json(concepto);
     } catch (error: any) {
@@ -2238,13 +2371,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { periodoId, empleadoId } = req.query;
       if (periodoId) {
+        // Verify access to the periodo
+        const periodo = await storage.getPeriodoNomina(periodoId as string);
+        if (periodo?.clienteId && !canAccessCliente(req, periodo.clienteId)) {
+          return res.status(403).json({ message: "No tienes acceso a este periodo" });
+        }
         const movimientos = await storage.getNominaMovimientosByPeriodo(periodoId as string);
         return res.json(movimientos);
       }
       if (empleadoId) {
+        // Verify access to the employee
+        const empleado = await storage.getEmployee(empleadoId as string);
+        if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+          return res.status(403).json({ message: "No tienes acceso a este empleado" });
+        }
         const movimientos = await storage.getNominaMovimientosByEmpleado(empleadoId as string);
         return res.json(movimientos);
       }
+      // For client users, filter by their clienteId
+      const clienteId = getClienteIdFromRequest(req);
+      if (clienteId) {
+        const movimientos = await storage.getNominaMovimientosByCliente(clienteId);
+        return res.json(movimientos);
+      }
+      // MaxTalent users can see all
       const movimientos = await storage.getNominaMovimientos();
       res.json(movimientos);
     } catch (error: any) {
@@ -2257,6 +2407,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const movimiento = await storage.getNominaMovimiento(req.params.id);
       if (!movimiento) {
         return res.status(404).json({ message: "Movimiento no encontrado" });
+      }
+      // Verify client access
+      if (movimiento.clienteId && !canAccessCliente(req, movimiento.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este movimiento" });
       }
       res.json(movimiento);
     } catch (error: any) {
@@ -6447,23 +6601,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // Compensación Trabajador API (BRUTO/NETO System)
   // ============================================================================
-  
+
   app.get("/api/compensaciones/empleado/:empleadoId", async (req, res) => {
     try {
       const { empleadoId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const compensaciones = await storage.getCompensacionTrabajadorByEmpleado(empleadoId);
       res.json(compensaciones);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.get("/api/compensaciones/empleado/:empleadoId/vigente", async (req, res) => {
     try {
       const { empleadoId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const { fecha } = req.query;
       const compensacion = await storage.getCompensacionTrabajadorVigente(
-        empleadoId, 
+        empleadoId,
         fecha ? new Date(fecha as string) : undefined
       );
       res.json(compensacion || null);
@@ -6471,20 +6635,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.post("/api/compensaciones", async (req, res) => {
     try {
       const validatedData = insertCompensacionTrabajadorSchema.parse(req.body);
+      // Verify client access before creating
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a crear compensaciones para este cliente" });
+      }
       const compensacion = await storage.createCompensacionTrabajador(validatedData);
       res.status(201).json(compensacion);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
   });
-  
+
   app.patch("/api/compensaciones/:id", async (req, res) => {
     try {
       const { id } = req.params;
+      // Verify access before updating
+      const existingComp = await storage.getCompensacionTrabajador(id);
+      if (existingComp?.clienteId && !canAccessCliente(req, existingComp.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a esta compensación" });
+      }
       const validatedData = insertCompensacionTrabajadorSchema.partial().parse(req.body);
       const compensacion = await storage.updateCompensacionTrabajador(id, validatedData);
       res.json(compensacion);
@@ -6496,30 +6669,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // Compensación Calculada API (Derived values)
   // ============================================================================
-  
+
   app.get("/api/compensaciones-calculadas/empleado/:empleadoId", async (req, res) => {
     try {
       const { empleadoId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const calculadas = await storage.getCompensacionCalculadaByEmpleado(empleadoId);
       res.json(calculadas);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.get("/api/compensaciones-calculadas/empleado/:empleadoId/ultima", async (req, res) => {
     try {
       const { empleadoId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const calculada = await storage.getCompensacionCalculadaLatest(empleadoId);
       res.json(calculada || null);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.post("/api/compensaciones-calculadas", async (req, res) => {
     try {
       const validatedData = insertCompensacionCalculadaSchema.parse(req.body);
+      // Verify client access before creating
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a crear compensaciones calculadas para este cliente" });
+      }
       const calculada = await storage.createCompensacionCalculada(validatedData);
       res.status(201).json(calculada);
     } catch (error: any) {
@@ -6653,13 +6840,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ============================================================================
   // Payroll Exento Ledger API (Cap consumption tracking)
   // ============================================================================
-  
+
   app.get("/api/payroll-exento-ledger/empleado/:empleadoId", async (req, res) => {
     try {
       const { empleadoId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const { ejercicio } = req.query;
       const ledger = await storage.getPayrollExentoLedgerByEmpleado(
-        empleadoId, 
+        empleadoId,
         ejercicio ? parseInt(ejercicio as string) : undefined
       );
       res.json(ledger);
@@ -6667,33 +6859,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.get("/api/payroll-exento-ledger/periodo/:periodoNominaId", async (req, res) => {
     try {
       const { periodoNominaId } = req.params;
+      // Verify access to the periodo
+      const periodo = await storage.getPeriodoNomina(periodoNominaId);
+      if (periodo?.clienteId && !canAccessCliente(req, periodo.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este periodo" });
+      }
       const ledger = await storage.getPayrollExentoLedgerByPeriodo(periodoNominaId);
       res.json(ledger);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
-  
+
   app.get("/api/payroll-exento-ledger/consumo/:empleadoId/:exentoCapConfigId", async (req, res) => {
     try {
       const { empleadoId, exentoCapConfigId } = req.params;
+      // Verify access to the employee
+      const empleado = await storage.getEmployee(empleadoId);
+      if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+        return res.status(403).json({ message: "No tienes acceso a este empleado" });
+      }
       const { ejercicio, mes } = req.query;
-      
+
       if (!ejercicio) {
         return res.status(400).json({ message: "Se requiere ejercicio" });
       }
-      
+
       const consumo = await storage.getConsumoAcumulado(
         empleadoId,
         exentoCapConfigId,
         parseInt(ejercicio as string),
         mes ? parseInt(mes as string) : undefined
       );
-      
+
       res.json({
         consumoMensualBp: consumo.consumoMensualBp.toString(),
         consumoAnualBp: consumo.consumoAnualBp.toString()
@@ -6975,66 +7177,103 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // PORTAL DE EMPLEADOS - Employee Self-Service API
   // ============================================================================
 
-  // Portal Authentication - Login for employees
-  app.post("/api/portal/auth/login", async (req, res) => {
+  // Portal - Get client info by ID (validates portal access)
+  app.get("/api/portal/:clienteId/info", async (req, res) => {
     try {
-      const { username, password } = req.body;
+      const { clienteId } = req.params;
+      const cliente = await storage.getCliente(clienteId);
 
-      if (!username || !password) {
-        return res.status(400).json({ message: "Correo y contraseña son requeridos" });
+      if (!cliente) {
+        return res.status(404).json({ message: "Cliente no encontrado" });
       }
 
-      const user = await storage.getUserByUsername(username);
-
-      if (!user) {
-        return res.status(401).json({ message: "Credenciales inválidas" });
+      if (!cliente.activo) {
+        return res.status(403).json({ message: "Portal no disponible" });
       }
 
-      // Must be an employee user type
-      if (user.tipoUsuario !== "empleado") {
-        return res.status(403).json({ message: "Este portal es solo para empleados" });
+      res.json({
+        clienteId: cliente.id,
+        nombreComercial: cliente.nombreComercial,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Authentication - Login for employees using RFC
+  app.post("/api/portal/:clienteId/auth/login", async (req, res) => {
+    try {
+      const { clienteId } = req.params;
+      const { rfc, password } = req.body;
+
+      // Validate client ID
+      const cliente = await storage.getCliente(clienteId);
+      if (!cliente) {
+        return res.status(404).json({ message: "Portal no encontrado" });
       }
 
-      if (!user.activo) {
-        return res.status(403).json({ message: "Cuenta desactivada. Contacte a Recursos Humanos." });
+      if (!rfc) {
+        return res.status(400).json({ message: "RFC es requerido" });
       }
 
-      if (!user.portalActivo) {
+      const employee = await storage.getEmployeeByRfc(rfc.toUpperCase());
+
+      if (!employee) {
+        return res.status(401).json({ message: "RFC no encontrado" });
+      }
+
+      // Verify employee belongs to this client
+      if (employee.clienteId !== cliente.id) {
+        return res.status(401).json({ message: "RFC no encontrado" });
+      }
+
+      // Check if portal access is enabled
+      if (!employee.portalActivo) {
         return res.status(403).json({ message: "Acceso al portal no habilitado. Contacte a Recursos Humanos." });
       }
 
-      const isPasswordValid = await bcrypt.compare(password, user.password);
+      // Check if employee is active
+      if (employee.estatus !== "activo") {
+        return res.status(403).json({ message: "Empleado inactivo. Contacte a Recursos Humanos." });
+      }
+
+      // First login - no password set yet
+      if (!employee.portalPassword) {
+        return res.status(200).json({
+          requiresPasswordSetup: true,
+          employeeId: employee.id,
+          employeeName: `${employee.nombre} ${employee.apellidoPaterno}`,
+          message: "Primera vez. Configure su contraseña."
+        });
+      }
+
+      // Password is required for login after setup
+      if (!password) {
+        return res.status(400).json({ message: "Contraseña es requerida" });
+      }
+
+      // Verify password
+      const isPasswordValid = await bcrypt.compare(password, employee.portalPassword);
 
       if (!isPasswordValid) {
-        return res.status(401).json({ message: "Credenciales inválidas" });
+        return res.status(401).json({ message: "Contraseña incorrecta" });
       }
 
-      // Get associated employee data
-      let employee = null;
-      if (user.empleadoId) {
-        employee = await storage.getEmployee(user.empleadoId);
-      }
-
-      // Update last portal access
-      await storage.updateUser(user.id, { ultimoAccesoPortal: new Date() });
-
-      // Store user in session with employee info
+      // Store employee in session
       req.session.user = {
-        id: user.id,
-        username: user.username,
-        nombre: user.nombre || employee?.nombre,
-        email: user.email || employee?.email,
-        tipoUsuario: user.tipoUsuario,
-        clienteId: user.clienteId,
-        empleadoId: user.empleadoId,
-        portalActivo: user.portalActivo,
+        id: employee.id,
+        username: employee.rfc,
+        nombre: employee.nombre,
+        email: employee.email || employee.correo,
+        tipoUsuario: "empleado",
+        clienteId: employee.clienteId,
+        empleadoId: employee.id,
+        portalActivo: employee.portalActivo,
       };
 
-      const { password: _, ...publicUser } = user;
       res.json({
         success: true,
-        user: publicUser,
-        employee: employee ? {
+        employee: {
           id: employee.id,
           nombre: employee.nombre,
           apellidoPaterno: employee.apellidoPaterno,
@@ -7046,7 +7285,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           departamento: employee.departamento,
           fechaIngreso: employee.fechaIngreso,
           diasVacacionesDisponibles: employee.diasVacacionesDisponibles,
-        } : null,
+        },
         message: "Login exitoso"
       });
     } catch (error: any) {
@@ -7054,27 +7293,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Portal Auth - Get current user
-  app.get("/api/portal/auth/me", async (req, res) => {
+  // Portal Authentication - Setup password for first login
+  app.post("/api/portal/:clienteId/auth/setup-password", async (req, res) => {
+    try {
+      const { clienteId } = req.params;
+      const { rfc, password } = req.body;
+
+      // Validate client ID
+      const cliente = await storage.getCliente(clienteId);
+      if (!cliente) {
+        return res.status(404).json({ message: "Portal no encontrado" });
+      }
+
+      if (!rfc || !password) {
+        return res.status(400).json({ message: "RFC y contraseña son requeridos" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "La contraseña debe tener al menos 6 caracteres" });
+      }
+
+      const employee = await storage.getEmployeeByRfc(rfc.toUpperCase());
+
+      if (!employee) {
+        return res.status(404).json({ message: "RFC no encontrado" });
+      }
+
+      // Verify employee belongs to this client
+      if (employee.clienteId !== cliente.id) {
+        return res.status(404).json({ message: "RFC no encontrado" });
+      }
+
+      // Only allow if no password set yet
+      if (employee.portalPassword) {
+        return res.status(400).json({ message: "Contraseña ya configurada. Use la opción de recuperar contraseña." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await storage.updateEmployee(employee.id, { portalPassword: hashedPassword });
+
+      res.json({ success: true, message: "Contraseña configurada exitosamente" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Auth - Get current employee
+  app.get("/api/portal/:clienteId/auth/me", async (req, res) => {
     if (!req.session?.user) {
       return res.status(401).json({ message: "No autenticado" });
     }
 
     try {
-      const user = await storage.getUser(req.session.user.id);
-      if (!user || user.tipoUsuario !== "empleado") {
+      // Session now stores employee ID directly
+      const empleadoId = req.session.user.empleadoId;
+      if (!empleadoId) {
         return res.status(401).json({ message: "Sesión inválida" });
       }
 
-      let employee = null;
-      if (user.empleadoId) {
-        employee = await storage.getEmployee(user.empleadoId);
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(401).json({ message: "Empleado no encontrado" });
       }
 
-      const { password: _, ...publicUser } = user;
+      // Check portal access is still enabled
+      if (!employee.portalActivo) {
+        return res.status(403).json({ message: "Acceso al portal no habilitado" });
+      }
+
       res.json({
-        user: publicUser,
-        employee: employee ? {
+        employee: {
           id: employee.id,
           nombre: employee.nombre,
           apellidoPaterno: employee.apellidoPaterno,
@@ -7099,7 +7387,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           codigoPostal: employee.codigoPostal,
           tipoContrato: employee.tipoContrato,
           horario: employee.horario,
-        } : null,
+        },
       });
     } catch (error: any) {
       res.status(401).json({ message: "Sesión inválida" });
@@ -7107,7 +7395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Portal Auth - Logout
-  app.post("/api/portal/auth/logout", (req, res) => {
+  app.post("/api/portal/:clienteId/auth/logout", (req, res) => {
     req.session.destroy((err) => {
       if (err) {
         return res.status(500).json({ message: "Error al cerrar sesión" });
@@ -7372,9 +7660,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // --- Course Categories ---
   app.get("/api/categorias-cursos", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      const clienteId = getEffectiveClienteId(req);
       if (!clienteId) {
-        return res.status(400).json({ message: "Cliente ID requerido" });
+        return res.status(400).json({ message: "Cliente ID requerido. Pasa ?clienteId=XXX en la URL." });
       }
       const categorias = await storage.getCategoriasCursos(clienteId);
       res.json(categorias);
@@ -7421,9 +7709,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // --- Courses ---
   app.get("/api/cursos", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      const clienteId = getEffectiveClienteId(req);
       if (!clienteId) {
-        return res.status(400).json({ message: "Cliente ID requerido" });
+        return res.status(400).json({ message: "Cliente ID requerido. Pasa ?clienteId=XXX en la URL." });
       }
       const estatus = req.query.estatus as string | undefined;
       const cursos = await storage.getCursos(clienteId, estatus);
@@ -7632,7 +7920,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/cursos/:cursoId/quizzes", async (req, res) => {
     try {
       const quizzes = await storage.getQuizzesCurso(req.params.cursoId);
-      res.json(quizzes);
+      // Include preguntas for each quiz
+      const quizzesConPreguntas = await Promise.all(
+        quizzes.map(async (quiz) => {
+          const preguntas = await storage.getPreguntasQuiz(quiz.id);
+          return { ...quiz, preguntas };
+        })
+      );
+      res.json(quizzesConPreguntas);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -7737,7 +8032,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const activo = req.query.activo === "true" ? true : req.query.activo === "false" ? false : undefined;
       const reglas = await storage.getReglasAsignacionCursos(clienteId, activo);
-      res.json(reglas);
+
+      // Enrich with course, departamento, and puesto details
+      const reglasConDetalles = await Promise.all(
+        reglas.map(async (regla) => {
+          const [curso, departamento, puesto] = await Promise.all([
+            storage.getCurso(regla.cursoId),
+            regla.departamentoId ? storage.getDepartamento(regla.departamentoId) : null,
+            regla.puestoId ? storage.getPuesto(regla.puestoId) : null,
+          ]);
+          return { ...regla, curso, departamento, puesto };
+        })
+      );
+
+      res.json(reglasConDetalles);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -7787,12 +8095,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Execute assignment rules manually
+  app.post("/api/reglas-asignacion-cursos/ejecutar", async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      const userId = req.session?.user?.id;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID requerido" });
+      }
+
+      // Get all active rules for this client
+      const reglas = await storage.getReglasAsignacionCursos(clienteId);
+      const reglasActivas = reglas.filter(r => r.activa);
+
+      let totalAsignaciones = 0;
+
+      for (const regla of reglasActivas) {
+        // Get employees matching this rule's criteria
+        const empleados = await storage.getEmployees(clienteId);
+        const empleadosFiltrados = empleados.filter(e => {
+          if (e.estatus !== "activo") return false;
+          if (regla.departamentoId && e.departamentoId !== regla.departamentoId) return false;
+          if (regla.puestoId && e.puestoId !== regla.puestoId) return false;
+          return true;
+        });
+
+        // Get existing assignments for this course
+        const asignacionesExistentes = await storage.getAsignacionesCursos(clienteId, { cursoId: regla.cursoId });
+        const empleadosYaAsignados = new Set(asignacionesExistentes.map(a => a.empleadoId));
+
+        // Create assignments for employees not yet assigned
+        const empleadosSinAsignar = empleadosFiltrados.filter(e => !empleadosYaAsignados.has(e.id));
+
+        if (empleadosSinAsignar.length > 0) {
+          const fechaVencimiento = regla.diasParaCompletar
+            ? new Date(Date.now() + regla.diasParaCompletar * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+            : null;
+
+          await storage.createAsignacionesCursosBulk({
+            clienteId,
+            cursoId: regla.cursoId,
+            empleadoIds: empleadosSinAsignar.map(e => e.id),
+            asignadoPor: userId!,
+            esObligatorio: true,
+            fechaVencimiento,
+            origen: "regla_automatica",
+            reglaOrigenId: regla.id,
+          });
+
+          totalAsignaciones += empleadosSinAsignar.length;
+        }
+      }
+
+      res.json({ asignaciones: totalAsignaciones, reglasEjecutadas: reglasActivas.length });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // --- Course Assignments ---
   app.get("/api/asignaciones-cursos", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      const clienteId = getEffectiveClienteId(req);
       if (!clienteId) {
-        return res.status(400).json({ message: "Cliente ID requerido" });
+        return res.status(400).json({ message: "Cliente ID requerido. Pasa ?clienteId=XXX en la URL." });
       }
       const filters = {
         empleadoId: req.query.empleadoId as string | undefined,
@@ -7801,7 +8167,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         esObligatorio: req.query.esObligatorio === "true" ? true : req.query.esObligatorio === "false" ? false : undefined
       };
       const asignaciones = await storage.getAsignacionesCursos(clienteId, filters);
-      res.json(asignaciones);
+
+      // Enrich with employee and course details
+      const asignacionesConDetalles = await Promise.all(
+        asignaciones.map(async (asig) => {
+          const [curso, empleado] = await Promise.all([
+            storage.getCurso(asig.cursoId),
+            storage.getEmployee(asig.empleadoId),
+          ]);
+          return { ...asig, curso, empleado };
+        })
+      );
+
+      res.json(asignacionesConDetalles);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -7809,9 +8187,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/asignaciones-cursos/vencidas", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      const clienteId = getEffectiveClienteId(req);
       if (!clienteId) {
-        return res.status(400).json({ message: "Cliente ID requerido" });
+        return res.status(400).json({ message: "Cliente ID requerido. Pasa ?clienteId=XXX en la URL." });
       }
       const asignaciones = await storage.getAsignacionesCursosVencidas(clienteId);
       res.json(asignaciones);
@@ -7834,7 +8212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/asignaciones-cursos", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      const clienteId = req.body.clienteId || getEffectiveClienteId(req);
       const userId = req.session?.user?.id;
       if (!clienteId) {
         return res.status(400).json({ message: "Cliente ID requerido" });
@@ -7857,41 +8235,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk assignment
   app.post("/api/asignaciones-cursos/bulk", async (req, res) => {
     try {
-      const clienteId = req.session?.user?.clienteId;
+      console.log("Bulk assignment request body:", JSON.stringify(req.body, null, 2));
+
+      // Get clienteId from body (for MaxTalent users) or session (for client users)
+      const clienteId = req.body.clienteId || getEffectiveClienteId(req);
       const userId = req.session?.user?.id;
       if (!clienteId) {
         return res.status(400).json({ message: "Cliente ID requerido" });
       }
 
-      const { empleadoIds, cursoIds, empresaId, tipoAsignacion, esObligatorio, diasParaCompletar } = req.body;
+      const { empleadoIds, cursoId, cursoIds: cursoIdsParam, empresaId, tipoAsignacion, esObligatorio, diasParaCompletar, fechaVencimiento: bodyFechaVencimiento } = req.body;
+      // Support both cursoId (single) and cursoIds (array)
+      const cursoIds = cursoIdsParam || (cursoId ? [cursoId] : []);
 
-      if (!Array.isArray(empleadoIds) || !Array.isArray(cursoIds)) {
-        return res.status(400).json({ message: "empleadoIds y cursoIds deben ser arrays" });
+      if (!Array.isArray(empleadoIds) || empleadoIds.length === 0) {
+        return res.status(400).json({ message: "empleadoIds debe ser un array con al menos un elemento" });
+      }
+      if (!Array.isArray(cursoIds) || cursoIds.length === 0) {
+        return res.status(400).json({ message: "Debe especificar al menos un curso" });
       }
 
-      const fechaVencimiento = diasParaCompletar
+      // Support fechaVencimiento from body or calculate from diasParaCompletar
+      const fechaVencimiento = bodyFechaVencimiento || (diasParaCompletar
         ? new Date(Date.now() + diasParaCompletar * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        : null;
+        : null);
+
+      // Get employee data to fetch empresaId for each employee
+      const employeeData = await storage.getEmployeesByIds(empleadoIds);
+      console.log("Employee data fetched:", employeeData.map(e => ({ id: e.id, empresaId: e.empresaId })));
+      const employeeMap = new Map(employeeData.map(e => [e.id, e]));
+
+      // Get default empresa for cliente if needed
+      let defaultEmpresaId = empresaId;
+      if (!defaultEmpresaId) {
+        const clienteEmpresas = await storage.getEmpresasByCliente(clienteId);
+        console.log("Cliente empresas:", clienteEmpresas.map(e => ({ id: e.id, nombre: e.razonSocial })));
+        if (clienteEmpresas.length > 0) {
+          defaultEmpresaId = clienteEmpresas[0].id;
+        }
+      }
+      console.log("Default empresaId:", defaultEmpresaId);
 
       const asignaciones = [];
       for (const empleadoId of empleadoIds) {
+        const employee = employeeMap.get(empleadoId);
+        if (!employee) continue; // Skip if employee not found
+
+        const empEmpresaId = employee.empresaId || defaultEmpresaId;
+        if (!empEmpresaId) continue; // Skip if no empresaId available
+
         for (const cursoId of cursoIds) {
           asignaciones.push({
             clienteId,
-            empresaId,
+            empresaId: empEmpresaId,
             empleadoId,
             cursoId,
             tipoAsignacion: tipoAsignacion || 'manual',
-            esObligatorio: esObligatorio || false,
+            esObligatorio: esObligatorio ?? false,
             asignadoPor: userId,
             fechaVencimiento
           });
         }
       }
 
+      console.log("Asignaciones to create:", JSON.stringify(asignaciones, null, 2));
+
+      if (asignaciones.length === 0) {
+        return res.status(400).json({
+          message: "No se pudieron crear asignaciones. Verifica que los empleados seleccionados tengan una empresa asignada."
+        });
+      }
+
       const created = await storage.createAsignacionesCursosBulk(asignaciones);
-      res.status(201).json(created);
+      res.status(201).json({ asignados: created.length, asignaciones: created });
     } catch (error: any) {
+      console.error("Error in bulk assignment:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -7914,6 +8332,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Re-send notification (placeholder - integrate with your notification system)
+  app.post("/api/asignaciones-cursos/:id/notificar", async (req, res) => {
+    try {
+      const asignacion = await storage.getAsignacionCurso(req.params.id);
+      if (!asignacion) {
+        return res.status(404).json({ message: "Asignación no encontrada" });
+      }
+      // TODO: Integrate with notification system (email, push, etc.)
+      // For now, just return success
+      res.json({ message: "Notificación enviada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // --- Certificates ---
   app.get("/api/certificados-cursos", async (req, res) => {
     try {
@@ -7927,7 +8360,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         estatus: req.query.estatus as string | undefined
       };
       const certificados = await storage.getCertificadosCursos(clienteId, filters);
-      res.json(certificados);
+
+      // Enrich with employee and course details
+      const certificadosConDetalles = await Promise.all(
+        certificados.map(async (cert) => {
+          const [curso, empleado] = await Promise.all([
+            storage.getCurso(cert.cursoId),
+            storage.getEmployee(cert.empleadoId),
+          ]);
+          return { ...cert, curso, empleado };
+        })
+      );
+
+      res.json(certificadosConDetalles);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -8233,6 +8678,552 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const certificados = await storage.getCertificadosByEmpleado(empleadoId);
       res.json(certificados);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Submit quiz (combined init + submit for simpler UX)
+  app.post("/api/portal/quiz/:quizId/submit", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const { asignacionId, respuestas } = req.body;
+
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const asignacion = await storage.getAsignacionCurso(asignacionId);
+      if (!asignacion || asignacion.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No autorizado" });
+      }
+
+      const quiz = await storage.getQuizCurso(req.params.quizId);
+      if (!quiz) {
+        return res.status(404).json({ message: "Quiz no encontrado" });
+      }
+
+      // Check attempt limits
+      const intentosAnteriores = await storage.getIntentosQuiz(asignacionId, req.params.quizId);
+      if (quiz.intentosMaximos && intentosAnteriores.length >= quiz.intentosMaximos) {
+        return res.status(400).json({ message: "Has alcanzado el máximo de intentos permitidos" });
+      }
+
+      // Create the attempt
+      const intento = await storage.createIntentoQuiz({
+        asignacionId,
+        quizId: req.params.quizId,
+        empleadoId,
+        numeroIntento: intentosAnteriores.length + 1,
+        fechaInicio: new Date(),
+        estatus: 'en_progreso'
+      });
+
+      // Get quiz questions to grade
+      const preguntas = await storage.getPreguntasQuiz(req.params.quizId);
+
+      let puntosObtenidos = 0;
+      let puntosMaximos = 0;
+      const correctAnswers: Record<string, boolean> = {};
+      const respuestasCalificadas = [];
+
+      for (const pregunta of preguntas) {
+        const respuestaUsuario = respuestas?.[pregunta.id];
+        const puntosPregunta = pregunta.puntos || 1;
+        puntosMaximos += puntosPregunta;
+
+        let esCorrecta = false;
+        const opciones = pregunta.opciones as { id?: string; texto: string; esCorrecta?: boolean }[] | null;
+
+        if (respuestaUsuario !== undefined && opciones) {
+          if (pregunta.tipoPregunta === 'true_false') {
+            // For true/false, check if answer matches correcta field
+            const correctAnswer = opciones.find(o => o.esCorrecta)?.texto?.toLowerCase();
+            esCorrecta = (respuestaUsuario === 'true' && correctAnswer === 'verdadero') ||
+                         (respuestaUsuario === 'false' && correctAnswer === 'falso');
+          } else if (pregunta.tipoPregunta === 'multiple_choice') {
+            // For multiple choice, respuestaUsuario is the index as string
+            const selectedIndex = parseInt(respuestaUsuario, 10);
+            esCorrecta = !isNaN(selectedIndex) && opciones[selectedIndex]?.esCorrecta === true;
+          } else if (pregunta.tipoPregunta === 'multiple_select') {
+            // For multiple select, compare arrays of correct indices
+            const correctIndices = opciones
+              .map((o, i) => o.esCorrecta ? String(i) : null)
+              .filter(Boolean)
+              .sort();
+            const selectedIndices = (Array.isArray(respuestaUsuario) ? respuestaUsuario : []).sort();
+            esCorrecta = JSON.stringify(correctIndices) === JSON.stringify(selectedIndices);
+          }
+        }
+
+        if (esCorrecta) {
+          puntosObtenidos += puntosPregunta;
+        }
+
+        correctAnswers[pregunta.id] = esCorrecta;
+
+        respuestasCalificadas.push({
+          preguntaId: pregunta.id,
+          respuesta: respuestaUsuario,
+          esCorrecta,
+          puntosObtenidos: esCorrecta ? puntosPregunta : 0
+        });
+      }
+
+      const calificacion = puntosMaximos > 0 ? Math.round((puntosObtenidos / puntosMaximos) * 100) : 0;
+      const minScore = quiz.calificacionMinima || 70;
+      const passed = calificacion >= minScore;
+
+      // Finalize the attempt
+      await storage.finalizarIntentoQuiz(
+        intento.id,
+        respuestasCalificadas,
+        puntosObtenidos,
+        puntosMaximos
+      );
+
+      // Find the lesson that has this quiz and mark it complete
+      const cursoCompleto = await storage.getCursoCompleto(asignacion.cursoId);
+      if (cursoCompleto) {
+        for (const modulo of cursoCompleto.modulos) {
+          for (const leccion of modulo.lecciones) {
+            if ((leccion as any).quizId === req.params.quizId) {
+              await storage.completarLeccion(asignacionId, leccion.id, 0);
+              break;
+            }
+          }
+        }
+      }
+
+      // Update course progress
+      const porcentaje = await storage.calcularProgresoCurso(asignacionId);
+      await storage.updateAsignacionCurso(asignacionId, {
+        porcentajeProgreso: porcentaje,
+        intentosRealizados: (asignacion.intentosRealizados || 0) + 1,
+        ...(passed ? { calificacionFinal: calificacion, aprobado: true } : {})
+      });
+
+      res.json({
+        score: calificacion,
+        passed,
+        minScore,
+        correctAnswers
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // DOCUMENT TEMPLATES - Plantillas de Documentos
+  // ============================================================================
+
+  // --- Template Categories ---
+  app.get("/api/plantillas-documento/categorias", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const categorias = await storage.getCategoriasPlantillaDocumento(clienteId);
+      res.json(categorias);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/plantillas-documento/categorias", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const categoria = await storage.createCategoriaPlantillaDocumento({
+        ...req.body,
+        clienteId,
+      });
+      res.json(categoria);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/plantillas-documento/categorias/:id", async (req, res) => {
+    try {
+      const categoria = await storage.updateCategoriaPlantillaDocumento(req.params.id, req.body);
+      res.json(categoria);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantillas-documento/categorias/:id", async (req, res) => {
+    try {
+      await storage.deleteCategoriaPlantillaDocumento(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Get template variables metadata ---
+  app.get("/api/plantillas-documento/variables", async (_req, res) => {
+    try {
+      const { templateVariableCategories, getAllTemplateVariables } = await import("@shared/templateVariables");
+      res.json({
+        categories: templateVariableCategories,
+        flatList: getAllTemplateVariables(),
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Templates CRUD ---
+  app.get("/api/plantillas-documento", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const tipoDocumento = req.query.tipo as string | undefined;
+      const templates = await storage.getPlantillasDocumento(clienteId, tipoDocumento);
+      res.json(templates);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/plantillas-documento/:id", async (req, res) => {
+    try {
+      const template = await storage.getPlantillaDocumentoById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/plantillas-documento", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const template = await storage.createPlantillaDocumento({
+        ...req.body,
+        clienteId,
+        createdBy: req.session?.user?.id,
+      });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/plantillas-documento/:id", async (req, res) => {
+    try {
+      const template = await storage.updatePlantillaDocumento(req.params.id, {
+        ...req.body,
+        updatedBy: req.session?.user?.id,
+      });
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantillas-documento/:id", async (req, res) => {
+    try {
+      await storage.deletePlantillaDocumento(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Template Versions ---
+  app.get("/api/plantillas-documento/:id/versiones", async (req, res) => {
+    try {
+      const versiones = await storage.getPlantillaDocumentoVersiones(req.params.id);
+      res.json(versiones);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/plantillas-documento/:id/restaurar/:version", async (req, res) => {
+    try {
+      const version = parseInt(req.params.version, 10);
+      if (isNaN(version)) {
+        return res.status(400).json({ message: "Invalid version number" });
+      }
+      const template = await storage.restaurarPlantillaDocumentoVersion(
+        req.params.id,
+        version,
+        req.session?.user?.id
+      );
+      res.json(template);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Template Assets ---
+  app.get("/api/plantillas-documento/assets", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const tipo = req.query.tipo as string | undefined;
+      const assets = await storage.getPlantillaDocumentoAssets(clienteId, tipo);
+      res.json(assets);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/plantillas-documento/assets", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const asset = await storage.createPlantillaDocumentoAsset({
+        ...req.body,
+        clienteId,
+      });
+      res.json(asset);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantillas-documento/assets/:id", async (req, res) => {
+    try {
+      await storage.deletePlantillaDocumentoAsset(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Assignment Rules ---
+  app.get("/api/plantillas-documento/reglas-asignacion", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const plantillaId = req.query.plantillaId as string | undefined;
+      const reglas = await storage.getReglasAsignacionPlantilla(clienteId, plantillaId);
+      res.json(reglas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/plantillas-documento/reglas-asignacion", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const regla = await storage.createReglaAsignacionPlantilla({
+        ...req.body,
+        clienteId,
+      });
+      res.json(regla);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/plantillas-documento/reglas-asignacion/:id", async (req, res) => {
+    try {
+      const regla = await storage.updateReglaAsignacionPlantilla(req.params.id, req.body);
+      res.json(regla);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/plantillas-documento/reglas-asignacion/:id", async (req, res) => {
+    try {
+      await storage.deleteReglaAsignacionPlantilla(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get suggested templates based on context
+  app.get("/api/plantillas-documento/sugeridas", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const context = {
+        tipoEvento: req.query.tipoEvento as string | undefined,
+        empresaId: req.query.empresaId as string | undefined,
+        departamento: req.query.departamento as string | undefined,
+        puestoId: req.query.puestoId as string | undefined,
+        tipoContrato: req.query.tipoContrato as string | undefined,
+      };
+      const plantillas = await storage.getPlantillasSugeridas(clienteId, context);
+      res.json(plantillas);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Preview template with sample or real data ---
+  app.post("/api/plantillas-documento/:id/preview", async (req, res) => {
+    try {
+      const template = await storage.getPlantillaDocumentoById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const { empleadoId, empresaId, customVariables } = req.body;
+      const {
+        buildEmpleadoVariables,
+        buildEmpresaVariables,
+        buildDocumentoVariables,
+        getSampleEmpleadoData,
+        getSampleEmpresaData,
+      } = await import("@shared/templateVariables");
+
+      // Get real or sample data
+      let empleadoData = getSampleEmpleadoData();
+      let empresaData = getSampleEmpresaData();
+
+      if (empleadoId) {
+        const empleado = await storage.getEmployee(empleadoId);
+        if (empleado) {
+          empleadoData = empleado as any;
+        }
+      }
+
+      if (empresaId) {
+        const empresa = await storage.getEmpresa(empresaId);
+        if (empresa) {
+          empresaData = empresa as any;
+        }
+      }
+
+      res.json({
+        template,
+        variables: {
+          empleado: buildEmpleadoVariables(empleadoData),
+          empresa: buildEmpresaVariables(empresaData),
+          documento: buildDocumentoVariables(),
+          custom: customVariables || {},
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Generate PDF from template ---
+  app.post("/api/plantillas-documento/:id/generar-pdf", async (req, res) => {
+    try {
+      const template = await storage.getPlantillaDocumentoById(req.params.id);
+      if (!template) {
+        return res.status(404).json({ message: "Template not found" });
+      }
+
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      const { empleadoId, empresaId, customVariables } = req.body;
+      const {
+        buildEmpleadoVariables,
+        buildEmpresaVariables,
+        buildDocumentoVariables,
+      } = await import("@shared/templateVariables");
+
+      // Get data
+      let empleadoData: Record<string, unknown> = {};
+      let empresaData: Record<string, unknown> = {};
+
+      if (empleadoId) {
+        const empleado = await storage.getEmployee(empleadoId);
+        if (empleado) {
+          empleadoData = empleado as any;
+        }
+      }
+
+      if (empresaId) {
+        const empresa = await storage.getEmpresa(empresaId);
+        if (empresa) {
+          empresaData = empresa as any;
+        }
+      }
+
+      const variableData = {
+        empleado: buildEmpleadoVariables(empleadoData),
+        empresa: buildEmpresaVariables(empresaData),
+        documento: buildDocumentoVariables(),
+        custom: customVariables || {},
+      };
+
+      // For now, return the data for client-side PDF generation
+      // Server-side PDF generation with Puppeteer will be added later
+      const generatedDoc = await storage.createDocumentoGenerado({
+        clienteId,
+        empresaId,
+        plantillaId: template.id,
+        plantillaVersion: template.version,
+        empleadoId,
+        nombreArchivo: `${template.nombre}_${new Date().toISOString().slice(0, 10)}.pdf`,
+        variablesUsadas: variableData,
+        variablesCustom: customVariables,
+        generadoPor: req.session?.user?.id,
+      });
+
+      res.json({
+        documento: generatedDoc,
+        template,
+        variables: variableData,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // --- Generated Documents History ---
+  app.get("/api/documentos-generados", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+      const documentos = await storage.getDocumentosGenerados(clienteId, {
+        empleadoId: req.query.empleadoId as string | undefined,
+        plantillaId: req.query.plantillaId as string | undefined,
+        limit: req.query.limit ? parseInt(req.query.limit as string, 10) : undefined,
+      });
+      res.json(documentos);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/documentos-generados/:id", async (req, res) => {
+    try {
+      const documento = await storage.getDocumentoGenerado(req.params.id);
+      if (!documento) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+      res.json(documento);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }

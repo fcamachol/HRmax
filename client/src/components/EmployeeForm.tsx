@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { insertEmployeeSchema } from "@shared/schema";
+import { insertEmployeeSchema, type Empresa } from "@shared/schema";
 import { z } from "zod";
+import { useCliente } from "@/contexts/ClienteContext";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -46,6 +47,57 @@ export function EmployeeForm({ onSuccess, defaultValues }: EmployeeFormProps) {
   const isEditMode = !!(defaultValues?.id);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedCliente } = useCliente();
+
+  // Fetch empresas filtered by current cliente
+  const { data: empresas = [] } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas", { clienteId: selectedCliente?.id }],
+    queryFn: async () => {
+      const url = selectedCliente?.id
+        ? `/api/empresas?clienteId=${selectedCliente.id}`
+        : "/api/empresas";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch empresas");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
+  });
+
+  const form = useForm<EmployeeFormValues>({
+    resolver: zodResolver(employeeFormSchema),
+    defaultValues: defaultValues || {
+      clienteId: selectedCliente?.id || "",
+      empresaId: "",
+      numeroEmpleado: "",
+      nombre: "",
+      apellidoPaterno: "",
+      apellidoMaterno: "",
+      rfc: "",
+      curp: "",
+      nss: "",
+      email: "",
+      telefono: "",
+      departamento: "",
+      puesto: "",
+      salarioBrutoMensual: "",
+      tipoContrato: "indeterminado",
+      fechaIngreso: "",
+    },
+  });
+
+  // Auto-select empresa if there's only one
+  useEffect(() => {
+    if (empresas.length === 1 && !form.getValues("empresaId")) {
+      form.setValue("empresaId", empresas[0].id);
+    }
+  }, [empresas, form]);
+
+  // Update clienteId when selectedCliente changes
+  useEffect(() => {
+    if (selectedCliente?.id && !form.getValues("clienteId")) {
+      form.setValue("clienteId", selectedCliente.id);
+    }
+  }, [selectedCliente, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: EmployeeFormValues) => {
@@ -75,33 +127,49 @@ export function EmployeeForm({ onSuccess, defaultValues }: EmployeeFormProps) {
   });
 
   const handleFormSubmit = (data: EmployeeFormValues) => {
-    mutation.mutate(data);
+    // Ensure clienteId is set from context if not already in the data
+    const submitData = {
+      ...data,
+      clienteId: data.clienteId || selectedCliente?.id,
+    };
+    mutation.mutate(submitData as EmployeeFormValues);
   };
-
-  const form = useForm<EmployeeFormValues>({
-    resolver: zodResolver(employeeFormSchema),
-    defaultValues: defaultValues || {
-      numeroEmpleado: "",
-      nombre: "",
-      apellidoPaterno: "",
-      apellidoMaterno: "",
-      rfc: "",
-      curp: "",
-      nss: "",
-      email: "",
-      telefono: "",
-      departamento: "",
-      puesto: "",
-      salarioBrutoMensual: "",
-      tipoContrato: "indeterminado",
-      fechaIngreso: "",
-    },
-  });
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <FormField
+            control={form.control}
+            name="empresaId"
+            render={({ field }) => (
+              <FormItem className="col-span-2">
+                <FormLabel>Empresa *</FormLabel>
+                {empresas.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No hay empresas configuradas para este cliente. Por favor, crea una empresa primero.
+                  </p>
+                ) : (
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-empresaId">
+                        <SelectValue placeholder="Selecciona una empresa" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {empresas.map((empresa) => (
+                        <SelectItem key={empresa.id} value={empresa.id}>
+                          {empresa.nombreComercial || empresa.razonSocial}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="numeroEmpleado"

@@ -15,11 +15,13 @@ import {
 import { EmployeeForm } from "@/components/EmployeeForm";
 import { CSVEmployeeUploader } from "@/components/CSVEmployeeUploader";
 import { useQuery } from "@tanstack/react-query";
+import { useCliente } from "@/contexts/ClienteContext";
 import type { Employee } from "@shared/schema";
 
 type ViewMode = "list" | "quick" | "detail";
 
 export default function Employees() {
+  const { clienteId } = useCliente();
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCSVDialogOpen, setIsCSVDialogOpen] = useState(false);
@@ -28,7 +30,13 @@ export default function Employees() {
   const [isEditing, setIsEditing] = useState(false);
 
   const { data: employees = [], isLoading } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar empleados");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const filteredEmployees = employees.filter(

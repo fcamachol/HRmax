@@ -179,7 +179,7 @@ function useToast() {
         listeners.splice(index, 1)
       }
     }
-  }, [state])
+  }, []) // Empty deps - only subscribe/unsubscribe on mount/unmount
 
   return {
     ...state,

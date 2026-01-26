@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation, useParams } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -8,10 +8,11 @@ import { AppSidebar } from "@/components/AppSidebar";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ClienteProvider } from "@/contexts/ClienteContext";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { PortalAuthProvider } from "@/contexts/PortalAuthContext";
 import { RequireAuth } from "@/components/RequireAuth";
 import { RequirePortalAuth } from "@/components/portal/RequirePortalAuth";
+import { useEffect } from "react";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
@@ -63,6 +64,14 @@ import ReportesCursos from "@/pages/cursos-capacitaciones/Reportes";
 import CertificadosCursos from "@/pages/cursos-capacitaciones/Certificados";
 import CursoPreview from "@/pages/cursos-capacitaciones/CursoPreview";
 
+// Documentos (Templates)
+import {
+  PlantillasDocumento,
+  EditorPlantilla,
+  GenerarDocumento,
+  ReglasAsignacion as ReglasAsignacionPlantillas,
+} from "@/pages/documentos";
+
 // Portal (Employee Self-Service) Pages
 import PortalLogin from "@/pages/portal/Login";
 import PortalHome from "@/pages/portal/Home";
@@ -72,54 +81,91 @@ import PortalMas from "@/pages/portal/Mas";
 import PortalProfile from "@/pages/portal/Profile";
 import PortalMisCursos from "@/pages/portal/MisCursos";
 import PortalCursoPlayer from "@/pages/portal/CursoPlayer";
+import AgencyDashboard from "@/pages/AgencyDashboard";
 
-function Router() {
+// Agency routes (for MaxTalent users without a specific client selected)
+function AgencyRouter() {
   return (
     <Switch>
-      <Route path="/" component={Dashboard} />
-      <Route path="/employees" component={Employees} />
-      <Route path="/employees/altas" component={Altas} />
-      <Route path="/employees/bajas" component={Bajas} />
-      <Route path="/employees/reingresos" component={Reingresos} />
-      <Route path="/employees/cambios" component={Cambios} />
-      <Route path="/payroll" component={Payroll} />
-      <Route path="/payroll/grupos" component={GruposNomina} />
-      <Route path="/attendance" component={Attendance} />
-      <Route path="/reloj-checador" component={RelojChecador} />
-      <Route path="/organizacion/puestos" component={Puestos} />
-      <Route path="/organizacion/centros-trabajo" component={CentrosTrabajo} />
-      <Route path="/organizacion/departamentos" component={Departamentos} />
-      <Route path="/reclutamiento/vacantes" component={Vacantes} />
-      <Route path="/reclutamiento/candidatos" component={Candidatos} />
-      <Route path="/reclutamiento/proceso" component={ProcesoSeleccion} />
-      <Route path="/vacaciones" component={Vacaciones} />
-      <Route path="/incapacidades" component={Incapacidades} />
-      <Route path="/permisos" component={Permisos} />
-      <Route path="/actas-administrativas" component={ActasAdministrativas} />
-      <Route path="/configuration/medios-pago" component={MediosPago} />
-      <Route path="/configuration/prestaciones" component={Prestaciones} />
-      <Route path="/configuration/plantillas-nomina" component={PlantillasNomina} />
-      <Route path="/configuration/conceptos" component={ConceptosNomina} />
-      <Route path="/configuration/catalogos" component={CatalogosBase} />
-      <Route path="/imss/movimientos" component={ImssMovimientos} />
-      <Route path="/imss/sua-bimestres" component={SuaBimestres} />
-      <Route path="/reports" component={Reports} />
-      <Route path="/legal" component={Legal} />
-      <Route path="/repse" component={REPSE} />
-      <Route path="/creditos" component={Creditos} />
-      <Route path="/configuration" component={Configuration} />
-      <Route path="/empresas" component={Empresas} />
-      <Route path="/cursos-capacitaciones" component={Cursos} />
-      <Route path="/cursos-capacitaciones/:id/editar" component={CursoBuilder} />
-      <Route path="/cursos-capacitaciones/:id/preview" component={CursoPreview} />
-      <Route path="/cursos-capacitaciones/asignaciones" component={Asignaciones} />
-      <Route path="/cursos-capacitaciones/reglas" component={ReglasAsignacion} />
-      <Route path="/cursos-capacitaciones/reportes" component={ReportesCursos} />
-      <Route path="/cursos-capacitaciones/certificados" component={CertificadosCursos} />
-      <Route path="/settings" component={Settings} />
+      <Route path="/agency" component={AgencyDashboard} />
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+// Routes within a client context (all use /:clienteId prefix)
+function ClienteRouter() {
+  return (
+    <Switch>
+      <Route path="/:clienteId" component={Dashboard} />
+      <Route path="/:clienteId/employees" component={Employees} />
+      <Route path="/:clienteId/employees/altas" component={Altas} />
+      <Route path="/:clienteId/employees/bajas" component={Bajas} />
+      <Route path="/:clienteId/employees/reingresos" component={Reingresos} />
+      <Route path="/:clienteId/employees/cambios" component={Cambios} />
+      <Route path="/:clienteId/payroll" component={Payroll} />
+      <Route path="/:clienteId/payroll/grupos" component={GruposNomina} />
+      <Route path="/:clienteId/attendance" component={Attendance} />
+      <Route path="/:clienteId/reloj-checador" component={RelojChecador} />
+      <Route path="/:clienteId/organizacion/puestos" component={Puestos} />
+      <Route path="/:clienteId/organizacion/centros-trabajo" component={CentrosTrabajo} />
+      <Route path="/:clienteId/organizacion/departamentos" component={Departamentos} />
+      <Route path="/:clienteId/reclutamiento/vacantes" component={Vacantes} />
+      <Route path="/:clienteId/reclutamiento/candidatos" component={Candidatos} />
+      <Route path="/:clienteId/reclutamiento/proceso" component={ProcesoSeleccion} />
+      <Route path="/:clienteId/vacaciones" component={Vacaciones} />
+      <Route path="/:clienteId/incapacidades" component={Incapacidades} />
+      <Route path="/:clienteId/permisos" component={Permisos} />
+      <Route path="/:clienteId/actas-administrativas" component={ActasAdministrativas} />
+      <Route path="/:clienteId/configuration/medios-pago" component={MediosPago} />
+      <Route path="/:clienteId/configuration/prestaciones" component={Prestaciones} />
+      <Route path="/:clienteId/configuration/plantillas-nomina" component={PlantillasNomina} />
+      <Route path="/:clienteId/configuration/conceptos" component={ConceptosNomina} />
+      <Route path="/:clienteId/configuration/catalogos" component={CatalogosBase} />
+      <Route path="/:clienteId/imss/movimientos" component={ImssMovimientos} />
+      <Route path="/:clienteId/imss/sua-bimestres" component={SuaBimestres} />
+      <Route path="/:clienteId/reports" component={Reports} />
+      <Route path="/:clienteId/legal" component={Legal} />
+      <Route path="/:clienteId/repse" component={REPSE} />
+      <Route path="/:clienteId/creditos" component={Creditos} />
+      <Route path="/:clienteId/configuration" component={Configuration} />
+      <Route path="/:clienteId/empresas" component={Empresas} />
+      <Route path="/:clienteId/cursos-capacitaciones/asignaciones" component={Asignaciones} />
+      <Route path="/:clienteId/cursos-capacitaciones/reglas" component={ReglasAsignacion} />
+      <Route path="/:clienteId/cursos-capacitaciones/reportes" component={ReportesCursos} />
+      <Route path="/:clienteId/cursos-capacitaciones/certificados" component={CertificadosCursos} />
+      <Route path="/:clienteId/cursos-capacitaciones/:id/editar" component={CursoBuilder} />
+      <Route path="/:clienteId/cursos-capacitaciones/:id/preview" component={CursoPreview} />
+      <Route path="/:clienteId/cursos-capacitaciones" component={Cursos} />
+      <Route path="/:clienteId/documentos/plantillas/:id" component={EditorPlantilla} />
+      <Route path="/:clienteId/documentos/plantillas" component={PlantillasDocumento} />
+      <Route path="/:clienteId/documentos/reglas-asignacion" component={ReglasAsignacionPlantillas} />
+      <Route path="/:clienteId/documentos/generar/:id" component={GenerarDocumento} />
+      <Route path="/:clienteId/settings" component={Settings} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+// Redirect to client-scoped URL after login
+function ClienteRedirect() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user) {
+      // Client users go to their assigned client
+      if (user.tipoUsuario === "cliente" && user.clienteId) {
+        setLocation(`/${user.clienteId}`);
+      } else {
+        // MaxTalent users - go to agency dashboard (client-agnostic)
+        // They can select a client from the selector when needed
+        setLocation("/agency");
+      }
+    }
+  }, [user, setLocation]);
+
+  return <div className="flex items-center justify-center h-screen">Redirecting...</div>;
 }
 
 export default function App() {
@@ -139,64 +185,70 @@ export default function App() {
               <Route path="/super-admin/login" component={SuperAdminLogin} />
 
               {/* Portal (Employee Self-Service) routes */}
-              <Route path="/portal/login" component={PortalLogin} />
-              <Route path="/portal">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/login">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <PortalLogin />
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalHome />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/solicitudes">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/solicitudes">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalSolicitudes />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/recibos">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/recibos">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalRecibos />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/mas">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/mas">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalMas />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/perfil">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/perfil">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalProfile />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/cursos/:asignacionId">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/cursos/:asignacionId">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalCursoPlayer />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}
               </Route>
-              <Route path="/portal/cursos">
-                {() => (
-                  <PortalAuthProvider>
+              <Route path="/portal/:clienteId/cursos">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalMisCursos />
                     </RequirePortalAuth>
@@ -225,7 +277,18 @@ export default function App() {
               )}
             </Route>
             <Route path="/onboarding" component={OnboardingWizard} />
-            <Route>
+
+            {/* Root redirect - send authenticated users to their client */}
+            <Route path="/">
+              {() => (
+                <RequireAuth>
+                  <ClienteRedirect />
+                </RequireAuth>
+              )}
+            </Route>
+
+            {/* Agency view for MaxTalent users (no client selected) */}
+            <Route path="/agency/*?">
               {() => (
                 <RequireAuth>
                   <ClienteProvider>
@@ -238,7 +301,31 @@ export default function App() {
                             <ThemeToggle />
                           </header>
                           <main className="flex-1 overflow-auto p-6 md:p-8">
-                            <Router />
+                            <AgencyRouter />
+                          </main>
+                        </div>
+                      </div>
+                    </SidebarProvider>
+                  </ClienteProvider>
+                </RequireAuth>
+              )}
+            </Route>
+
+            {/* Client-scoped routes - matches /:clienteId and /:clienteId/anything */}
+            <Route path="/:clienteId/*?">
+              {() => (
+                <RequireAuth>
+                  <ClienteProvider>
+                    <SidebarProvider style={style as React.CSSProperties}>
+                      <div className="flex h-screen w-full">
+                        <AppSidebar />
+                        <div className="flex flex-col flex-1 overflow-hidden">
+                          <header className="flex items-center justify-between p-4 border-b bg-background">
+                            <SidebarTrigger data-testid="button-sidebar-toggle" />
+                            <ThemeToggle />
+                          </header>
+                          <main className="flex-1 overflow-auto p-6 md:p-8">
+                            <ClienteRouter />
                           </main>
                         </div>
                       </div>

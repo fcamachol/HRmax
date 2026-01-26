@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useCliente } from "@/contexts/ClienteContext";
 import type { Cliente } from "@shared/schema";
 import {
@@ -15,7 +16,8 @@ import { ChevronDown, Search, LayoutGrid } from "lucide-react";
 export function ClienteSelector() {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { selectedCliente, setSelectedCliente, isAgencyView, setIsAgencyView, canChangeCliente, isClientUser } = useCliente();
+  const [, setLocation] = useLocation();
+  const { selectedCliente, navigateToCliente, isAgencyView, canChangeCliente, isClientUser } = useCliente();
 
   const { data: clientes = [], isLoading } = useQuery<Cliente[]>({
     queryKey: ["/api/clientes/activos"],
@@ -29,15 +31,14 @@ export function ClienteSelector() {
   );
 
   const handleSelectCliente = (cliente: Cliente) => {
-    setSelectedCliente(cliente);
-    setIsAgencyView(false);
+    navigateToCliente(cliente.id);
     setOpen(false);
     setSearchQuery("");
   };
 
   const handleAgencyView = () => {
-    setSelectedCliente(null);
-    setIsAgencyView(true);
+    // Navigate to agency dashboard (client-agnostic view)
+    setLocation("/agency");
     setOpen(false);
     setSearchQuery("");
   };

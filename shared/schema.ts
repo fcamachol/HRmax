@@ -102,6 +102,9 @@ export const employees = pgTable("employees", {
   driveId: text("drive_id"),
   cuenta: numeric("cuenta"),
   grupoNominaId: varchar("grupo_nomina_id"),
+  // Portal de Empleados
+  portalActivo: boolean("portal_activo").notNull().default(true),
+  portalPassword: text("portal_password"), // hashed, null until first login
 }, (table) => ({
   clienteEmpresaIdx: index("employees_cliente_empresa_idx").on(table.clienteId, table.empresaId),
 }));
@@ -110,7 +113,19 @@ export const employees = pgTable("employees", {
 // MODIFICACIONES DE PERSONAL - Historial de cambios en empleados
 // ============================================================================
 
-export const tiposModificacion = ["salario", "puesto", "centro_trabajo", "departamento", "jefe_directo", "otro"] as const;
+export const tiposModificacion = [
+  "salario",
+  "puesto",
+  "centro_trabajo",
+  "departamento",
+  "jefe_directo",
+  "cuenta_bancaria",
+  "horario",
+  "registro_patronal",
+  "contrato",
+  "estatus",
+  "otro"
+] as const;
 export type TipoModificacion = typeof tiposModificacion[number];
 
 export const modificacionesPersonal = pgTable("modificaciones_personal", {
@@ -5452,3 +5467,508 @@ export const insertCertificadoCursoSchema = createInsertSchema(certificadosCurso
   createdAt: true,
 });
 export type InsertCertificadoCurso = z.infer<typeof insertCertificadoCursoSchema>;
+
+// ============================================================================
+// ANONYMOUS REPORTING SYSTEM (Denuncias Anónimas / Whistleblower)
+// NOM-035-STPS-2018 Compliant - Psychosocial Risk Prevention
+// ============================================================================
+
+// Report categories
+export const categoriasDenuncia = ["harassment_abuse", "ethics_compliance", "suggestions", "safety_concerns"] as const;
+export type CategoriaDenuncia = (typeof categoriasDenuncia)[number];
+
+export const categoriasDenunciaLabels: Record<CategoriaDenuncia, string> = {
+  harassment_abuse: "Acoso y Abuso",
+  ethics_compliance: "Ética y Cumplimiento",
+  suggestions: "Sugerencias",
+  safety_concerns: "Seguridad en el Trabajo"
+};
+
+// Report statuses
+export const estatusDenuncia = ["nuevo", "en_revision", "en_investigacion", "resuelto", "cerrado", "descartado"] as const;
+export type EstatusDenuncia = (typeof estatusDenuncia)[number];
+
+export const estatusDenunciaLabels: Record<EstatusDenuncia, string> = {
+  nuevo: "Nuevo",
+  en_revision: "En Revisión",
+  en_investigacion: "En Investigación",
+  resuelto: "Resuelto",
+  cerrado: "Cerrado",
+  descartado: "Descartado"
+};
+
+// Priority levels
+export const prioridadDenuncia = ["baja", "normal", "alta", "urgente"] as const;
+export type PrioridadDenuncia = (typeof prioridadDenuncia)[number];
+
+// Main anonymous reports table
+export const denunciasAnonimas = pgTable("denuncias_anonimas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // Multi-tenant isolation
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+
+  // Anonymous access credentials (Case Number + PIN for anonymous follow-up)
+  caseNumber: varchar("case_number", { length: 20 }).notNull().unique(),
+  pinHash: varchar("pin_hash", { length: 255 }).notNull(),
+
+  // Report content
+  categoria: varchar("categoria", { length: 50 }).notNull(),
+  subcategoria: varchar("subcategoria", { length: 100 }),
+  titulo: varchar("titulo", { length: 255 }).notNull(),
+  descripcion: text("descripcion").notNull(),
+
+  // Optional incident details
+  fechaIncidente: date("fecha_incidente"),
+  ubicacionDescripcion: text("ubicacion_descripcion"),
+
+  // Identity disclosure (opt-in only - reporter chooses to identify themselves)
+  reporteroDeseaIdentificarse: boolean("reportero_desea_identificarse").notNull().default(false),
+  reporteroNombre: varchar("reportero_nombre", { length: 255 }),
+  reporteroContacto: varchar("reportero_contacto", { length: 255 }),
+
+  // Workflow
+  estatus: varchar("estatus", { length: 30 }).notNull().default("nuevo"),
+  prioridad: varchar("prioridad", { length: 20 }).notNull().default("normal"),
+
+  // Assignment
+  asignadoA: varchar("asignado_a").references(() => users.id, { onDelete: "set null" }),
+  fechaAsignacion: timestamp("fecha_asignacion"),
+
+  // Resolution
+  resolucionTipo: varchar("resolucion_tipo", { length: 50 }),
+  resolucionDescripcion: text("resolucion_descripcion"),
+  notasInternas: text("notas_internas"), // Only visible to admins, never to reporter
+
+  // Anonymous notifications (optional email that can't be traced to employee)
+  emailAnonimo: varchar("email_anonimo", { length: 255 }),
+  notificarPorEmail: boolean("notificar_por_email").notNull().default(false),
+
+  // SLA tracking
+  fechaLimiteRevision: timestamp("fecha_limite_revision"),
+  fechaLimiteResolucion: timestamp("fecha_limite_resolucion"),
+
+  // Timestamps
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+  resolvedAt: timestamp("resolved_at"),
+}, (table) => ({
+  clienteIdx: index("denuncias_anonimas_cliente_idx").on(table.clienteId),
+  empresaIdx: index("denuncias_anonimas_empresa_idx").on(table.empresaId),
+  estatusIdx: index("denuncias_anonimas_estatus_idx").on(table.estatus),
+  caseNumberIdx: uniqueIndex("denuncias_anonimas_case_number_idx").on(table.caseNumber),
+  createdAtIdx: index("denuncias_anonimas_created_at_idx").on(table.createdAt),
+}));
+
+export type DenunciaAnonima = typeof denunciasAnonimas.$inferSelect;
+export const insertDenunciaAnonimaSchema = createInsertSchema(denunciasAnonimas).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  resolvedAt: true,
+});
+export type InsertDenunciaAnonima = z.infer<typeof insertDenunciaAnonimaSchema>;
+
+// Two-way anonymous communication messages
+export const denunciaMensajes = pgTable("denuncia_mensajes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  denunciaId: varchar("denuncia_id").notNull().references(() => denunciasAnonimas.id, { onDelete: "cascade" }),
+
+  contenido: text("contenido").notNull(),
+
+  // Who sent the message
+  tipoRemitente: varchar("tipo_remitente", { length: 20 }).notNull(), // 'reporter' | 'investigator'
+  investigadorId: varchar("investigador_id").references(() => users.id, { onDelete: "set null" }), // Only set for investigator messages
+
+  // Read tracking for reporter
+  leidoPorReportero: boolean("leido_por_reportero").notNull().default(false),
+  fechaLecturaReportero: timestamp("fecha_lectura_reportero"),
+
+  // Read tracking for investigator
+  leidoPorInvestigador: boolean("leido_por_investigador").notNull().default(false),
+  fechaLecturaInvestigador: timestamp("fecha_lectura_investigador"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  denunciaIdx: index("denuncia_mensajes_denuncia_idx").on(table.denunciaId),
+  createdAtIdx: index("denuncia_mensajes_created_at_idx").on(table.createdAt),
+}));
+
+export type DenunciaMensaje = typeof denunciaMensajes.$inferSelect;
+export const insertDenunciaMensajeSchema = createInsertSchema(denunciaMensajes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDenunciaMensaje = z.infer<typeof insertDenunciaMensajeSchema>;
+
+// File attachments for reports
+export const denunciaAdjuntos = pgTable("denuncia_adjuntos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  denunciaId: varchar("denuncia_id").notNull().references(() => denunciasAnonimas.id, { onDelete: "cascade" }),
+  mensajeId: varchar("mensaje_id").references(() => denunciaMensajes.id, { onDelete: "cascade" }), // Optional - can be attached to initial report or a message
+
+  nombreArchivo: varchar("nombre_archivo", { length: 255 }).notNull(),
+  tipoMime: varchar("tipo_mime", { length: 100 }).notNull(),
+  tamanioBytes: integer("tamanio_bytes").notNull(),
+  storagePath: varchar("storage_path", { length: 500 }).notNull(),
+
+  // Who uploaded
+  subidoPor: varchar("subido_por", { length: 20 }).notNull(), // 'reporter' | 'investigator'
+  investigadorId: varchar("investigador_id").references(() => users.id, { onDelete: "set null" }),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  denunciaIdx: index("denuncia_adjuntos_denuncia_idx").on(table.denunciaId),
+  mensajeIdx: index("denuncia_adjuntos_mensaje_idx").on(table.mensajeId),
+}));
+
+export type DenunciaAdjunto = typeof denunciaAdjuntos.$inferSelect;
+export const insertDenunciaAdjuntoSchema = createInsertSchema(denunciaAdjuntos).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDenunciaAdjunto = z.infer<typeof insertDenunciaAdjuntoSchema>;
+
+// Admin audit log - tracks admin actions only, NEVER reporter actions (to preserve anonymity)
+export const denunciaAuditLog = pgTable("denuncia_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  denunciaId: varchar("denuncia_id").notNull().references(() => denunciasAnonimas.id, { onDelete: "cascade" }),
+
+  usuarioId: varchar("usuario_id").notNull().references(() => users.id, { onDelete: "restrict" }),
+  usuarioNombre: varchar("usuario_nombre", { length: 255 }).notNull(),
+
+  accion: varchar("accion", { length: 50 }).notNull(), // 'viewed', 'status_changed', 'assigned', 'message_sent', 'resolved', etc.
+  detalles: jsonb("detalles"), // Additional context { from: 'nuevo', to: 'en_revision' }
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  denunciaIdx: index("denuncia_audit_log_denuncia_idx").on(table.denunciaId),
+  usuarioIdx: index("denuncia_audit_log_usuario_idx").on(table.usuarioId),
+  createdAtIdx: index("denuncia_audit_log_created_at_idx").on(table.createdAt),
+}));
+
+export type DenunciaAuditLog = typeof denunciaAuditLog.$inferSelect;
+export const insertDenunciaAuditLogSchema = createInsertSchema(denunciaAuditLog).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDenunciaAuditLog = z.infer<typeof insertDenunciaAuditLogSchema>;
+
+// Per-cliente configuration for the anonymous reporting system
+export const denunciaConfiguracion = pgTable("denuncia_configuracion", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().unique().references(() => clientes.id, { onDelete: "cascade" }),
+
+  // Feature toggles
+  habilitado: boolean("habilitado").notNull().default(true),
+  permitirAnonimo: boolean("permitir_anonimo").notNull().default(true),
+  permitirAdjuntos: boolean("permitir_adjuntos").notNull().default(true),
+
+  // Which categories are enabled for this cliente
+  categoriasHabilitadas: jsonb("categorias_habilitadas").notNull().default(sql`'["harassment_abuse", "ethics_compliance", "suggestions", "safety_concerns"]'::jsonb`),
+
+  // SLA configuration
+  horasParaRevision: integer("horas_para_revision").notNull().default(72), // 72 hours default
+  diasParaResolucion: integer("dias_para_resolucion").notNull().default(30), // 30 days default
+
+  // Notifications
+  notificarAdminNuevaDenuncia: boolean("notificar_admin_nueva_denuncia").notNull().default(true),
+  emailsNotificacion: jsonb("emails_notificacion"), // Array of emails to notify on new reports
+
+  // Customization
+  textoPoliticaPrivacidad: text("texto_politica_privacidad"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: uniqueIndex("denuncia_configuracion_cliente_idx").on(table.clienteId),
+}));
+
+export type DenunciaConfiguracion = typeof denunciaConfiguracion.$inferSelect;
+export const insertDenunciaConfiguracionSchema = createInsertSchema(denunciaConfiguracion).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertDenunciaConfiguracion = z.infer<typeof insertDenunciaConfiguracionSchema>;
+
+// ============================================================================
+// DOCUMENT TEMPLATES SYSTEM - Plantillas de Documentos
+// Contracts, Cartas Patronales, and other HR documents
+// ============================================================================
+
+// Document types enum
+export const tiposPlantillaDocumento = [
+  "contrato_laboral",
+  "contrato_confidencialidad",
+  "carta_oferta",
+  "carta_finiquito",
+  "carta_liquidacion",
+  "constancia_laboral",
+  "carta_recomendacion",
+  "carta_renuncia",
+  "acta_administrativa",
+  "aviso_privacidad",
+  "recibo_nomina",
+  "otro"
+] as const;
+export type TipoPlantillaDocumento = (typeof tiposPlantillaDocumento)[number];
+
+export const tiposPlantillaDocumentoLabels: Record<TipoPlantillaDocumento, string> = {
+  contrato_laboral: "Contrato Laboral",
+  contrato_confidencialidad: "Contrato de Confidencialidad",
+  carta_oferta: "Carta de Oferta",
+  carta_finiquito: "Carta de Finiquito",
+  carta_liquidacion: "Carta de Liquidación",
+  constancia_laboral: "Constancia Laboral",
+  carta_recomendacion: "Carta de Recomendación",
+  carta_renuncia: "Carta de Renuncia",
+  acta_administrativa: "Acta Administrativa",
+  aviso_privacidad: "Aviso de Privacidad",
+  recibo_nomina: "Recibo de Nómina",
+  otro: "Otro"
+};
+
+// Template status enum
+export const estatusPlantillaDocumento = ["borrador", "publicada", "archivada"] as const;
+export type EstatusPlantillaDocumento = (typeof estatusPlantillaDocumento)[number];
+
+// Event types for assignment rules
+export const tiposEventoPlantilla = ["alta", "baja", "promocion", "renovacion", "cambio_puesto", "cambio_salario", "otro"] as const;
+export type TipoEventoPlantilla = (typeof tiposEventoPlantilla)[number];
+
+// 1. Template Categories
+export const categoriasPlantillaDocumento = pgTable("categorias_plantilla_documento", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 100 }).notNull(),
+  descripcion: text("descripcion"),
+  icono: varchar("icono", { length: 50 }), // Lucide icon name
+  orden: integer("orden").default(0),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("categorias_plantilla_doc_cliente_idx").on(table.clienteId),
+}));
+
+export type CategoriaPlantillaDocumento = typeof categoriasPlantillaDocumento.$inferSelect;
+export const insertCategoriaPlantillaDocumentoSchema = createInsertSchema(categoriasPlantillaDocumento).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCategoriaPlantillaDocumento = z.infer<typeof insertCategoriaPlantillaDocumentoSchema>;
+
+// 2. Main Templates Table
+export const plantillasDocumento = pgTable("plantillas_documento", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+
+  // Basic Info
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+  codigo: varchar("codigo", { length: 50 }), // Internal reference code
+
+  // Classification
+  categoriaId: varchar("categoria_id").references(() => categoriasPlantillaDocumento.id, { onDelete: "set null" }),
+  tipoDocumento: varchar("tipo_documento", { length: 50 }).notNull().default("otro"),
+
+  // Template Content (TipTap JSON format)
+  contenido: jsonb("contenido").notNull(),
+
+  // Page Configuration
+  tamanioPapel: varchar("tamanio_papel", { length: 20 }).default("letter"), // 'letter', 'legal', 'a4'
+  orientacion: varchar("orientacion", { length: 20 }).default("portrait"), // 'portrait', 'landscape'
+  margenes: jsonb("margenes").default(sql`'{"top": 72, "right": 72, "bottom": 72, "left": 72}'::jsonb`),
+
+  // Header/Footer
+  encabezado: jsonb("encabezado"), // TipTap JSON for header
+  piePagina: jsonb("pie_pagina"), // TipTap JSON for footer
+  mostrarNumeroPagina: boolean("mostrar_numero_pagina").default(false),
+
+  // Variables metadata
+  variablesUsadas: jsonb("variables_usadas"), // Array of variable keys used in template
+  variablesCustomDefinidas: jsonb("variables_custom_definidas"), // Custom variables defined for this template
+
+  // Status & Versioning
+  version: integer("version").notNull().default(1),
+  estatus: varchar("estatus", { length: 20 }).default("borrador"), // 'borrador', 'publicada', 'archivada'
+  esDefault: boolean("es_default").default(false), // Default template for this type
+
+  // Audit
+  createdBy: varchar("created_by"),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("plantillas_doc_cliente_idx").on(table.clienteId),
+  tipoIdx: index("plantillas_doc_tipo_idx").on(table.tipoDocumento),
+  codigoClienteUnique: unique("plantillas_doc_codigo_cliente_unique").on(table.clienteId, table.codigo),
+}));
+
+export type PlantillaDocumento = typeof plantillasDocumento.$inferSelect;
+export const insertPlantillaDocumentoSchema = createInsertSchema(plantillasDocumento).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  contenido: z.any(), // TipTap JSON document
+  margenes: z.object({
+    top: z.number(),
+    right: z.number(),
+    bottom: z.number(),
+    left: z.number(),
+  }).optional(),
+  encabezado: z.any().optional(),
+  piePagina: z.any().optional(),
+  variablesUsadas: z.array(z.string()).optional(),
+  variablesCustomDefinidas: z.array(z.object({
+    key: z.string(),
+    label: z.string(),
+    descripcion: z.string().optional(),
+    tipo: z.enum(["texto", "numero", "fecha", "moneda"]).default("texto"),
+    requerida: z.boolean().default(false),
+    valorDefault: z.string().optional(),
+  })).optional(),
+});
+export type InsertPlantillaDocumento = z.infer<typeof insertPlantillaDocumentoSchema>;
+
+// 3. Template Version History (Full Versioning with Rollback)
+export const plantillasDocumentoVersiones = pgTable("plantillas_documento_versiones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  plantillaId: varchar("plantilla_id").notNull().references(() => plantillasDocumento.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+
+  // Full snapshot of template at this version
+  contenido: jsonb("contenido").notNull(),
+  encabezado: jsonb("encabezado"),
+  piePagina: jsonb("pie_pagina"),
+  margenes: jsonb("margenes"),
+  tamanioPapel: varchar("tamanio_papel", { length: 20 }),
+  orientacion: varchar("orientacion", { length: 20 }),
+  variablesUsadas: jsonb("variables_usadas"),
+  variablesCustomDefinidas: jsonb("variables_custom_definidas"),
+
+  // Change info
+  cambios: text("cambios"), // Description of changes
+  creadoPor: varchar("creado_por"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  plantillaVersionIdx: unique("plantilla_version_unique").on(table.plantillaId, table.version),
+  plantillaIdx: index("plantillas_doc_versiones_plantilla_idx").on(table.plantillaId),
+}));
+
+export type PlantillaDocumentoVersion = typeof plantillasDocumentoVersiones.$inferSelect;
+export const insertPlantillaDocumentoVersionSchema = createInsertSchema(plantillasDocumentoVersiones).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPlantillaDocumentoVersion = z.infer<typeof insertPlantillaDocumentoVersionSchema>;
+
+// 4. Template Assets (logos, signatures, stamps)
+export const plantillasDocumentoAssets = pgTable("plantillas_documento_assets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  tipo: varchar("tipo", { length: 30 }).notNull(), // 'logo', 'firma', 'sello', 'imagen'
+  url: varchar("url", { length: 500 }).notNull(),
+  mimeType: varchar("mime_type", { length: 100 }),
+  tamanioBytes: integer("tamanio_bytes"),
+  ancho: integer("ancho"),
+  alto: integer("alto"),
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("plantillas_doc_assets_cliente_idx").on(table.clienteId),
+  tipoIdx: index("plantillas_doc_assets_tipo_idx").on(table.tipo),
+}));
+
+export type PlantillaDocumentoAsset = typeof plantillasDocumentoAssets.$inferSelect;
+export const insertPlantillaDocumentoAssetSchema = createInsertSchema(plantillasDocumentoAssets).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertPlantillaDocumentoAsset = z.infer<typeof insertPlantillaDocumentoAssetSchema>;
+
+// 5. Template Assignment Rules (determines which template to use based on context)
+export const reglasAsignacionPlantilla = pgTable("reglas_asignacion_plantilla", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  plantillaId: varchar("plantilla_id").notNull().references(() => plantillasDocumento.id, { onDelete: "cascade" }),
+
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  descripcion: text("descripcion"),
+
+  // Criteria - when to suggest/use this template
+  tipoEvento: varchar("tipo_evento", { length: 50 }), // alta, baja, promocion, renovacion, etc.
+
+  // Scope filters (null = applies to all)
+  empresaIds: jsonb("empresa_ids"), // Array of empresa IDs or null for all
+  departamentos: jsonb("departamentos"), // Array of department names or null
+  puestoIds: jsonb("puesto_ids"), // Array of puesto IDs or null
+  tiposContrato: jsonb("tipos_contrato"), // Array of contract types or null
+
+  // Priority for when multiple rules match
+  prioridad: integer("prioridad").default(0),
+
+  // Options
+  esObligatoria: boolean("es_obligatoria").default(false), // Must generate on event
+  autoGenerar: boolean("auto_generar").default(false), // Auto-generate on event
+
+  activo: boolean("activo").default(true),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("reglas_asig_plantilla_cliente_idx").on(table.clienteId),
+  plantillaIdx: index("reglas_asig_plantilla_plantilla_idx").on(table.plantillaId),
+  tipoEventoIdx: index("reglas_asig_plantilla_tipo_evento_idx").on(table.tipoEvento),
+}));
+
+export type ReglaAsignacionPlantilla = typeof reglasAsignacionPlantilla.$inferSelect;
+export const insertReglaAsignacionPlantillaSchema = createInsertSchema(reglasAsignacionPlantilla).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).extend({
+  empresaIds: z.array(z.string()).nullable().optional(),
+  departamentos: z.array(z.string()).nullable().optional(),
+  puestoIds: z.array(z.string()).nullable().optional(),
+  tiposContrato: z.array(z.string()).nullable().optional(),
+});
+export type InsertReglaAsignacionPlantilla = z.infer<typeof insertReglaAsignacionPlantillaSchema>;
+
+// 6. Generated Documents Log (audit trail)
+export const documentosGenerados = pgTable("documentos_generados", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "set null" }),
+  plantillaId: varchar("plantilla_id").notNull().references(() => plantillasDocumento.id, { onDelete: "restrict" }),
+  plantillaVersion: integer("plantilla_version").notNull(),
+  empleadoId: varchar("empleado_id").references(() => employees.id, { onDelete: "set null" }),
+
+  // Generated file info
+  archivoUrl: varchar("archivo_url", { length: 500 }),
+  nombreArchivo: varchar("nombre_archivo", { length: 255 }),
+
+  // Variables snapshot at generation time
+  variablesUsadas: jsonb("variables_usadas"), // All variables and their values at generation
+  variablesCustom: jsonb("variables_custom"), // Custom variable values provided
+
+  estatus: varchar("estatus", { length: 20 }).default("generado"), // 'generado', 'firmado', 'anulado'
+  generadoPor: varchar("generado_por"),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("docs_generados_cliente_idx").on(table.clienteId),
+  empleadoIdx: index("docs_generados_empleado_idx").on(table.empleadoId),
+  plantillaIdx: index("docs_generados_plantilla_idx").on(table.plantillaId),
+  createdAtIdx: index("docs_generados_created_at_idx").on(table.createdAt),
+}));
+
+export type DocumentoGenerado = typeof documentosGenerados.$inferSelect;
+export const insertDocumentoGeneradoSchema = createInsertSchema(documentosGenerados).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDocumentoGenerado = z.infer<typeof insertDocumentoGeneradoSchema>;

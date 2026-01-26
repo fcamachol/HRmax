@@ -33,6 +33,9 @@ import {
   LogOut,
   User,
   GraduationCap,
+  FileSignature,
+  ListChecks,
+  History,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -51,6 +54,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCliente } from "@/contexts/ClienteContext";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -217,6 +221,24 @@ const configuracionSubItems = [
   },
 ];
 
+const documentosSubItems = [
+  {
+    title: "Plantillas",
+    url: "/documentos/plantillas",
+    icon: FileSignature,
+  },
+  {
+    title: "Reglas de Asignación",
+    url: "/documentos/reglas-asignacion",
+    icon: ListChecks,
+  },
+  {
+    title: "Generados",
+    url: "/documentos/generados",
+    icon: History,
+  },
+];
+
 const mainMenuItems = [
   {
     title: "Dashboard",
@@ -247,14 +269,25 @@ const mainMenuItems = [
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const isEmployeesActive = location.startsWith("/employees");
-  const isPayrollActive = location.startsWith("/payroll") || location.startsWith("/attendance");
-  const isOrganizacionActive = location.startsWith("/organizacion");
-  const isReclutamientoActive = location.startsWith("/reclutamiento");
-  const isGestionPersonalActive = location.startsWith("/vacaciones") || location.startsWith("/incapacidades") || location.startsWith("/permisos") || location.startsWith("/creditos") || location.startsWith("/actas-administrativas");
-  const isCursosActive = location.startsWith("/cursos-capacitaciones");
-  const isImssActive = location.startsWith("/imss");
-  const isConfiguracionActive = location.startsWith("/configuration");
+  const { clienteId } = useCliente();
+
+  // Helper to build cliente-scoped URLs
+  const url = (path: string) => clienteId ? `/${clienteId}${path}` : path;
+
+  // Helper to check if a path is active (ignoring the clienteId prefix)
+  const pathWithoutCliente = clienteId ? location.replace(`/${clienteId}`, '') : location;
+  const isActive = (path: string) => pathWithoutCliente === path || pathWithoutCliente === '';
+  const startsWithPath = (prefix: string) => pathWithoutCliente.startsWith(prefix);
+
+  const isEmployeesActive = startsWithPath("/employees");
+  const isPayrollActive = startsWithPath("/payroll") || startsWithPath("/attendance");
+  const isOrganizacionActive = startsWithPath("/organizacion");
+  const isReclutamientoActive = startsWithPath("/reclutamiento");
+  const isGestionPersonalActive = startsWithPath("/vacaciones") || startsWithPath("/incapacidades") || startsWithPath("/permisos") || startsWithPath("/creditos") || startsWithPath("/actas-administrativas");
+  const isCursosActive = startsWithPath("/cursos-capacitaciones");
+  const isDocumentosActive = startsWithPath("/documentos");
+  const isImssActive = startsWithPath("/imss");
+  const isConfiguracionActive = startsWithPath("/configuration");
 
   return (
     <Sidebar>
@@ -276,10 +309,10 @@ export function AppSidebar() {
               <SidebarMenuItem>
                 <SidebarMenuButton
                   asChild
-                  isActive={location === "/"}
+                  isActive={pathWithoutCliente === "" || pathWithoutCliente === "/"}
                   data-testid="link-dashboard"
                 >
-                  <Link href="/">
+                  <Link href={url("")}>
                     <LayoutDashboard className="h-4 w-4" />
                     <span>Dashboard</span>
                   </Link>
@@ -304,10 +337,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -337,10 +370,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -370,10 +403,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -403,10 +436,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -424,11 +457,44 @@ export function AppSidebar() {
                   isActive={isCursosActive}
                   data-testid="link-cursos-capacitaciones"
                 >
-                  <Link href="/cursos-capacitaciones">
+                  <Link href={url("/cursos-capacitaciones")}>
                     <GraduationCap className="h-4 w-4" />
                     <span>Cursos y Capacitaciones</span>
                   </Link>
                 </SidebarMenuButton>
+              </SidebarMenuItem>
+
+              <SidebarMenuItem>
+                <Collapsible defaultOpen={isDocumentosActive}>
+                  <CollapsibleTrigger asChild>
+                    <SidebarMenuButton
+                      isActive={isDocumentosActive}
+                      data-testid="link-documentos"
+                    >
+                      <FileSignature className="h-4 w-4" />
+                      <span>Documentos</span>
+                      <ChevronRight className="ml-auto h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                    </SidebarMenuButton>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {documentosSubItems.map((subItem) => (
+                        <SidebarMenuSubItem key={subItem.title}>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathWithoutCliente === subItem.url}
+                            data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <Link href={url(subItem.url)}>
+                              <subItem.icon className="h-4 w-4" />
+                              <span>{subItem.title}</span>
+                            </Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
               </SidebarMenuItem>
 
               <SidebarMenuItem>
@@ -449,10 +515,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase()}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -482,10 +548,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -515,10 +581,10 @@ export function AppSidebar() {
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild
-                            isActive={location === subItem.url}
+                            isActive={pathWithoutCliente === subItem.url}
                             data-testid={`link-${subItem.title.toLowerCase().replace(/\s+/g, '-')}`}
                           >
-                            <Link href={subItem.url}>
+                            <Link href={url(subItem.url)}>
                               <subItem.icon className="h-4 w-4" />
                               <span>{subItem.title}</span>
                             </Link>
@@ -529,15 +595,15 @@ export function AppSidebar() {
                   </CollapsibleContent>
                 </Collapsible>
               </SidebarMenuItem>
-              
+
               {mainMenuItems.filter(item => item.title !== "Dashboard").map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location === item.url}
+                    isActive={pathWithoutCliente === item.url}
                     data-testid={`link-${item.title.toLowerCase()}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={url(item.url)}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>

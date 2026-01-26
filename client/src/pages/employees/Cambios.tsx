@@ -35,28 +35,54 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { useCliente } from "@/contexts/ClienteContext";
 import type { ModificacionPersonal, Employee, Puesto, CentroTrabajo } from "@shared/schema";
 
 export default function Cambios() {
+  const { clienteId } = useCliente();
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [filterTipo, setFilterTipo] = useState<string>("all");
   const [filterEstatus, setFilterEstatus] = useState<string>("all");
 
   const { data: modificaciones = [], isLoading } = useQuery<ModificacionPersonal[]>({
-    queryKey: ["/api/modificaciones-personal"],
+    queryKey: ["/api/modificaciones-personal", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/modificaciones-personal?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar modificaciones");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const { data: empleados = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["/api/employees", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar empleados");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const { data: puestos = [] } = useQuery<Puesto[]>({
-    queryKey: ["/api/puestos"],
+    queryKey: ["/api/puestos", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/puestos?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar puestos");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const { data: centrosTrabajo = [] } = useQuery<CentroTrabajo[]>({
-    queryKey: ["/api/centros-trabajo"],
+    queryKey: ["/api/centros-trabajo", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/centros-trabajo?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar centros de trabajo");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const createMutation = useMutation({
@@ -135,7 +161,9 @@ export default function Cambios() {
       return apiRequest("POST", `/api/modificaciones-personal/${id}/aplicar`, {});
     },
     onSuccess: () => {
+      // Invalidate both modificaciones and employees cache since applying changes the employee data
       queryClient.invalidateQueries({ queryKey: ["/api/modificaciones-personal"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       toast({
         title: "Modificación aplicada",
         description: "La modificación se ha aplicado al empleado",
@@ -183,6 +211,11 @@ export default function Cambios() {
       centro_trabajo: "Cambio de Centro de Trabajo",
       departamento: "Cambio de Departamento",
       jefe_directo: "Cambio de Jefe Directo",
+      cuenta_bancaria: "Cuenta Bancaria",
+      horario: "Horario de Trabajo",
+      registro_patronal: "Registro Patronal",
+      contrato: "Tipo de Contrato",
+      estatus: "Estatus de Empleo",
       otro: "Otro",
     };
     return labels[tipo] || tipo;
@@ -211,6 +244,11 @@ export default function Cambios() {
               <SelectItem value="centro_trabajo">Cambio de Centro</SelectItem>
               <SelectItem value="departamento">Cambio de Departamento</SelectItem>
               <SelectItem value="jefe_directo">Cambio de Jefe</SelectItem>
+              <SelectItem value="cuenta_bancaria">Cuenta Bancaria</SelectItem>
+              <SelectItem value="horario">Horario de Trabajo</SelectItem>
+              <SelectItem value="registro_patronal">Registro Patronal</SelectItem>
+              <SelectItem value="contrato">Tipo de Contrato</SelectItem>
+              <SelectItem value="estatus">Estatus de Empleo</SelectItem>
               <SelectItem value="otro">Otro</SelectItem>
             </SelectContent>
           </Select>
@@ -284,6 +322,8 @@ export default function Cambios() {
                     <TableHead>Tipo</TableHead>
                     <TableHead>Fecha Efectiva</TableHead>
                     <TableHead>Motivo</TableHead>
+                    <TableHead>Creado por</TableHead>
+                    <TableHead>Aprobado por</TableHead>
                     <TableHead>Estatus</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -301,6 +341,16 @@ export default function Cambios() {
                           : "-"}
                       </TableCell>
                       <TableCell className="max-w-xs truncate">{mod.motivo}</TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {mod.createdBy || "Sistema"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-sm text-muted-foreground">
+                          {mod.aprobadoPor || "-"}
+                        </span>
+                      </TableCell>
                       <TableCell>
                         <Badge className={getEstatusColor(mod.estatus)} variant="outline">
                           {mod.estatus}
@@ -449,6 +499,58 @@ function ModificacionForm({
         case "departamento":
           valoresAnteriores = { departamento: empleado.departamento };
           valoresNuevos = { departamento: cambio.valoresNuevos.departamento };
+          break;
+        case "jefe_directo":
+          valoresAnteriores = { jefeDirecto: empleado.jefeDirecto };
+          valoresNuevos = { jefeDirecto: cambio.valoresNuevos.jefeDirecto };
+          break;
+        case "cuenta_bancaria":
+          valoresAnteriores = {
+            banco: empleado.banco,
+            clabe: empleado.clabe,
+            cuenta: empleado.cuenta,
+            sucursal: empleado.sucursal,
+          };
+          valoresNuevos = {
+            banco: cambio.valoresNuevos.banco,
+            clabe: cambio.valoresNuevos.clabe,
+            cuenta: cambio.valoresNuevos.cuenta,
+            sucursal: cambio.valoresNuevos.sucursal,
+          };
+          break;
+        case "horario":
+          valoresAnteriores = {
+            horario: empleado.horario,
+            diasLaborales: empleado.diasLaborales,
+            tipoJornada: empleado.tipoJornada,
+          };
+          valoresNuevos = {
+            horario: cambio.valoresNuevos.horario,
+            diasLaborales: cambio.valoresNuevos.diasLaborales,
+            tipoJornada: cambio.valoresNuevos.tipoJornada,
+          };
+          break;
+        case "registro_patronal":
+          valoresAnteriores = { registroPatronalId: empleado.registroPatronalId };
+          valoresNuevos = { registroPatronalId: cambio.valoresNuevos.registroPatronalId };
+          break;
+        case "contrato":
+          valoresAnteriores = {
+            tipoContrato: empleado.tipoContrato,
+            esquemaContratacion: empleado.esquemaContratacion,
+          };
+          valoresNuevos = {
+            tipoContrato: cambio.valoresNuevos.tipoContrato,
+            esquemaContratacion: cambio.valoresNuevos.esquemaContratacion,
+          };
+          break;
+        case "estatus":
+          valoresAnteriores = { estatus: empleado.estatus || "activo" };
+          valoresNuevos = { estatus: cambio.valoresNuevos.estatus };
+          break;
+        case "otro":
+          valoresAnteriores = {};
+          valoresNuevos = { descripcion: cambio.valoresNuevos.descripcion };
           break;
       }
 
@@ -624,6 +726,13 @@ function CambioCard({
                 <SelectItem value="puesto">Cambio de Puesto</SelectItem>
                 <SelectItem value="centro_trabajo">Cambio de Centro de Trabajo</SelectItem>
                 <SelectItem value="departamento">Cambio de Departamento</SelectItem>
+                <SelectItem value="jefe_directo">Cambio de Jefe Directo</SelectItem>
+                <SelectItem value="cuenta_bancaria">Cuenta Bancaria</SelectItem>
+                <SelectItem value="horario">Horario de Trabajo</SelectItem>
+                <SelectItem value="registro_patronal">Registro Patronal</SelectItem>
+                <SelectItem value="contrato">Tipo de Contrato</SelectItem>
+                <SelectItem value="estatus">Estatus de Empleo</SelectItem>
+                <SelectItem value="otro">Otro</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -655,6 +764,39 @@ function CambioCard({
                 )}
                 {cambio.tipoModificacion === "departamento" && (
                   <div>Departamento: {empleado.departamento}</div>
+                )}
+                {cambio.tipoModificacion === "jefe_directo" && (
+                  <div>Jefe Directo: {empleado.jefeDirecto || "No especificado"}</div>
+                )}
+                {cambio.tipoModificacion === "cuenta_bancaria" && (
+                  <div className="space-y-1">
+                    <div>Banco: {empleado.banco || "No especificado"}</div>
+                    <div>CLABE: {empleado.clabe || "No especificado"}</div>
+                    <div>Cuenta: {empleado.cuenta || "No especificado"}</div>
+                    <div>Sucursal: {empleado.sucursal || "No especificado"}</div>
+                  </div>
+                )}
+                {cambio.tipoModificacion === "horario" && (
+                  <div className="space-y-1">
+                    <div>Horario: {empleado.horario || "No especificado"}</div>
+                    <div>Días Laborales: {empleado.diasLaborales || "No especificado"}</div>
+                    <div>Tipo Jornada: {empleado.tipoJornada || "No especificado"}</div>
+                  </div>
+                )}
+                {cambio.tipoModificacion === "registro_patronal" && (
+                  <div>Registro Patronal ID: {empleado.registroPatronalId || "No especificado"}</div>
+                )}
+                {cambio.tipoModificacion === "contrato" && (
+                  <div className="space-y-1">
+                    <div>Tipo Contrato: {empleado.tipoContrato || "No especificado"}</div>
+                    <div>Esquema: {empleado.esquemaContratacion || "No especificado"}</div>
+                  </div>
+                )}
+                {cambio.tipoModificacion === "estatus" && (
+                  <div>Estatus: {empleado.estatus || "activo"}</div>
+                )}
+                {cambio.tipoModificacion === "otro" && (
+                  <div>Ver campos adicionales abajo</div>
                 )}
               </div>
             </div>
@@ -756,6 +898,200 @@ function CambioCard({
                     })
                   }
                   data-testid={`input-valor-${cambio.id}`}
+                />
+              )}
+
+              {cambio.tipoModificacion === "jefe_directo" && (
+                <Input
+                  type="text"
+                  placeholder="Nombre del nuevo jefe directo"
+                  value={cambio.valoresNuevos.jefeDirecto || ""}
+                  onChange={(e) =>
+                    onUpdate({
+                      valoresNuevos: { jefeDirecto: e.target.value },
+                    })
+                  }
+                  data-testid={`input-valor-${cambio.id}`}
+                />
+              )}
+
+              {cambio.tipoModificacion === "cuenta_bancaria" && (
+                <div className="space-y-3">
+                  <Input
+                    type="text"
+                    placeholder="Banco"
+                    value={cambio.valoresNuevos.banco || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, banco: e.target.value },
+                      })
+                    }
+                  />
+                  <Input
+                    type="text"
+                    placeholder="CLABE (18 dígitos)"
+                    maxLength={18}
+                    value={cambio.valoresNuevos.clabe || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, clabe: e.target.value },
+                      })
+                    }
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Número de cuenta"
+                    value={cambio.valoresNuevos.cuenta || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, cuenta: e.target.value },
+                      })
+                    }
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Sucursal"
+                    value={cambio.valoresNuevos.sucursal || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, sucursal: e.target.value },
+                      })
+                    }
+                  />
+                </div>
+              )}
+
+              {cambio.tipoModificacion === "horario" && (
+                <div className="space-y-3">
+                  <Input
+                    type="text"
+                    placeholder="Horario (ej: 9:00 - 18:00)"
+                    value={cambio.valoresNuevos.horario || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, horario: e.target.value },
+                      })
+                    }
+                  />
+                  <Input
+                    type="text"
+                    placeholder="Días laborales (ej: Lunes a Viernes)"
+                    value={cambio.valoresNuevos.diasLaborales || ""}
+                    onChange={(e) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, diasLaborales: e.target.value },
+                      })
+                    }
+                  />
+                  <Select
+                    value={cambio.valoresNuevos.tipoJornada || ""}
+                    onValueChange={(value) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, tipoJornada: value },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo de jornada" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="diurna">Diurna</SelectItem>
+                      <SelectItem value="nocturna">Nocturna</SelectItem>
+                      <SelectItem value="mixta">Mixta</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {cambio.tipoModificacion === "registro_patronal" && (
+                <Input
+                  type="text"
+                  placeholder="ID de Registro Patronal"
+                  value={cambio.valoresNuevos.registroPatronalId || ""}
+                  onChange={(e) =>
+                    onUpdate({
+                      valoresNuevos: { registroPatronalId: e.target.value },
+                    })
+                  }
+                  data-testid={`input-valor-${cambio.id}`}
+                />
+              )}
+
+              {cambio.tipoModificacion === "contrato" && (
+                <div className="space-y-3">
+                  <Select
+                    value={cambio.valoresNuevos.tipoContrato || ""}
+                    onValueChange={(value) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, tipoContrato: value },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo de contrato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="indefinido">Indefinido</SelectItem>
+                      <SelectItem value="temporal">Temporal</SelectItem>
+                      <SelectItem value="obra_determinada">Obra Determinada</SelectItem>
+                      <SelectItem value="tiempo_determinado">Tiempo Determinado</SelectItem>
+                      <SelectItem value="capacitacion">Capacitación</SelectItem>
+                      <SelectItem value="periodo_prueba">Periodo de Prueba</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={cambio.valoresNuevos.esquemaContratacion || ""}
+                    onValueChange={(value) =>
+                      onUpdate({
+                        valoresNuevos: { ...cambio.valoresNuevos, esquemaContratacion: value },
+                      })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Esquema de contratación" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nomina">Nómina</SelectItem>
+                      <SelectItem value="asimilados">Asimilados a Salarios</SelectItem>
+                      <SelectItem value="honorarios">Honorarios</SelectItem>
+                      <SelectItem value="outsourcing">Outsourcing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {cambio.tipoModificacion === "estatus" && (
+                <Select
+                  value={cambio.valoresNuevos.estatus || ""}
+                  onValueChange={(value) =>
+                    onUpdate({
+                      valoresNuevos: { estatus: value },
+                    })
+                  }
+                >
+                  <SelectTrigger data-testid={`select-estatus-${cambio.id}`}>
+                    <SelectValue placeholder="Nuevo estatus" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="inactivo">Inactivo (Baja)</SelectItem>
+                    <SelectItem value="licencia">Licencia</SelectItem>
+                    <SelectItem value="incapacidad">Incapacidad</SelectItem>
+                    <SelectItem value="vacaciones">Vacaciones</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              {cambio.tipoModificacion === "otro" && (
+                <Textarea
+                  placeholder="Describe el cambio a realizar..."
+                  value={cambio.valoresNuevos.descripcion || ""}
+                  onChange={(e) =>
+                    onUpdate({
+                      valoresNuevos: { descripcion: e.target.value },
+                    })
+                  }
+                  rows={3}
                 />
               )}
             </div>
