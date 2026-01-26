@@ -1,27 +1,35 @@
 import { Link, useLocation } from "wouter";
-import { Home, FileText, Receipt, Menu, User } from "lucide-react";
+import { Home, FileText, Receipt, GraduationCap, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { usePortalAuth } from "@/contexts/PortalAuthContext";
 
 interface NavItem {
   title: string;
-  url: string;
+  path: string;
   icon: React.ComponentType<{ className?: string }>;
 }
 
-const navItems: NavItem[] = [
-  { title: "Inicio", url: "/portal", icon: Home },
-  { title: "Solicitudes", url: "/portal/solicitudes", icon: FileText },
-  { title: "Recibos", url: "/portal/recibos", icon: Receipt },
-  { title: "Más", url: "/portal/mas", icon: Menu },
-  { title: "Perfil", url: "/portal/perfil", icon: User },
+const navItemsConfig: NavItem[] = [
+  { title: "Inicio", path: "", icon: Home },
+  { title: "Solicitudes", path: "/solicitudes", icon: FileText },
+  { title: "Cursos", path: "/cursos", icon: GraduationCap },
+  { title: "Recibos", path: "/recibos", icon: Receipt },
+  { title: "Perfil", path: "/perfil", icon: User },
 ];
 
 export function BottomNavigation() {
   const [location] = useLocation();
+  const { clienteId } = usePortalAuth();
 
-  const isActive = (url: string) => {
-    if (url === "/portal") {
-      return location === "/portal" || location === "/portal/";
+  const baseUrl = `/portal/${clienteId}`;
+  const navItems = navItemsConfig.map(item => ({
+    ...item,
+    url: `${baseUrl}${item.path}`,
+  }));
+
+  const isActive = (url: string, path: string) => {
+    if (path === "") {
+      return location === baseUrl || location === `${baseUrl}/`;
     }
     return location.startsWith(url);
   };
@@ -29,8 +37,8 @@ export function BottomNavigation() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border safe-area-bottom">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto px-2">
-        {navItems.map((item) => {
-          const active = isActive(item.url);
+        {navItems.map((item, index) => {
+          const active = isActive(item.url, navItemsConfig[index].path);
           const Icon = item.icon;
 
           return (

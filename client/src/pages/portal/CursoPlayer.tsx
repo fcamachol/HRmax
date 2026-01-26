@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, Link, useLocation } from "wouter";
 import {
   ArrowLeft,
+  ArrowRight,
   CheckCircle,
   Circle,
   PlayCircle,
@@ -13,6 +14,7 @@ import {
   Clock,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Award,
   AlertCircle,
 } from "lucide-react";
@@ -27,10 +29,15 @@ import {
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import type { Curso, ModuloCurso, LeccionCurso, AsignacionCurso, ProgresoLeccion } from "@shared/schema";
+import { usePortalAuth } from "@/contexts/PortalAuthContext";
+import type { Curso, ModuloCurso, LeccionCurso, AsignacionCurso, ProgresoLeccion, QuizCurso, PreguntaQuiz } from "@shared/schema";
 
 interface ModuloConLecciones extends ModuloCurso {
   lecciones: LeccionCurso[];
+}
+
+interface QuizConPreguntas extends QuizCurso {
+  preguntas: PreguntaQuiz[];
 }
 
 interface CursoContenido {
@@ -38,16 +45,21 @@ interface CursoContenido {
   curso: Curso;
   modulos: ModuloConLecciones[];
   progresos: ProgresoLeccion[];
+  quizzes: QuizConPreguntas[];
 }
 
 export default function CursoPlayer() {
   const params = useParams<{ asignacionId: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { clienteId } = usePortalAuth();
 
   const [expandedModulos, setExpandedModulos] = useState<Set<string>>(new Set());
   const [currentLeccion, setCurrentLeccion] = useState<LeccionCurso | null>(null);
   const [startTime, setStartTime] = useState<Date | null>(null);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string | string[]>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizResult, setQuizResult] = useState<{ score: number; passed: boolean; correctAnswers: Record<string, boolean> } | null>(null);
 
   const { data: contenido, isLoading } = useQuery<CursoContenido>({
     queryKey: [`/api/portal/cursos/${params.asignacionId}`],
@@ -74,6 +86,29 @@ export default function CursoPlayer() {
       queryClient.invalidateQueries({ queryKey: [`/api/portal/cursos/${params.asignacionId}`] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal/mis-cursos"] });
       toast({ title: "Lección completada" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const submitQuizMutation = useMutation({
+    mutationFn: async ({ quizId, respuestas }: { quizId: string; respuestas: Record<string, string | string[]> }) => {
+      return (await apiRequest("POST", `/api/portal/quiz/${quizId}/submit`, {
+        asignacionId: params.asignacionId,
+        respuestas,
+      })).json();
+    },
+    onSuccess: (data) => {
+      setQuizResult(data);
+      setQuizSubmitted(true);
+      queryClient.invalidateQueries({ queryKey: [`/api/portal/cursos/${params.asignacionId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/mis-cursos"] });
+      if (data.passed) {
+        toast({ title: "¡Felicidades!", description: `Aprobaste con ${data.score}%` });
+      } else {
+        toast({ title: "Quiz completado", description: `Obtuviste ${data.score}%. Se requiere ${data.minScore}% para aprobar.`, variant: "destructive" });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -133,7 +168,57 @@ export default function CursoPlayer() {
   const handleSelectLeccion = (leccion: LeccionCurso) => {
     setCurrentLeccion(leccion);
     setStartTime(new Date());
+    // Reset quiz state when changing lessons
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizResult(null);
   };
+
+  // Get all lessons in order for navigation
+  const getAllLecciones = (): LeccionCurso[] => {
+    if (!contenido) return [];
+    return contenido.modulos.flatMap((m) => m.lecciones);
+  };
+
+  const getCurrentLeccionIndex = (): number => {
+    if (!currentLeccion) return -1;
+    return getAllLecciones().findIndex((l) => l.id === currentLeccion.id);
+  };
+
+  const handlePreviousLeccion = () => {
+    const allLecciones = getAllLecciones();
+    const currentIndex = getCurrentLeccionIndex();
+    if (currentIndex > 0) {
+      const prevLeccion = allLecciones[currentIndex - 1];
+      handleSelectLeccion(prevLeccion);
+      // Expand the module containing this lesson
+      const modulo = contenido?.modulos.find((m) =>
+        m.lecciones.some((l) => l.id === prevLeccion.id)
+      );
+      if (modulo) {
+        setExpandedModulos((prev) => new Set([...Array.from(prev), modulo.id]));
+      }
+    }
+  };
+
+  const handleNextLeccion = () => {
+    const allLecciones = getAllLecciones();
+    const currentIndex = getCurrentLeccionIndex();
+    if (currentIndex < allLecciones.length - 1) {
+      const nextLeccion = allLecciones[currentIndex + 1];
+      handleSelectLeccion(nextLeccion);
+      // Expand the module containing this lesson
+      const modulo = contenido?.modulos.find((m) =>
+        m.lecciones.some((l) => l.id === nextLeccion.id)
+      );
+      if (modulo) {
+        setExpandedModulos((prev) => new Set([...Array.from(prev), modulo.id]));
+      }
+    }
+  };
+
+  const hasPreviousLeccion = getCurrentLeccionIndex() > 0;
+  const hasNextLeccion = getCurrentLeccionIndex() < getAllLecciones().length - 1;
 
   const handleCompletarLeccion = () => {
     if (!currentLeccion || !startTime) return;
@@ -151,7 +236,7 @@ export default function CursoPlayer() {
         for (const leccion of modulo.lecciones) {
           if (foundCurrent && !isLeccionCompleted(leccion.id)) {
             setCurrentLeccion(leccion);
-            setExpandedModulos((prev) => new Set([...prev, modulo.id]));
+            setExpandedModulos((prev) => new Set([...Array.from(prev), modulo.id]));
             return;
           }
           if (leccion.id === currentLeccion.id) {
@@ -226,23 +311,30 @@ export default function CursoPlayer() {
         {/* Content based on type */}
         <div className="min-h-[200px]">
           {currentLeccion.tipoContenido === "video" && currentLeccion.videoUrl && (
-            <div className="aspect-video rounded-lg overflow-hidden bg-black">
-              {extractYouTubeId(currentLeccion.videoUrl) ? (
-                <iframe
-                  width="100%"
-                  height="100%"
-                  src={`https://www.youtube.com/embed/${extractYouTubeId(currentLeccion.videoUrl)}`}
-                  title={currentLeccion.nombre}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="border-0"
-                />
-              ) : (
-                <video
-                  src={currentLeccion.videoUrl}
-                  controls
-                  className="w-full h-full"
-                />
+            <div>
+              <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                {extractYouTubeId(currentLeccion.videoUrl) ? (
+                  <iframe
+                    width="100%"
+                    height="100%"
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(currentLeccion.videoUrl)}`}
+                    title={currentLeccion.nombre}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="border-0"
+                  />
+                ) : (
+                  <video
+                    src={currentLeccion.videoUrl}
+                    controls
+                    className="w-full h-full"
+                  />
+                )}
+              </div>
+              {(currentLeccion.contenido as any)?.textoAdicional && (
+                <div className="prose prose-sm max-w-none p-4 bg-muted/50 rounded-lg mt-4">
+                  {(currentLeccion.contenido as any).textoAdicional}
+                </div>
               )}
             </div>
           )}
@@ -285,10 +377,187 @@ export default function CursoPlayer() {
               </a>
             </div>
           )}
+
+          {currentLeccion.tipoContenido === "quiz" && (
+            <div className="p-4 bg-muted/50 rounded-lg">
+              {(() => {
+                const quizId = (currentLeccion as any).quizId;
+                const quiz = contenido?.quizzes?.find((q) => q.id === quizId);
+
+                if (!quiz) {
+                  return (
+                    <div className="text-center py-8">
+                      <HelpCircle className="h-16 w-16 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-muted-foreground">
+                        No se encontró el quiz asociado a esta lección.
+                      </p>
+                    </div>
+                  );
+                }
+
+                const handleAnswerChange = (preguntaId: string, value: string, isMultiple: boolean) => {
+                  if (isMultiple) {
+                    setQuizAnswers(prev => {
+                      const current = (prev[preguntaId] as string[]) || [];
+                      if (current.includes(value)) {
+                        return { ...prev, [preguntaId]: current.filter(v => v !== value) };
+                      }
+                      return { ...prev, [preguntaId]: [...current, value] };
+                    });
+                  } else {
+                    setQuizAnswers(prev => ({ ...prev, [preguntaId]: value }));
+                  }
+                };
+
+                const handleSubmitQuiz = () => {
+                  submitQuizMutation.mutate({ quizId: quiz.id, respuestas: quizAnswers });
+                };
+
+                const allQuestionsAnswered = quiz.preguntas?.every(p => {
+                  const answer = quizAnswers[p.id];
+                  if (p.tipoPregunta === 'multiple_select') {
+                    return Array.isArray(answer) && answer.length > 0;
+                  }
+                  return answer && answer.length > 0;
+                });
+
+                return (
+                  <div className="space-y-4">
+                    <div className="text-center mb-6">
+                      <HelpCircle className="h-12 w-12 mx-auto text-primary mb-2" />
+                      <h3 className="font-semibold text-lg">{quiz.nombre}</h3>
+                      {quiz.descripcion && (
+                        <p className="text-sm text-muted-foreground mt-1">{quiz.descripcion}</p>
+                      )}
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {quiz.preguntas?.length || 0} preguntas
+                        {quiz.calificacionMinima && ` • Mínimo ${quiz.calificacionMinima}% para aprobar`}
+                      </p>
+                    </div>
+
+                    {quizResult && (
+                      <div className={`p-4 rounded-lg mb-4 ${quizResult.passed ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        <div className="flex items-center gap-2">
+                          {quizResult.passed ? (
+                            <CheckCircle className="h-5 w-5" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5" />
+                          )}
+                          <span className="font-medium">
+                            {quizResult.passed ? '¡Aprobado!' : 'No aprobado'}
+                          </span>
+                        </div>
+                        <p className="text-sm mt-1">Calificación: {quizResult.score}%</p>
+                      </div>
+                    )}
+
+                    <div className="space-y-4">
+                      {quiz.preguntas?.sort((a, b) => a.orden - b.orden).map((pregunta, idx) => {
+                        const isCorrect = quizResult?.correctAnswers?.[pregunta.id];
+
+                        return (
+                          <div
+                            key={pregunta.id}
+                            className={`border rounded-lg p-4 bg-background ${
+                              quizSubmitted
+                                ? isCorrect
+                                  ? 'border-green-300 bg-green-50'
+                                  : 'border-red-300 bg-red-50'
+                                : ''
+                            }`}
+                          >
+                            <p className="font-medium mb-3">
+                              {idx + 1}. {pregunta.pregunta}
+                            </p>
+                            <div className="space-y-2 ml-4">
+                              {pregunta.tipoPregunta === "true_false" ? (
+                                <>
+                                  <label className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                    <input
+                                      type="radio"
+                                      name={`q-${pregunta.id}`}
+                                      className="accent-primary"
+                                      disabled={quizSubmitted}
+                                      checked={quizAnswers[pregunta.id] === 'true'}
+                                      onChange={() => handleAnswerChange(pregunta.id, 'true', false)}
+                                    />
+                                    Verdadero
+                                  </label>
+                                  <label className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                    <input
+                                      type="radio"
+                                      name={`q-${pregunta.id}`}
+                                      className="accent-primary"
+                                      disabled={quizSubmitted}
+                                      checked={quizAnswers[pregunta.id] === 'false'}
+                                      onChange={() => handleAnswerChange(pregunta.id, 'false', false)}
+                                    />
+                                    Falso
+                                  </label>
+                                </>
+                              ) : pregunta.tipoPregunta === "free_text" ? (
+                                <textarea
+                                  placeholder="Escribe tu respuesta aquí..."
+                                  className="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                                  rows={3}
+                                  disabled={quizSubmitted}
+                                  value={(quizAnswers[pregunta.id] as string) || ''}
+                                  onChange={(e) => handleAnswerChange(pregunta.id, e.target.value, false)}
+                                />
+                              ) : (
+                                (pregunta.opciones as any[])?.map((opcion: any, optIdx: number) => (
+                                  <label key={optIdx} className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                    <input
+                                      type={pregunta.tipoPregunta === "multiple_select" ? "checkbox" : "radio"}
+                                      name={`q-${pregunta.id}`}
+                                      className="accent-primary"
+                                      disabled={quizSubmitted}
+                                      checked={
+                                        pregunta.tipoPregunta === "multiple_select"
+                                          ? ((quizAnswers[pregunta.id] as string[]) || []).includes(String(optIdx))
+                                          : quizAnswers[pregunta.id] === String(optIdx)
+                                      }
+                                      onChange={() => handleAnswerChange(
+                                        pregunta.id,
+                                        String(optIdx),
+                                        pregunta.tipoPregunta === "multiple_select"
+                                      )}
+                                    />
+                                    {opcion.texto}
+                                  </label>
+                                ))
+                              )}
+                            </div>
+                            {quizSubmitted && pregunta.explicacion && (
+                              <p className="text-sm text-muted-foreground mt-3 pt-3 border-t">
+                                <strong>Explicación:</strong> {pregunta.explicacion}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {!quizSubmitted && (
+                      <div className="flex justify-end pt-4">
+                        <Button
+                          className="px-8"
+                          onClick={handleSubmitQuiz}
+                          disabled={!allQuestionsAnswered || submitQuizMutation.isPending}
+                        >
+                          {submitQuizMutation.isPending ? "Enviando..." : "Enviar respuestas"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
 
         {/* Mark as complete button */}
-        {!isCompleted && (
+        {!isCompleted && currentLeccion.tipoContenido !== "quiz" && (
           <Button
             className="w-full"
             onClick={handleCompletarLeccion}
@@ -297,6 +566,28 @@ export default function CursoPlayer() {
             {completarLeccionMutation.isPending ? "Guardando..." : "Marcar como completada"}
           </Button>
         )}
+
+        {/* Navigation buttons */}
+        <div className="flex justify-between items-center pt-6 border-t mt-6">
+          <Button
+            variant="outline"
+            onClick={handlePreviousLeccion}
+            disabled={!hasPreviousLeccion}
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {getCurrentLeccionIndex() + 1} de {getAllLecciones().length}
+          </span>
+          <Button
+            onClick={handleNextLeccion}
+            disabled={!hasNextLeccion}
+          >
+            Siguiente
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </div>
       </div>
     );
   };
@@ -320,7 +611,7 @@ export default function CursoPlayer() {
         <div className="text-center">
           <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-muted-foreground mb-4">Curso no encontrado</p>
-          <Link href="/portal/cursos">
+          <Link href={`/portal/${clienteId}/cursos`}>
             <Button>Volver a Mis Cursos</Button>
           </Link>
         </div>
@@ -335,7 +626,7 @@ export default function CursoPlayer() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center gap-3 p-4">
-          <Link href="/portal/cursos">
+          <Link href={`/portal/${clienteId}/cursos`}>
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>

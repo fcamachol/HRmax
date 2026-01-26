@@ -23,43 +23,48 @@ interface QuickAction {
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-  href: string;
+  path: string;
   color: string;
 }
 
-const quickActions: QuickAction[] = [
+const quickActionsConfig: QuickAction[] = [
   {
     title: "Vacaciones",
     description: "Solicitar días",
     icon: Umbrella,
-    href: "/portal/solicitudes?tab=vacaciones",
+    path: "/solicitudes?tab=vacaciones",
     color: "bg-blue-500",
   },
   {
     title: "Permiso",
     description: "Solicitar permiso",
     icon: Clock,
-    href: "/portal/solicitudes?tab=permisos",
+    path: "/solicitudes?tab=permisos",
     color: "bg-purple-500",
   },
   {
     title: "Recibos",
     description: "Ver nómina",
     icon: Receipt,
-    href: "/portal/recibos",
+    path: "/recibos",
     color: "bg-green-500",
   },
   {
     title: "Documentos",
     description: "Mis archivos",
     icon: Folder,
-    href: "/portal/mas/documentos",
+    path: "/mas/documentos",
     color: "bg-orange-500",
   },
 ];
 
 export default function PortalHome() {
-  const { employee } = usePortalAuth();
+  const { employee, clienteId } = usePortalAuth();
+
+  const quickActions = quickActionsConfig.map(action => ({
+    ...action,
+    href: `/portal/${clienteId}${action.path}`,
+  }));
 
   // Fetch dashboard data
   const { data: dashboardData, refetch, isLoading } = useQuery({
@@ -106,7 +111,7 @@ export default function PortalHome() {
                 </div>
                 <CalendarDays className="h-12 w-12 opacity-50" />
               </div>
-              <Link href="/portal/solicitudes?tab=vacaciones">
+              <Link href={`/portal/${clienteId}/solicitudes?tab=vacaciones`}>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -149,7 +154,7 @@ export default function PortalHome() {
 
           {/* Pending Requests */}
           {(dashboardData?.solicitudesPendientes || 0) > 0 && (
-            <Link href="/portal/solicitudes">
+            <Link href={`/portal/${clienteId}/solicitudes`}>
               <Card className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-900/10">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
@@ -174,7 +179,7 @@ export default function PortalHome() {
               <h2 className="text-sm font-semibold text-muted-foreground">
                 Último recibo
               </h2>
-              <Link href="/portal/recibos">
+              <Link href={`/portal/${clienteId}/recibos`}>
                 <Button variant="ghost" size="sm" className="text-xs h-7">
                   Ver todos
                   <ChevronRight className="h-4 w-4 ml-1" />
@@ -195,7 +200,7 @@ export default function PortalHome() {
                 </CardContent>
               </Card>
             ) : dashboardData?.ultimoRecibo ? (
-              <Link href={`/portal/recibos/${dashboardData.ultimoRecibo.id}`}>
+              <Link href={`/portal/${clienteId}/recibos/${dashboardData.ultimoRecibo.id}`}>
                 <Card className="hover:bg-accent/50 transition-colors active:scale-[0.98] touch-manipulation">
                   <CardContent className="p-4 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
@@ -229,7 +234,7 @@ export default function PortalHome() {
 
           {/* Announcements Preview */}
           {(dashboardData?.anunciosPendientes || 0) > 0 && (
-            <Link href="/portal/mas/anuncios">
+            <Link href={`/portal/${clienteId}/mas/anuncios`}>
               <Card>
                 <CardContent className="p-4 flex items-center gap-3">
                   <Badge variant="destructive" className="h-6 min-w-6 px-2">

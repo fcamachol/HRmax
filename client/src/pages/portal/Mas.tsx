@@ -24,75 +24,75 @@ interface MenuItem {
   title: string;
   description: string;
   icon: React.ComponentType<{ className?: string }>;
-  href: string;
+  path: string;
   color: string;
   badge?: number;
 }
 
-const menuItems: MenuItem[] = [
+const menuItemsConfig: MenuItem[] = [
   {
     title: "Mis Documentos",
     description: "Contratos, constancias y más",
     icon: Folder,
-    href: "/portal/mas/documentos",
+    path: "/mas/documentos",
     color: "bg-orange-500",
   },
   {
     title: "Directorio",
     description: "Buscar compañeros",
     icon: Users,
-    href: "/portal/mas/directorio",
+    path: "/mas/directorio",
     color: "bg-blue-500",
   },
   {
     title: "Organigrama",
     description: "Estructura de la empresa",
     icon: Network,
-    href: "/portal/mas/organigrama",
+    path: "/mas/organigrama",
     color: "bg-indigo-500",
   },
   {
     title: "Anuncios",
     description: "Noticias de la empresa",
     icon: Megaphone,
-    href: "/portal/mas/anuncios",
+    path: "/mas/anuncios",
     color: "bg-red-500",
   },
   {
     title: "Mensajes",
     description: "Comunicación interna",
     icon: MessageSquare,
-    href: "/portal/mas/mensajes",
+    path: "/mas/mensajes",
     color: "bg-green-500",
   },
   {
     title: "Asistencia",
     description: "Historial de asistencia",
     icon: Calendar,
-    href: "/portal/mas/asistencia",
+    path: "/mas/asistencia",
     color: "bg-cyan-500",
   },
   {
     title: "Incapacidades",
     description: "Historial médico",
     icon: Shield,
-    href: "/portal/mas/incapacidades",
+    path: "/mas/incapacidades",
     color: "bg-yellow-500",
   },
   {
     title: "Prestaciones",
     description: "Beneficios asignados",
     icon: Gift,
-    href: "/portal/mas/prestaciones",
+    path: "/mas/prestaciones",
     color: "bg-pink-500",
   },
 ];
 
-function MenuCard({ item }: { item: MenuItem }) {
+function MenuCard({ item, clienteId }: { item: MenuItem; clienteId: string }) {
   const Icon = item.icon;
 
   return (
-    <Link href={item.href}>
+    <Link href={`/portal/${clienteId}${item.path}`}>
       <Card className="hover:bg-accent/50 transition-colors active:scale-[0.98] touch-manipulation cursor-pointer">
         <CardContent className="p-4 flex items-center gap-3">
           <div
@@ -117,11 +117,11 @@ function MenuCard({ item }: { item: MenuItem }) {
 }
 
 export default function PortalMas() {
-  const { logout } = usePortalAuth();
+  const { logout, clienteId } = usePortalAuth();
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/portal/login";
+    window.location.href = `/portal/${clienteId}/login`;
   };
 
   return (
@@ -129,8 +129,8 @@ export default function PortalMas() {
       <div className="p-4 space-y-6">
         {/* Main Menu Items */}
         <div className="space-y-2">
-          {menuItems.map((item) => (
-            <MenuCard key={item.href} item={item} />
+          {menuItemsConfig.map((item) => (
+            <MenuCard key={item.path} item={item} clienteId={clienteId} />
           ))}
         </div>
 
@@ -138,7 +138,7 @@ export default function PortalMas() {
 
         {/* Settings & Help */}
         <div className="space-y-2">
-          <Link href="/portal/mas/configuracion">
+          <Link href={`/portal/${clienteId}/mas/configuracion`}>
             <Card className="hover:bg-accent/50 transition-colors cursor-pointer">
               <CardContent className="p-4 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gray-500 flex items-center justify-center">

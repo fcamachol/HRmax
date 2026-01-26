@@ -41,7 +41,7 @@ function InfoRow({ icon: Icon, label, value }: InfoItem) {
 }
 
 export default function PortalProfile() {
-  const { employee, user, logout } = usePortalAuth();
+  const { employee, logout, clienteId } = usePortalAuth();
   const [showEditRequest, setShowEditRequest] = useState(false);
 
   const getInitials = (nombre?: string, apellido?: string) => {
@@ -65,7 +65,7 @@ export default function PortalProfile() {
 
   const handleLogout = async () => {
     await logout();
-    window.location.href = "/portal/login";
+    window.location.href = `/portal/${clienteId}/login`;
   };
 
   return (

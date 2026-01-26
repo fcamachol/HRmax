@@ -12,7 +12,7 @@ interface PortalHeaderProps {
 }
 
 export function PortalHeader({ title }: PortalHeaderProps) {
-  const { employee } = usePortalAuth();
+  const { employee, clienteId } = usePortalAuth();
 
   // Fetch unread notifications count
   const { data: notificationsData } = useQuery({
@@ -46,7 +46,7 @@ export function PortalHeader({ title }: PortalHeaderProps) {
           )}
         </div>
 
-        <Link href="/portal/notificaciones">
+        <Link href={`/portal/${clienteId}/notificaciones`}>
           <Button variant="ghost" size="icon" className="relative h-10 w-10">
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (

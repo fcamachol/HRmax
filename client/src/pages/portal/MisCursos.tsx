@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalMobileLayout } from "@/components/portal/layout/PortalMobileLayout";
 import { PullToRefresh } from "@/components/portal/layout/PullToRefresh";
+import { usePortalAuth } from "@/contexts/PortalAuthContext";
 
 interface CursoAsignado {
   id: string;
@@ -43,6 +44,7 @@ interface CursoAsignado {
 
 export default function MisCursos() {
   const [activeTab, setActiveTab] = useState("en_progreso");
+  const { clienteId } = usePortalAuth();
 
   const { data: cursos = [], isLoading, refetch } = useQuery<CursoAsignado[]>({
     queryKey: ["/api/portal/mis-cursos"],
@@ -103,7 +105,7 @@ export default function MisCursos() {
     const isOverdue = daysUntilDue !== null && daysUntilDue <= 0;
 
     return (
-      <Link key={asignacion.id} href={`/portal/cursos/${asignacion.id}`}>
+      <Link key={asignacion.id} href={`/portal/${clienteId}/cursos/${asignacion.id}`}>
         <Card className="mb-3 active:scale-[0.98] transition-transform">
           <CardContent className="p-4">
             <div className="flex gap-3">
