@@ -45,10 +45,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useCliente } from "@/contexts/ClienteContext";
 import { CursoFormDialog } from "@/components/cursos/CursoFormDialog";
 import type { Curso, CategoriaCurso } from "@shared/schema";
 
 export default function Cursos() {
+  const { clienteId } = useCliente();
   const [search, setSearch] = useState("");
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
   const [estatusFilter, setEstatusFilter] = useState<string>("all");
@@ -57,15 +59,33 @@ export default function Cursos() {
   const { toast } = useToast();
 
   const { data: cursos = [], isLoading } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos"],
+    queryKey: ["/api/cursos", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/cursos?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar cursos");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const { data: categorias = [] } = useQuery<CategoriaCurso[]>({
-    queryKey: ["/api/categorias-cursos"],
+    queryKey: ["/api/categorias-cursos", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/categorias-cursos?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar categorías");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const { data: asignaciones = [] } = useQuery<any[]>({
-    queryKey: ["/api/asignaciones-cursos"],
+    queryKey: ["/api/asignaciones-cursos", { clienteId }],
+    queryFn: async () => {
+      const res = await fetch(`/api/asignaciones-cursos?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar asignaciones");
+      return res.json();
+    },
+    enabled: !!clienteId,
   });
 
   const deleteMutation = useMutation({
@@ -259,11 +279,17 @@ export default function Cursos() {
         </Select>
 
         <div className="ml-auto flex gap-2">
-          <Link href="/cursos-capacitaciones/categorias">
-            <Button variant="outline">Categorías</Button>
-          </Link>
-          <Link href="/cursos-capacitaciones/asignaciones">
+          <Link href={`/${clienteId}/cursos-capacitaciones/asignaciones`}>
             <Button variant="outline">Asignaciones</Button>
+          </Link>
+          <Link href={`/${clienteId}/cursos-capacitaciones/reglas`}>
+            <Button variant="outline">Reglas</Button>
+          </Link>
+          <Link href={`/${clienteId}/cursos-capacitaciones/reportes`}>
+            <Button variant="outline">Reportes</Button>
+          </Link>
+          <Link href={`/${clienteId}/cursos-capacitaciones/certificados`}>
+            <Button variant="outline">Certificados</Button>
           </Link>
           <Button onClick={() => setIsFormOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -325,13 +351,13 @@ export default function Cursos() {
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Acciones</DropdownMenuLabel>
                       <DropdownMenuItem asChild>
-                        <Link href={`/cursos-capacitaciones/${curso.id}`}>
+                        <Link href={`/${clienteId}/cursos-capacitaciones/${curso.id}/preview`}>
                           <Eye className="h-4 w-4 mr-2" />
                           Ver detalles
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild>
-                        <Link href={`/cursos-capacitaciones/${curso.id}/editar`}>
+                        <Link href={`/${clienteId}/cursos-capacitaciones/${curso.id}/editar`}>
                           <Edit className="h-4 w-4 mr-2" />
                           Editar contenido
                         </Link>

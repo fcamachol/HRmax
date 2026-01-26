@@ -12,7 +12,9 @@ import {
   Calendar,
   FileSpreadsheet,
   Award,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,29 +45,29 @@ interface AsignacionConDetalles extends AsignacionCurso {
 }
 
 export default function Reportes() {
-  const { clienteActual } = useCliente();
+  const { selectedCliente } = useCliente();
   const { toast } = useToast();
   const [periodo, setPeriodo] = useState<string>("mes");
   const [departamentoFilter, setDepartamentoFilter] = useState<string>("todos");
 
   const { data: cursos = [] } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const { data: asignaciones = [] } = useQuery<AsignacionConDetalles[]>({
-    queryKey: ["/api/asignaciones-cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/asignaciones-cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const { data: departamentos = [] } = useQuery<Departamento[]>({
-    queryKey: ["/api/departamentos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/departamentos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const { data: empleados = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/employees", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   // Filter by date period
@@ -203,14 +205,21 @@ export default function Reportes() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6" />
-            Reportes de Capacitación
-          </h1>
-          <p className="text-muted-foreground">
-            Análisis y métricas de los programas de capacitación
-          </p>
+        <div className="flex items-center gap-3">
+          <Link href={`/${selectedCliente?.id}/cursos-capacitaciones`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <BarChart3 className="h-6 w-6" />
+              Reportes de Capacitación
+            </h1>
+            <p className="text-muted-foreground">
+              Análisis y métricas de los programas de capacitación
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Select value={periodo} onValueChange={setPeriodo}>

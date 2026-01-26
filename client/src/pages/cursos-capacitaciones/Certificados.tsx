@@ -10,7 +10,9 @@ import {
   GraduationCap,
   FileText,
   RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,20 +49,20 @@ interface CertificadoConDetalles extends CertificadoCurso {
 }
 
 export default function Certificados() {
-  const { clienteActual } = useCliente();
+  const { selectedCliente } = useCliente();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [cursoFilter, setCursoFilter] = useState<string>("todos");
   const [previewCertificado, setPreviewCertificado] = useState<CertificadoConDetalles | null>(null);
 
   const { data: certificados = [], isLoading } = useQuery<CertificadoConDetalles[]>({
-    queryKey: ["/api/certificados-cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/certificados-cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const { data: cursos = [] } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const regenerarMutation = useMutation({
@@ -248,14 +250,21 @@ export default function Certificados() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Award className="h-6 w-6" />
-            Certificados
-          </h1>
-          <p className="text-muted-foreground">
-            Gestiona los certificados de capacitación emitidos
-          </p>
+        <div className="flex items-center gap-3">
+          <Link href={`/${selectedCliente?.id}/cursos-capacitaciones`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold flex items-center gap-2">
+              <Award className="h-6 w-6" />
+              Certificados
+            </h1>
+            <p className="text-muted-foreground">
+              Gestiona los certificados de capacitación emitidos
+            </p>
+          </div>
         </div>
       </div>
 

@@ -13,7 +13,9 @@ import {
   Eye,
   Send,
   Calendar,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,7 +46,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useCliente } from "@/contexts/ClienteContext";
 import { AsignarCursoDialog } from "@/components/cursos/AsignarCursoDialog";
-import type { AsignacionCurso, Curso, Employee } from "@shared/schema";
+import type { AsignacionCurso, Curso, Employee, Departamento, Puesto } from "@shared/schema";
 
 interface AsignacionConDetalles extends AsignacionCurso {
   curso: Curso;
@@ -52,7 +54,7 @@ interface AsignacionConDetalles extends AsignacionCurso {
 }
 
 export default function Asignaciones() {
-  const { clienteActual } = useCliente();
+  const { selectedCliente } = useCliente();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [estatusFilter, setEstatusFilter] = useState<string>("todos");
@@ -60,13 +62,53 @@ export default function Asignaciones() {
   const [asignarDialogOpen, setAsignarDialogOpen] = useState(false);
 
   const { data: asignaciones = [], isLoading } = useQuery<AsignacionConDetalles[]>({
-    queryKey: ["/api/asignaciones-cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/asignaciones-cursos", selectedCliente?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/asignaciones-cursos?clienteId=${selectedCliente?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar asignaciones");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
   });
 
   const { data: cursos = [] } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/cursos", selectedCliente?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/cursos?clienteId=${selectedCliente?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar cursos");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
+  });
+
+  const { data: empleados = [] } = useQuery<Employee[]>({
+    queryKey: ["/api/employees", selectedCliente?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees?clienteId=${selectedCliente?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar empleados");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
+  });
+
+  const { data: departamentos = [] } = useQuery<Departamento[]>({
+    queryKey: ["/api/departamentos", selectedCliente?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/departamentos?clienteId=${selectedCliente?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar departamentos");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
+  });
+
+  const { data: puestos = [] } = useQuery<Puesto[]>({
+    queryKey: ["/api/puestos", selectedCliente?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/puestos?clienteId=${selectedCliente?.id}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Error al cargar puestos");
+      return res.json();
+    },
+    enabled: !!selectedCliente?.id,
   });
 
   const eliminarMutation = useMutation({
@@ -155,11 +197,18 @@ export default function Asignaciones() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Asignaciones de Cursos</h1>
-          <p className="text-muted-foreground">
-            Gestiona las asignaciones de cursos a empleados
-          </p>
+        <div className="flex items-center gap-3">
+          <Link href={`/${selectedCliente?.id}/cursos-capacitaciones`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Asignaciones de Cursos</h1>
+            <p className="text-muted-foreground">
+              Gestiona las asignaciones de cursos a empleados
+            </p>
+          </div>
         </div>
         <Button onClick={() => setAsignarDialogOpen(true)}>
           <UserPlus className="h-4 w-4 mr-2" />
@@ -380,6 +429,11 @@ export default function Asignaciones() {
       <AsignarCursoDialog
         open={asignarDialogOpen}
         onOpenChange={setAsignarDialogOpen}
+        clienteId={selectedCliente?.id || null}
+        cursos={cursos}
+        empleados={empleados}
+        departamentos={departamentos}
+        puestos={puestos}
       />
     </div>
   );

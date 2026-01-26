@@ -58,7 +58,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useCliente } from "@/contexts/ClienteContext";
 import type { Curso, ModuloCurso, LeccionCurso } from "@shared/schema";
+import QuizBuilder from "@/components/cursos/QuizBuilder";
 
 interface ModuloConLecciones extends ModuloCurso {
   lecciones: LeccionCurso[];
@@ -71,6 +73,7 @@ interface CursoCompleto {
 }
 
 export default function CursoBuilder() {
+  const { clienteId } = useCliente();
   const params = useParams<{ id: string }>();
   const cursoId = params.id;
   const { toast } = useToast();
@@ -93,6 +96,7 @@ export default function CursoBuilder() {
     contenido: "",
     archivoUrl: "",
     archivoNombre: "",
+    quizId: "",
   });
 
   const { data: cursoCompleto, isLoading } = useQuery<CursoCompleto>({
@@ -102,6 +106,7 @@ export default function CursoBuilder() {
 
   const curso = cursoCompleto?.curso;
   const modulos = cursoCompleto?.modulos || [];
+  const quizzes = cursoCompleto?.quizzes || [];
 
   // Mutations
   const createModuloMutation = useMutation({
@@ -228,6 +233,7 @@ export default function CursoBuilder() {
       contenido: "",
       archivoUrl: "",
       archivoNombre: "",
+      quizId: "",
     });
   };
 
@@ -250,15 +256,20 @@ export default function CursoBuilder() {
     setSelectedModuloId(moduloId);
     if (leccion) {
       setEditingLeccion(leccion);
+      // Get contenido - for texto type use .texto, for others use .textoAdicional
+      const contenidoData = leccion.contenido as any;
+      const contenidoText = contenidoData?.texto || contenidoData?.textoAdicional || "";
+
       setLeccionForm({
         nombre: leccion.nombre,
         descripcion: leccion.descripcion || "",
         tipoContenido: leccion.tipoContenido,
         duracionEstimadaMinutos: leccion.duracionEstimadaMinutos || 0,
         videoUrl: leccion.videoUrl || "",
-        contenido: (leccion.contenido as any)?.texto || "",
+        contenido: contenidoText,
         archivoUrl: leccion.archivoUrl || "",
         archivoNombre: leccion.archivoNombre || "",
+        quizId: (leccion as any).quizId || "",
       });
     } else {
       setEditingLeccion(null);
@@ -276,15 +287,27 @@ export default function CursoBuilder() {
   };
 
   const handleSaveLeccion = () => {
+    // Build contenido based on type - texto uses it as main content, others use it as additional text
+    const buildContenido = () => {
+      if (leccionForm.tipoContenido === "texto") {
+        return { texto: leccionForm.contenido };
+      }
+      if (["video", "documento", "link"].includes(leccionForm.tipoContenido) && leccionForm.contenido) {
+        return { textoAdicional: leccionForm.contenido };
+      }
+      return null;
+    };
+
     const data = {
       nombre: leccionForm.nombre,
       descripcion: leccionForm.descripcion,
       tipoContenido: leccionForm.tipoContenido,
       duracionEstimadaMinutos: leccionForm.duracionEstimadaMinutos || null,
-      videoUrl: leccionForm.tipoContenido === "video" ? leccionForm.videoUrl : null,
-      contenido: leccionForm.tipoContenido === "texto" ? { texto: leccionForm.contenido } : null,
+      videoUrl: leccionForm.tipoContenido === "video" || leccionForm.tipoContenido === "link" ? leccionForm.videoUrl : null,
+      contenido: buildContenido(),
       archivoUrl: leccionForm.tipoContenido === "documento" ? leccionForm.archivoUrl : null,
       archivoNombre: leccionForm.tipoContenido === "documento" ? leccionForm.archivoNombre : null,
+      quizId: leccionForm.tipoContenido === "quiz" ? leccionForm.quizId : null,
     };
 
     if (editingLeccion) {
@@ -334,7 +357,7 @@ export default function CursoBuilder() {
       <div className="p-8">
         <div className="text-center py-12">
           <p className="text-muted-foreground">Curso no encontrado</p>
-          <Link href="/cursos-capacitaciones">
+          <Link href={`/${clienteId}/cursos-capacitaciones`}>
             <Button variant="link">Volver a cursos</Button>
           </Link>
         </div>
@@ -346,7 +369,7 @@ export default function CursoBuilder() {
     <div className="p-8">
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <Link href="/cursos-capacitaciones">
+        <Link href={`/${clienteId}/cursos-capacitaciones`}>
           <Button variant="ghost" size="icon">
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -363,7 +386,7 @@ export default function CursoBuilder() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Link href={`/cursos-capacitaciones/${cursoId}/preview`}>
+          <Link href={`/${clienteId}/cursos-capacitaciones/${cursoId}/preview`}>
             <Button variant="outline">
               <Eye className="h-4 w-4 mr-2" />
               Vista Previa
@@ -536,6 +559,11 @@ export default function CursoBuilder() {
               ))}
             </div>
           )}
+
+          {/* Quiz Section */}
+          <div className="mt-8">
+            <QuizBuilder cursoId={cursoId!} />
+          </div>
         </div>
 
         {/* Sidebar - Course Info */}
@@ -694,6 +722,7 @@ export default function CursoBuilder() {
                     <SelectItem value="video">Video</SelectItem>
                     <SelectItem value="documento">Documento</SelectItem>
                     <SelectItem value="link">Enlace externo</SelectItem>
+                    <SelectItem value="quiz">Quiz</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -722,44 +751,103 @@ export default function CursoBuilder() {
             )}
 
             {leccionForm.tipoContenido === "video" && (
-              <div>
-                <label className="text-sm font-medium">URL del Video (YouTube/Vimeo)</label>
-                <Input
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  value={leccionForm.videoUrl}
-                  onChange={(e) => setLeccionForm({ ...leccionForm, videoUrl: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Soporta enlaces de YouTube y Vimeo
-                </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">URL del Video (YouTube/Vimeo)</label>
+                  <Input
+                    placeholder="https://www.youtube.com/watch?v=..."
+                    value={leccionForm.videoUrl}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, videoUrl: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Soporta enlaces de YouTube y Vimeo
+                  </p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Texto adicional (opcional)</label>
+                  <Textarea
+                    placeholder="Escribe notas o instrucciones adicionales..."
+                    value={leccionForm.contenido}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, contenido: e.target.value })}
+                    rows={4}
+                  />
+                </div>
               </div>
             )}
 
             {leccionForm.tipoContenido === "documento" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium">URL del Documento</label>
-                <Input
-                  placeholder="https://..."
-                  value={leccionForm.archivoUrl}
-                  onChange={(e) => setLeccionForm({ ...leccionForm, archivoUrl: e.target.value })}
-                />
-                <label className="text-sm font-medium">Nombre del archivo</label>
-                <Input
-                  placeholder="documento.pdf"
-                  value={leccionForm.archivoNombre}
-                  onChange={(e) => setLeccionForm({ ...leccionForm, archivoNombre: e.target.value })}
-                />
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">URL del Documento</label>
+                  <Input
+                    placeholder="https://..."
+                    value={leccionForm.archivoUrl}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, archivoUrl: e.target.value })}
+                  />
+                  <label className="text-sm font-medium">Nombre del archivo</label>
+                  <Input
+                    placeholder="documento.pdf"
+                    value={leccionForm.archivoNombre}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, archivoNombre: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Texto adicional (opcional)</label>
+                  <Textarea
+                    placeholder="Escribe notas o instrucciones adicionales..."
+                    value={leccionForm.contenido}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, contenido: e.target.value })}
+                    rows={4}
+                  />
+                </div>
               </div>
             )}
 
             {leccionForm.tipoContenido === "link" && (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Enlace Externo</label>
+                  <Input
+                    placeholder="https://..."
+                    value={leccionForm.videoUrl}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, videoUrl: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Texto adicional (opcional)</label>
+                  <Textarea
+                    placeholder="Escribe notas o instrucciones adicionales..."
+                    value={leccionForm.contenido}
+                    onChange={(e) => setLeccionForm({ ...leccionForm, contenido: e.target.value })}
+                    rows={4}
+                  />
+                </div>
+              </div>
+            )}
+
+            {leccionForm.tipoContenido === "quiz" && (
               <div>
-                <label className="text-sm font-medium">Enlace Externo</label>
-                <Input
-                  placeholder="https://..."
-                  value={leccionForm.videoUrl}
-                  onChange={(e) => setLeccionForm({ ...leccionForm, videoUrl: e.target.value })}
-                />
+                <label className="text-sm font-medium">Seleccionar Quiz *</label>
+                <Select
+                  value={leccionForm.quizId}
+                  onValueChange={(v) => setLeccionForm({ ...leccionForm, quizId: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un quiz..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {quizzes.map((quiz: any) => (
+                      <SelectItem key={quiz.id} value={quiz.id}>
+                        {quiz.nombre} ({quiz.preguntas?.length || 0} preguntas)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {quizzes.length === 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    No hay quizzes creados. Crea uno primero en la sección de Evaluaciones.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -769,7 +857,7 @@ export default function CursoBuilder() {
             </Button>
             <Button
               onClick={handleSaveLeccion}
-              disabled={!leccionForm.nombre || createLeccionMutation.isPending || updateLeccionMutation.isPending}
+              disabled={!leccionForm.nombre || (leccionForm.tipoContenido === "quiz" && !leccionForm.quizId) || createLeccionMutation.isPending || updateLeccionMutation.isPending}
             >
               {createLeccionMutation.isPending || updateLeccionMutation.isPending ? "Guardando..." : "Guardar"}
             </Button>

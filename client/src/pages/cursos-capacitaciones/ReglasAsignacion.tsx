@@ -13,7 +13,9 @@ import {
   Briefcase,
   Calendar,
   RefreshCw,
+  ArrowLeft,
 } from "lucide-react";
+import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,15 +51,15 @@ interface ReglaConDetalles extends ReglaAsignacionCurso {
 }
 
 export default function ReglasAsignacion() {
-  const { clienteActual } = useCliente();
+  const { selectedCliente } = useCliente();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRegla, setEditingRegla] = useState<ReglaConDetalles | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const { data: reglas = [], isLoading } = useQuery<ReglaConDetalles[]>({
-    queryKey: ["/api/reglas-asignacion-cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id,
+    queryKey: ["/api/reglas-asignacion-cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id,
   });
 
   const toggleActivaMutation = useMutation({
@@ -155,11 +157,18 @@ export default function ReglasAsignacion() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Reglas de Asignación Automática</h1>
-          <p className="text-muted-foreground">
-            Configura reglas para asignar cursos automáticamente
-          </p>
+        <div className="flex items-center gap-3">
+          <Link href={`/${selectedCliente?.id}/cursos-capacitaciones`}>
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold">Reglas de Asignación Automática</h1>
+            <p className="text-muted-foreground">
+              Configura reglas para asignar cursos automáticamente
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button

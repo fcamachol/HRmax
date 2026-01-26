@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useMemo } from "react";
+import { Check } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,7 +13,6 @@ import {
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -33,7 +33,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useCliente } from "@/contexts/ClienteContext";
 import type { Curso, Employee, Departamento, Puesto } from "@shared/schema";
 
 const asignarSchema = z.object({
@@ -47,15 +46,27 @@ type AsignarForm = z.infer<typeof asignarSchema>;
 interface AsignarCursoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  clienteId: string | null;
+  cursos: Curso[];
+  empleados: Employee[];
+  departamentos: Departamento[];
+  puestos: Puesto[];
 }
 
-export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogProps) {
-  const { clienteActual } = useCliente();
+export function AsignarCursoDialog({
+  open,
+  onOpenChange,
+  clienteId,
+  cursos,
+  empleados,
+  departamentos,
+  puestos,
+}: AsignarCursoDialogProps) {
   const { toast } = useToast();
-  const [assignMode, setAssignMode] = useState<"individual" | "grupo" | "filtro">("individual");
+  const [assignMode, setAssignMode] = useState<"individual" | "filtro">("individual");
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
-  const [departamentoFilter, setDepartamentoFilter] = useState<string>("");
-  const [puestoFilter, setPuestoFilter] = useState<string>("");
+  const [departamentoFilter, setDepartamentoFilter] = useState<string>("all");
+  const [puestoFilter, setPuestoFilter] = useState<string>("all");
 
   const form = useForm<AsignarForm>({
     resolver: zodResolver(asignarSchema),
@@ -66,26 +77,6 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
     },
   });
 
-  const { data: cursos = [] } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
-  });
-
-  const { data: empleados = [] } = useQuery<Employee[]>({
-    queryKey: ["/api/employees", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
-  });
-
-  const { data: departamentos = [] } = useQuery<Departamento[]>({
-    queryKey: ["/api/departamentos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
-  });
-
-  const { data: puestos = [] } = useQuery<Puesto[]>({
-    queryKey: ["/api/puestos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
-  });
-
   const asignarMutation = useMutation({
     mutationFn: async (data: {
       cursoId: string;
@@ -93,7 +84,10 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
       fechaVencimiento?: string;
       esObligatorio: boolean;
     }) => {
-      return (await apiRequest("POST", "/api/asignaciones-cursos/bulk", data)).json();
+      return (await apiRequest("POST", "/api/asignaciones-cursos/bulk", {
+        ...data,
+        clienteId,
+      })).json();
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/asignaciones-cursos"] });
@@ -101,20 +95,36 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
         title: "Curso asignado",
         description: `Se asignó el curso a ${result.asignados} empleado(s)`,
       });
-      handleClose();
+      handleClose(false);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 
-  const handleClose = () => {
-    form.reset();
-    setSelectedEmployees([]);
-    setDepartamentoFilter("");
-    setPuestoFilter("");
-    setAssignMode("individual");
-    onOpenChange(false);
+  const activeEmpleados = useMemo(() => {
+    // Include employees that are active or don't have a status set (null/undefined defaults to active)
+    // Also handle case-insensitive comparison
+    return empleados.filter((e) => !e.estatus || e.estatus.toLowerCase() === "activo");
+  }, [empleados]);
+
+  const filteredEmployees = useMemo(() => {
+    return activeEmpleados.filter((e) => {
+      if (departamentoFilter !== "all" && e.departamentoId !== departamentoFilter) return false;
+      if (puestoFilter !== "all" && e.puestoId !== puestoFilter) return false;
+      return true;
+    });
+  }, [activeEmpleados, departamentoFilter, puestoFilter]);
+
+  const handleClose = (isOpen: boolean) => {
+    if (!isOpen) {
+      form.reset();
+      setSelectedEmployees([]);
+      setAssignMode("individual");
+      setDepartamentoFilter("all");
+      setPuestoFilter("all");
+    }
+    onOpenChange(isOpen);
   };
 
   const toggleEmployee = (employeeId: string) => {
@@ -126,21 +136,11 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
   };
 
   const selectAll = () => {
-    const filtered = getFilteredEmployees();
-    setSelectedEmployees(filtered.map((e) => e.id));
+    setSelectedEmployees(activeEmpleados.map((e) => e.id));
   };
 
   const clearSelection = () => {
     setSelectedEmployees([]);
-  };
-
-  const getFilteredEmployees = () => {
-    return empleados.filter((e) => {
-      if (e.estatus !== "activo") return false;
-      if (departamentoFilter && e.departamentoId !== departamentoFilter) return false;
-      if (puestoFilter && e.puestoId !== puestoFilter) return false;
-      return true;
-    });
   };
 
   const onSubmit = (data: AsignarForm) => {
@@ -149,7 +149,7 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
     if (assignMode === "individual") {
       empleadoIds = selectedEmployees;
     } else if (assignMode === "filtro") {
-      empleadoIds = getFilteredEmployees().map((e) => e.id);
+      empleadoIds = filteredEmployees.map((e) => e.id);
     }
 
     if (empleadoIds.length === 0) {
@@ -168,9 +168,6 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
       esObligatorio: data.esObligatorio,
     });
   };
-
-  const filteredEmployees = getFilteredEmployees();
-  const activeEmpleados = empleados.filter((e) => e.estatus === "activo");
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -243,7 +240,7 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
             </div>
 
             <div className="flex-1 overflow-hidden mt-4">
-              <Tabs value={assignMode} onValueChange={(v) => setAssignMode(v as any)}>
+              <Tabs value={assignMode} onValueChange={(v) => setAssignMode(v as "individual" | "filtro")}>
                 <TabsList className="w-full">
                   <TabsTrigger value="individual" className="flex-1">
                     Individual
@@ -269,28 +266,38 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
                   </div>
                   <ScrollArea className="flex-1 border rounded-md">
                     <div className="p-2 space-y-1">
-                      {activeEmpleados.map((empleado) => (
-                        <div
-                          key={empleado.id}
-                          className={`flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-muted ${
-                            selectedEmployees.includes(empleado.id) ? "bg-primary/10" : ""
-                          }`}
-                          onClick={() => toggleEmployee(empleado.id)}
-                        >
-                          <Checkbox
-                            checked={selectedEmployees.includes(empleado.id)}
-                            onCheckedChange={() => toggleEmployee(empleado.id)}
-                          />
-                          <div className="flex-1">
-                            <p className="text-sm font-medium">
-                              {empleado.nombre} {empleado.apellidoPaterno}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {empleado.numeroEmpleado}
-                            </p>
+                      {activeEmpleados.map((empleado) => {
+                        const isSelected = selectedEmployees.includes(empleado.id);
+                        return (
+                          <div
+                            key={empleado.id}
+                            className={`flex items-center gap-3 p-2 rounded cursor-pointer hover:bg-muted ${
+                              isSelected ? "bg-primary/10" : ""
+                            }`}
+                            onClick={() => toggleEmployee(empleado.id)}
+                          >
+                            <div
+                              className={`h-4 w-4 shrink-0 rounded-sm border ${
+                                isSelected
+                                  ? "bg-primary border-primary"
+                                  : "border-primary"
+                              } flex items-center justify-center`}
+                            >
+                              {isSelected && (
+                                <Check className="h-3 w-3 text-primary-foreground" />
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <p className="text-sm font-medium">
+                                {empleado.nombre} {empleado.apellidoPaterno}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {empleado.numeroEmpleado}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 </TabsContent>
@@ -307,7 +314,7 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
                           <SelectValue placeholder="Todos" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Todos</SelectItem>
+                          <SelectItem value="all">Todos</SelectItem>
                           {departamentos.map((d) => (
                             <SelectItem key={d.id} value={d.id}>
                               {d.nombre}
@@ -323,7 +330,7 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
                           <SelectValue placeholder="Todos" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Todos</SelectItem>
+                          <SelectItem value="all">Todos</SelectItem>
                           {puestos.map((p) => (
                             <SelectItem key={p.id} value={p.id}>
                               {p.nombre}
@@ -359,7 +366,7 @@ export function AsignarCursoDialog({ open, onOpenChange }: AsignarCursoDialogPro
             </div>
 
             <div className="flex justify-end gap-2 mt-4 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={handleClose}>
+              <Button type="button" variant="outline" onClick={() => handleClose(false)}>
                 Cancelar
               </Button>
               <Button type="submit" disabled={asignarMutation.isPending}>

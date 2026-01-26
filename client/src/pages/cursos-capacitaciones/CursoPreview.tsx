@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import {
   ArrowLeft,
+  ArrowRight,
   PlayCircle,
   FileText,
   Video,
@@ -10,6 +11,7 @@ import {
   HelpCircle,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Clock,
   BookOpen,
   Eye,
@@ -22,18 +24,36 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { useCliente } from "@/contexts/ClienteContext";
 import type { Curso, ModuloCurso, LeccionCurso } from "@shared/schema";
 
 interface ModuloConLecciones extends ModuloCurso {
   lecciones: LeccionCurso[];
 }
 
+interface QuizPregunta {
+  id: string;
+  tipoPregunta: string;
+  pregunta: string;
+  opciones: any[];
+  orden: number;
+}
+
+interface Quiz {
+  id: string;
+  nombre: string;
+  descripcion?: string;
+  preguntas: QuizPregunta[];
+}
+
 interface CursoCompleto {
   curso: Curso;
   modulos: ModuloConLecciones[];
+  quizzes: Quiz[];
 }
 
 export default function CursoPreview() {
+  const { clienteId } = useCliente();
   const params = useParams<{ id: string }>();
   const cursoId = params.id;
 
@@ -71,6 +91,52 @@ export default function CursoPreview() {
   const handleSelectLeccion = (leccion: LeccionCurso) => {
     setCurrentLeccion(leccion);
   };
+
+  // Get all lessons in order for navigation
+  const getAllLecciones = (): LeccionCurso[] => {
+    if (!cursoCompleto) return [];
+    return cursoCompleto.modulos.flatMap((m) => m.lecciones);
+  };
+
+  const getCurrentLeccionIndex = (): number => {
+    if (!currentLeccion) return -1;
+    return getAllLecciones().findIndex((l) => l.id === currentLeccion.id);
+  };
+
+  const handlePreviousLeccion = () => {
+    const allLecciones = getAllLecciones();
+    const currentIndex = getCurrentLeccionIndex();
+    if (currentIndex > 0) {
+      const prevLeccion = allLecciones[currentIndex - 1];
+      setCurrentLeccion(prevLeccion);
+      // Expand the module containing this lesson
+      const modulo = cursoCompleto?.modulos.find((m) =>
+        m.lecciones.some((l) => l.id === prevLeccion.id)
+      );
+      if (modulo) {
+        setExpandedModulos((prev) => new Set([...prev, modulo.id]));
+      }
+    }
+  };
+
+  const handleNextLeccion = () => {
+    const allLecciones = getAllLecciones();
+    const currentIndex = getCurrentLeccionIndex();
+    if (currentIndex < allLecciones.length - 1) {
+      const nextLeccion = allLecciones[currentIndex + 1];
+      setCurrentLeccion(nextLeccion);
+      // Expand the module containing this lesson
+      const modulo = cursoCompleto?.modulos.find((m) =>
+        m.lecciones.some((l) => l.id === nextLeccion.id)
+      );
+      if (modulo) {
+        setExpandedModulos((prev) => new Set([...prev, modulo.id]));
+      }
+    }
+  };
+
+  const hasPreviousLeccion = getCurrentLeccionIndex() > 0;
+  const hasNextLeccion = getCurrentLeccionIndex() < getAllLecciones().length - 1;
 
   const getTipoContenidoIcon = (tipo: string) => {
     switch (tipo) {
@@ -127,23 +193,30 @@ export default function CursoPreview() {
         {/* Content based on type */}
         <div className="min-h-[300px] bg-muted/30 rounded-lg">
           {currentLeccion.tipoContenido === "video" && currentLeccion.videoUrl && (
-            <div className="aspect-video rounded-lg overflow-hidden bg-black">
-              {extractYouTubeId(currentLeccion.videoUrl) ? (
-                <iframe
-                  width="100%"
-                  height="100%"
-                  src={`https://www.youtube.com/embed/${extractYouTubeId(currentLeccion.videoUrl)}`}
-                  title={currentLeccion.nombre}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  className="border-0"
-                />
-              ) : (
-                <video
-                  src={currentLeccion.videoUrl}
-                  controls
-                  className="w-full h-full"
-                />
+            <div>
+              <div className="aspect-video rounded-lg overflow-hidden bg-black">
+                {extractYouTubeId(currentLeccion.videoUrl) ? (
+                  <iframe
+                    width="100%"
+                    height="100%"
+                    src={`https://www.youtube.com/embed/${extractYouTubeId(currentLeccion.videoUrl)}`}
+                    title={currentLeccion.nombre}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="border-0"
+                  />
+                ) : (
+                  <video
+                    src={currentLeccion.videoUrl}
+                    controls
+                    className="w-full h-full"
+                  />
+                )}
+              </div>
+              {(currentLeccion.contenido as any)?.textoAdicional && (
+                <div className="prose prose-sm max-w-none p-6 border-t mt-4">
+                  {(currentLeccion.contenido as any).textoAdicional}
+                </div>
               )}
             </div>
           )}
@@ -170,31 +243,116 @@ export default function CursoPreview() {
                 <LinkIcon className="h-4 w-4" />
                 {currentLeccion.videoUrl}
               </a>
+              {(currentLeccion.contenido as any)?.textoAdicional && (
+                <div className="prose prose-sm max-w-none mt-6 pt-4 border-t">
+                  {(currentLeccion.contenido as any).textoAdicional}
+                </div>
+              )}
             </div>
           )}
 
           {currentLeccion.tipoContenido === "documento" && currentLeccion.archivoUrl && (
-            <div className="p-6 text-center">
-              <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-3" />
-              <p className="text-sm mb-3">{currentLeccion.archivoNombre || "Documento"}</p>
-              <a
-                href={currentLeccion.archivoUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button variant="outline">
-                  Abrir documento
-                </Button>
-              </a>
+            <div className="p-6">
+              <div className="text-center">
+                <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm mb-3">{currentLeccion.archivoNombre || "Documento"}</p>
+                <a
+                  href={currentLeccion.archivoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="outline">
+                    Abrir documento
+                  </Button>
+                </a>
+              </div>
+              {(currentLeccion.contenido as any)?.textoAdicional && (
+                <div className="prose prose-sm max-w-none mt-6 pt-4 border-t">
+                  {(currentLeccion.contenido as any).textoAdicional}
+                </div>
+              )}
             </div>
           )}
 
           {currentLeccion.tipoContenido === "quiz" && (
-            <div className="p-6 text-center">
-              <HelpCircle className="h-16 w-16 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
-                Esta lección contiene un quiz que los empleados deberán completar.
-              </p>
+            <div className="p-6">
+              {(() => {
+                const quizId = (currentLeccion as any).quizId;
+                const quiz = cursoCompleto?.quizzes?.find((q) => q.id === quizId);
+
+                if (!quiz) {
+                  return (
+                    <div className="text-center">
+                      <HelpCircle className="h-16 w-16 mx-auto text-muted-foreground mb-3" />
+                      <p className="text-muted-foreground">
+                        No se encontró el quiz asociado a esta lección.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div className="text-center mb-6">
+                      <HelpCircle className="h-12 w-12 mx-auto text-primary mb-2" />
+                      <h3 className="font-semibold text-lg">{quiz.nombre}</h3>
+                      {quiz.descripcion && (
+                        <p className="text-sm text-muted-foreground mt-1">{quiz.descripcion}</p>
+                      )}
+                      <p className="text-sm text-muted-foreground mt-2">
+                        {quiz.preguntas?.length || 0} preguntas
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {quiz.preguntas?.sort((a, b) => a.orden - b.orden).map((pregunta, idx) => (
+                        <div key={pregunta.id} className="border rounded-lg p-4 bg-background">
+                          <p className="font-medium mb-3">
+                            {idx + 1}. {pregunta.pregunta}
+                          </p>
+                          <div className="space-y-2 ml-4">
+                            {pregunta.tipoPregunta === "true_false" ? (
+                              <>
+                                <label className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                  <input type="radio" name={`q-${pregunta.id}`} className="accent-primary" />
+                                  Verdadero
+                                </label>
+                                <label className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                  <input type="radio" name={`q-${pregunta.id}`} className="accent-primary" />
+                                  Falso
+                                </label>
+                              </>
+                            ) : pregunta.tipoPregunta === "free_text" ? (
+                              <textarea
+                                placeholder="Escribe tu respuesta aquí..."
+                                className="w-full border rounded p-2 text-sm focus:ring-2 focus:ring-primary focus:border-primary"
+                                rows={3}
+                              />
+                            ) : (
+                              pregunta.opciones?.map((opcion: any, optIdx: number) => (
+                                <label key={optIdx} className="flex items-center gap-2 text-sm cursor-pointer hover:text-primary">
+                                  <input
+                                    type={pregunta.tipoPregunta === "multiple_select" ? "checkbox" : "radio"}
+                                    name={`q-${pregunta.id}`}
+                                    className="accent-primary"
+                                  />
+                                  {opcion.texto}
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="flex justify-end pt-4">
+                      <Button className="px-8">
+                        Enviar respuestas
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -206,6 +364,28 @@ export default function CursoPreview() {
               <p>No hay contenido configurado para esta lección</p>
             </div>
           )}
+        </div>
+
+        {/* Navigation buttons */}
+        <div className="flex justify-between items-center pt-6 border-t mt-6">
+          <Button
+            variant="outline"
+            onClick={handlePreviousLeccion}
+            disabled={!hasPreviousLeccion}
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            {getCurrentLeccionIndex() + 1} de {getAllLecciones().length}
+          </span>
+          <Button
+            onClick={handleNextLeccion}
+            disabled={!hasNextLeccion}
+          >
+            Siguiente
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
         </div>
       </div>
     );
@@ -228,7 +408,7 @@ export default function CursoPreview() {
         <div className="text-center">
           <BookOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
           <p className="text-muted-foreground mb-4">Curso no encontrado</p>
-          <Link href="/cursos-capacitaciones">
+          <Link href={`/${clienteId}/cursos-capacitaciones`}>
             <Button>Volver a Cursos</Button>
           </Link>
         </div>
@@ -244,7 +424,7 @@ export default function CursoPreview() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b">
         <div className="flex items-center gap-3 p-4">
-          <Link href={`/cursos-capacitaciones/${cursoId}/editar`}>
+          <Link href={`/${clienteId}/cursos-capacitaciones/${cursoId}/editar`}>
             <Button variant="ghost" size="icon">
               <ArrowLeft className="h-5 w-5" />
             </Button>

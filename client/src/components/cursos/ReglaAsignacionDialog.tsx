@@ -53,7 +53,7 @@ interface ReglaAsignacionDialogProps {
 }
 
 export function ReglaAsignacionDialog({ open, onOpenChange, regla }: ReglaAsignacionDialogProps) {
-  const { clienteActual } = useCliente();
+  const { selectedCliente } = useCliente();
   const { toast } = useToast();
   const isEditing = !!regla;
 
@@ -98,18 +98,18 @@ export function ReglaAsignacionDialog({ open, onOpenChange, regla }: ReglaAsigna
   }, [regla, form]);
 
   const { data: cursos = [] } = useQuery<Curso[]>({
-    queryKey: ["/api/cursos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
+    queryKey: ["/api/cursos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id && open,
   });
 
   const { data: departamentos = [] } = useQuery<Departamento[]>({
-    queryKey: ["/api/departamentos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
+    queryKey: ["/api/departamentos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id && open,
   });
 
   const { data: puestos = [] } = useQuery<Puesto[]>({
-    queryKey: ["/api/puestos", clienteActual?.id],
-    enabled: !!clienteActual?.id && open,
+    queryKey: ["/api/puestos", selectedCliente?.id],
+    enabled: !!selectedCliente?.id && open,
   });
 
   const crearMutation = useMutation({
