@@ -106,7 +106,7 @@ export function BottomSheet({
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 safe-area-bottom">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-6 safe-area-bottom">
           {children}
         </div>
       </div>
