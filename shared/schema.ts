@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index, uniqueIndex, check, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, integer, date, timestamp, jsonb, uuid, boolean, numeric, unique, index, uniqueIndex, check, bigint, serial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -900,9 +900,19 @@ export const insertIncidenciaAsistenciaSchema = createInsertSchema(incidenciasAs
   id: true,
   createdAt: true,
   updatedAt: true,
-});
+}).refine(
+  (data) => data.faltas === undefined || data.faltas === null || (data.faltas >= 0 && data.faltas <= 1),
+  { message: "Faltas debe ser 0 o 1", path: ["faltas"] }
+);
 
-export const updateIncidenciaAsistenciaSchema = insertIncidenciaAsistenciaSchema.partial();
+export const updateIncidenciaAsistenciaSchema = createInsertSchema(incidenciasAsistencia).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+}).partial().refine(
+  (data) => data.faltas === undefined || data.faltas === null || (data.faltas >= 0 && data.faltas <= 1),
+  { message: "Faltas debe ser 0 o 1", path: ["faltas"] }
+);
 
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -969,7 +979,13 @@ export const hiringProcess = pgTable("hiring_process", {
   department: text("department").notNull().default(""), // Campo legacy - usar departamentoId
   puestoId: varchar("puesto_id").references(() => puestos.id, { onDelete: "set null" }), // Puesto ofrecido (FK)
   departamentoId: varchar("departamento_id").references(() => departamentos.id, { onDelete: "set null" }), // Departamento (FK)
-  proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto
+  proposedSalary: decimal("proposed_salary", { precision: 10, scale: 2 }).notNull(), // Salario propuesto (mensual neto)
+  // Nuevos campos de salario para IMSS
+  salarioDiarioNominal: numeric("salario_diario_nominal", { precision: 12, scale: 2 }), // Salario diario nominal (base para IMSS)
+  salarioDiarioExento: numeric("salario_diario_exento", { precision: 12, scale: 2 }), // Salario diario exento (si aplica)
+  sdi: numeric("sdi", { precision: 12, scale: 2 }), // Salario Diario Integrado (calculado)
+  esquemaPago: varchar("esquema_pago", { length: 20 }).default("tradicional"), // tradicional o mixto
+  periodicidadPago: varchar("periodicidad_pago", { length: 20 }).default("quincenal"), // semanal, catorcenal, quincenal, mensual
   startDate: date("start_date").notNull(), // Fecha propuesta de inicio
   endDate: date("end_date"), // Fecha de fin (para contratos temporales, por obra o prueba)
   stage: text("stage").notNull().default("oferta"), // Etapa actual del proceso
@@ -1088,12 +1104,17 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type PublicUser = Omit<User, 'password'>;
 
 // Schema for updating user - only allows specific non-sensitive fields
+// Roles hierarchy: cliente_master > cliente_admin > supervisor > user
+// - cliente_master: Full control over all users in their client account
+// - cliente_admin: Can manage regular users and supervisors
+// - supervisor: Can manage incidencias/approvals for assigned centros de trabajo
+// - user: Regular user with granular permissions
 export const updateUserSchema = z.object({
   nombre: z.string().optional(),
   email: z.string().email().optional(),
   tipoUsuario: z.enum(["maxtalent", "cliente"]).optional(),
   clienteId: z.string().nullable().optional(),
-  role: z.enum(["user", "cliente_admin"]).optional(),
+  role: z.enum(["user", "cliente_admin", "cliente_master", "supervisor"]).optional(),
   activo: z.boolean().optional(),
   isSuperAdmin: z.boolean().optional(),
 });
@@ -1223,7 +1244,7 @@ export const registrosPatronales = pgTable("registros_patronales", {
   codigoPostal: varchar("codigo_postal", { length: 5 }),
   // Clasificación de riesgo IMSS
   claseRiesgo: varchar("clase_riesgo").notNull().default("I"), // I, II, III, IV, V
-  primaRiesgo: decimal("prima_riesgo", { precision: 5, scale: 4 }).default("0.5000"), // Porcentaje (ej: 0.5000 = 0.5%)
+  primaRiesgo: decimal("prima_riesgo", { precision: 7, scale: 5 }).default("0.50000"), // Porcentaje (ej: 0.50000 = 0.5%)
   divisionEconomica: text("division_economica"),
   grupoActividad: text("grupo_actividad"),
   fraccionActividad: text("fraccion_actividad"),
@@ -1342,6 +1363,25 @@ export const updateCentroTrabajoSchema = insertCentroTrabajoSchema.partial();
 
 export type CentroTrabajo = typeof centrosTrabajo.$inferSelect;
 export type InsertCentroTrabajo = z.infer<typeof insertCentroTrabajoSchema>;
+
+// ============================================================================
+// SUPERVISOR - CENTROS DE TRABAJO (Many-to-Many assignment)
+// ============================================================================
+// Links supervisor users to the centros de trabajo they manage
+export const supervisorCentrosTrabajo = pgTable("supervisor_centros_trabajo", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  usuarioId: varchar("usuario_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  centroTrabajoId: varchar("centro_trabajo_id").notNull().references(() => centrosTrabajo.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+});
+
+export const insertSupervisorCentroTrabajoSchema = createInsertSchema(supervisorCentrosTrabajo).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type SupervisorCentroTrabajo = typeof supervisorCentrosTrabajo.$inferSelect;
+export type InsertSupervisorCentroTrabajo = z.infer<typeof insertSupervisorCentroTrabajoSchema>;
 
 // Turnos de Centro de Trabajo
 // Un centro de trabajo puede tener múltiples turnos (matutino, vespertino, nocturno, etc.)
@@ -5101,6 +5141,9 @@ export const cursos = pgTable("cursos", {
   clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
   empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
 
+  // Type: 'curso' or 'evaluacion'
+  tipo: varchar("tipo", { length: 20 }).default("curso"),
+
   // Basic info
   codigo: varchar("codigo", { length: 50 }).notNull(),
   nombre: varchar("nombre", { length: 200 }).notNull(),
@@ -5972,3 +6015,30 @@ export const insertDocumentoGeneradoSchema = createInsertSchema(documentosGenera
   createdAt: true,
 });
 export type InsertDocumentoGenerado = z.infer<typeof insertDocumentoGeneradoSchema>;
+
+// Portal Document Requests (employee self-service)
+export const solicitudesDocumentos = pgTable("solicitudes_documentos", {
+  id: serial("id").primaryKey(),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  tipoDocumento: varchar("tipo_documento", { length: 50 }).notNull(), // constancia_laboral, constancia_ingresos, etc.
+  nombre: varchar("nombre", { length: 255 }).notNull(),
+  estado: varchar("estado", { length: 20 }).notNull().default("pendiente"), // pendiente, generado, error
+  fechaSolicitud: timestamp("fecha_solicitud").notNull().default(sql`now()`),
+  fechaGeneracion: timestamp("fecha_generacion"),
+  urlDescarga: varchar("url_descarga", { length: 500 }),
+  tamanio: varchar("tamanio", { length: 20 }),
+  categoria: varchar("categoria", { length: 50 }).default("otros"),
+  notas: text("notas"),
+}, (table) => ({
+  clienteIdx: index("solicitudes_docs_cliente_idx").on(table.clienteId),
+  empleadoIdx: index("solicitudes_docs_empleado_idx").on(table.empleadoId),
+  estadoIdx: index("solicitudes_docs_estado_idx").on(table.estado),
+}));
+
+export type SolicitudDocumento = typeof solicitudesDocumentos.$inferSelect;
+export const insertSolicitudDocumentoSchema = createInsertSchema(solicitudesDocumentos).omit({
+  id: true,
+  fechaSolicitud: true,
+});
+export type InsertSolicitudDocumento = z.infer<typeof insertSolicitudDocumentoSchema>;

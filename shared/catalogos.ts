@@ -81,6 +81,7 @@ export const FORMAS_PAGO = [
 
 export const PERIODICIDAD_PAGO = [
   { value: 'semanal', label: 'Semanal' },
+  { value: 'catorcenal', label: 'Catorcenal' },
   { value: 'quincenal', label: 'Quincenal' },
   { value: 'mensual', label: 'Mensual' },
   { value: 'decenal', label: 'Decenal' },
