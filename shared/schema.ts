@@ -375,6 +375,8 @@ export const attendance = pgTable("attendance", {
   status: text("status").notNull(), // presente, ausente, retardo, vacaciones, permiso, incapacidad
   clockIn: text("clock_in"),
   clockOut: text("clock_out"),
+  lunchOut: text("lunch_out"), // Hora de salida a comida
+  lunchIn: text("lunch_in"), // Hora de regreso de comida
   horasTrabajadas: decimal("horas_trabajadas", { precision: 4, scale: 2 }), // Horas trabajadas calculadas
   motivoAusencia: text("motivo_ausencia"), // Si status es ausencia/permiso, el motivo
   tipoJornada: varchar("tipo_jornada").default("normal"), // normal, festivo, descanso

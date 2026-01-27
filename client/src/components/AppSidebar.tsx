@@ -36,6 +36,7 @@ import {
   FileSignature,
   ListChecks,
   History,
+  MessageSquareWarning,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -260,6 +261,11 @@ const mainMenuItems = [
     title: "Legal",
     url: "/legal",
     icon: Scale,
+  },
+  {
+    title: "Canal de Denuncias",
+    url: "/denuncias",
+    icon: MessageSquareWarning,
   },
   {
     title: "REPSE",

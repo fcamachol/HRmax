@@ -139,20 +139,20 @@ export default function Denuncias() {
 
   // Fetch denuncias
   const { data: denuncias = [], isLoading } = useQuery<Denuncia[]>({
-    queryKey: ["/api/denuncias", clienteId],
+    queryKey: [`/api/denuncias?clienteId=${clienteId}`],
     enabled: !!clienteId,
   });
 
   // Fetch selected denuncia details
   const { data: denunciaDetail, isLoading: loadingDetail } = useQuery<DenunciaDetail>({
-    queryKey: ["/api/denuncias", selectedDenuncia],
-    enabled: !!selectedDenuncia,
+    queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`],
+    enabled: !!selectedDenuncia && !!clienteId,
   });
 
   // Update denuncia
   const updateMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
-      const res = await fetch(`/api/denuncias/${id}`, {
+      const res = await fetch(`/api/denuncias/${id}?clienteId=${clienteId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
@@ -162,7 +162,8 @@ export default function Denuncias() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/denuncias"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/denuncias?clienteId=${clienteId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`] });
       toast({ title: "Actualizado", description: "Cambios guardados" });
     },
     onError: () => {
@@ -173,7 +174,7 @@ export default function Denuncias() {
   // Send message
   const messageMutation = useMutation({
     mutationFn: async ({ id, contenido }: { id: string; contenido: string }) => {
-      const res = await fetch(`/api/denuncias/${id}/mensaje`, {
+      const res = await fetch(`/api/denuncias/${id}/mensaje?clienteId=${clienteId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contenido }),
@@ -183,7 +184,7 @@ export default function Denuncias() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/denuncias", selectedDenuncia] });
+      queryClient.invalidateQueries({ queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`] });
       setNewMessage("");
       toast({ title: "Enviado", description: "Mensaje enviado al reportante" });
     },

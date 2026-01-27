@@ -13,6 +13,7 @@ import {
   LogIn,
   LogOut,
   Loader2,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -37,8 +38,12 @@ interface TodayStatus {
   checkedIn: boolean;
   horaEntrada: string | null;
   horaSalida: string | null;
+  lunchOut: string | null;
+  lunchIn: string | null;
   canCheckIn: boolean;
   canCheckOut: boolean;
+  canLunchOut: boolean;
+  canLunchIn: boolean;
 }
 
 export default function PortalHome() {
@@ -106,9 +111,15 @@ export default function PortalHome() {
   // Check-in mutation
   const checkInMutation = useMutation({
     mutationFn: async () => {
+      const now = new Date();
+      const localTime = format(now, "HH:mm:ss");
+      const localDate = format(now, "yyyy-MM-dd");
+
       const res = await fetch("/api/portal/asistencia/checkin", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ localTime, localDate }),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -137,9 +148,15 @@ export default function PortalHome() {
   // Check-out mutation
   const checkOutMutation = useMutation({
     mutationFn: async () => {
+      const now = new Date();
+      const localTime = format(now, "HH:mm:ss");
+      const localDate = format(now, "yyyy-MM-dd");
+
       const res = await fetch("/api/portal/asistencia/checkout", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ localTime, localDate }),
       });
       if (!res.ok) {
         const error = await res.json();
@@ -165,6 +182,78 @@ export default function PortalHome() {
     },
   });
 
+  // Lunch out mutation
+  const lunchOutMutation = useMutation({
+    mutationFn: async () => {
+      const now = new Date();
+      const localTime = format(now, "HH:mm:ss");
+      const localDate = format(now, "yyyy-MM-dd");
+
+      const res = await fetch("/api/portal/asistencia/lunch-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ localTime, localDate }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar salida a comida");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Salida a comida registrada",
+        description: `Hora: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      refetchTodayStatus();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Lunch in mutation
+  const lunchInMutation = useMutation({
+    mutationFn: async () => {
+      const now = new Date();
+      const localTime = format(now, "HH:mm:ss");
+      const localDate = format(now, "yyyy-MM-dd");
+
+      const res = await fetch("/api/portal/asistencia/lunch-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ localTime, localDate }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar regreso de comida");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Regreso de comida registrado",
+        description: `Hora: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      refetchTodayStatus();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRefresh = async () => {
     await Promise.all([refetch(), refetchTodayStatus()]);
   };
@@ -178,15 +267,53 @@ export default function PortalHome() {
   // Determine button state
   const canCheckIn = todayStatus?.canCheckIn ?? true;
   const canCheckOut = todayStatus?.canCheckOut ?? false;
-  const isProcessing = checkInMutation.isPending || checkOutMutation.isPending;
+  const canLunchOut = todayStatus?.canLunchOut ?? false;
+  const canLunchIn = todayStatus?.canLunchIn ?? false;
+  const isProcessing = checkInMutation.isPending || checkOutMutation.isPending || lunchOutMutation.isPending || lunchInMutation.isPending;
 
   const handleAttendanceAction = () => {
-    if (canCheckIn) {
+    if (canLunchIn) {
+      lunchInMutation.mutate();
+    } else if (canLunchOut) {
+      lunchOutMutation.mutate();
+    } else if (canCheckIn) {
       checkInMutation.mutate();
     } else if (canCheckOut) {
       checkOutMutation.mutate();
     }
   };
+
+  // Determine which action to show
+  const getButtonConfig = () => {
+    if (canLunchIn) {
+      return {
+        label: "Regreso Comida",
+        icon: UtensilsCrossed,
+        className: "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20 text-white",
+      };
+    }
+    if (canLunchOut) {
+      return {
+        label: "Salida Comida",
+        icon: UtensilsCrossed,
+        className: "bg-amber-500 hover:bg-amber-600 shadow-amber-500/20 text-white",
+      };
+    }
+    if (canCheckOut) {
+      return {
+        label: "Registrar Salida",
+        icon: LogOut,
+        className: "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20 text-white",
+      };
+    }
+    return {
+      label: "Registrar Entrada",
+      icon: LogIn,
+      className: "bg-[#135bec] hover:bg-[#135bec]/90 shadow-[#135bec]/20 text-white",
+    };
+  };
+
+  const buttonConfig = getButtonConfig();
 
   // Dashboard tiles config
   const dashboardTiles = [
@@ -298,11 +425,9 @@ export default function PortalHome() {
               <Button
                 className={cn(
                   "flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold shadow-lg transition-all active:scale-95",
-                  canCheckOut
-                    ? "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20 text-white"
-                    : "bg-[#135bec] hover:bg-[#135bec]/90 shadow-[#135bec]/20 text-white"
+                  buttonConfig.className
                 )}
-                disabled={isProcessing || (!canCheckIn && !canCheckOut)}
+                disabled={isProcessing || (!canCheckIn && !canCheckOut && !canLunchOut && !canLunchIn)}
                 onClick={handleAttendanceAction}
               >
                 {isProcessing ? (
@@ -310,15 +435,10 @@ export default function PortalHome() {
                     <Loader2 className="h-5 w-5 animate-spin" />
                     <span>Registrando...</span>
                   </>
-                ) : canCheckOut ? (
-                  <>
-                    <LogOut className="h-5 w-5" />
-                    <span>Registrar Salida</span>
-                  </>
                 ) : (
                   <>
-                    <LogIn className="h-5 w-5" />
-                    <span>Registrar Entrada</span>
+                    <buttonConfig.icon className="h-5 w-5" />
+                    <span>{buttonConfig.label}</span>
                   </>
                 )}
               </Button>

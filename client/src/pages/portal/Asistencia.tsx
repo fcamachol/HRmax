@@ -11,6 +11,7 @@ import {
   Timer,
   ChevronRight,
   ChevronLeft,
+  UtensilsCrossed,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,8 +46,12 @@ interface TodayStatus {
   checkedIn: boolean;
   horaEntrada: string | null;
   horaSalida: string | null;
+  lunchOut: string | null;
+  lunchIn: string | null;
   canCheckIn: boolean;
   canCheckOut: boolean;
+  canLunchOut: boolean;
+  canLunchIn: boolean;
 }
 
 const DAYS_OF_WEEK = ["L", "M", "X", "J", "V", "S", "D"];
@@ -201,6 +206,66 @@ export default function PortalAsistencia() {
     },
   });
 
+  // Lunch out mutation
+  const lunchOutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/asistencia/lunch-out", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar salida a comida");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Salida a comida registrada",
+        description: `Hora: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      refetchToday();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Lunch in mutation
+  const lunchInMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/asistencia/lunch-in", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar regreso de comida");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Regreso de comida registrado",
+        description: `Hora: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      refetchToday();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRefresh = async () => {
     await Promise.all([refetchToday(), refetchWeekly(), refetchSummary()]);
   };
@@ -295,17 +360,25 @@ export default function PortalAsistencia() {
               ) : (
                 <>
                   {/* Status indicators */}
-                  <div className="flex items-center gap-4 mb-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4 text-sm">
                     <div className="flex items-center gap-2">
                       <LogIn className="h-4 w-4" />
                       <span>
-                        Entrada: {todayStatus?.horaEntrada || "--:--"}
+                        Entrada: {todayStatus?.horaEntrada?.slice(0, 5) || "--:--"}
                       </span>
                     </div>
+                    {(todayStatus?.lunchOut || todayStatus?.lunchIn) && (
+                      <div className="flex items-center gap-2">
+                        <UtensilsCrossed className="h-4 w-4" />
+                        <span>
+                          Comida: {todayStatus?.lunchOut?.slice(0, 5) || "--:--"} - {todayStatus?.lunchIn?.slice(0, 5) || "--:--"}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <LogOut className="h-4 w-4" />
                       <span>
-                        Salida: {todayStatus?.horaSalida || "--:--"}
+                        Salida: {todayStatus?.horaSalida?.slice(0, 5) || "--:--"}
                       </span>
                     </div>
                   </div>
@@ -320,6 +393,26 @@ export default function PortalAsistencia() {
                       <LogIn className="h-4 w-4 mr-2" />
                       {checkInMutation.isPending ? "Registrando..." : "Entrada"}
                     </Button>
+                    {todayStatus?.canLunchOut && (
+                      <Button
+                        className="flex-1 bg-amber-500/80 hover:bg-amber-500 text-white border-0"
+                        disabled={lunchOutMutation.isPending}
+                        onClick={() => lunchOutMutation.mutate()}
+                      >
+                        <UtensilsCrossed className="h-4 w-4 mr-2" />
+                        {lunchOutMutation.isPending ? "Registrando..." : "Comida"}
+                      </Button>
+                    )}
+                    {todayStatus?.canLunchIn && (
+                      <Button
+                        className="flex-1 bg-amber-500/80 hover:bg-amber-500 text-white border-0"
+                        disabled={lunchInMutation.isPending}
+                        onClick={() => lunchInMutation.mutate()}
+                      >
+                        <UtensilsCrossed className="h-4 w-4 mr-2" />
+                        {lunchInMutation.isPending ? "Registrando..." : "Regreso"}
+                      </Button>
+                    )}
                     <Button
                       className="flex-1 bg-white/20 hover:bg-white/30 text-white border-0"
                       disabled={!todayStatus?.canCheckOut || checkOutMutation.isPending}

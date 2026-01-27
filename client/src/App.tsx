@@ -89,6 +89,7 @@ import PortalDirectorio from "@/pages/portal/Directorio";
 import PortalAprobaciones from "@/pages/portal/Aprobaciones";
 import PortalNotificaciones from "@/pages/portal/Notificaciones";
 import AgencyDashboard from "@/pages/AgencyDashboard";
+import Denuncias from "@/pages/Denuncias";
 
 // Anonymous Denuncia (Public) Pages
 import DenunciaSubmit from "@/pages/denuncia/Submit";
@@ -138,6 +139,7 @@ function ClienteRouter() {
       <Route path="/:clienteId/imss/sua-bimestres" component={SuaBimestres} />
       <Route path="/:clienteId/reports" component={Reports} />
       <Route path="/:clienteId/legal" component={Legal} />
+      <Route path="/:clienteId/denuncias" component={Denuncias} />
       <Route path="/:clienteId/repse" component={REPSE} />
       <Route path="/:clienteId/creditos" component={Creditos} />
       <Route path="/:clienteId/configuration" component={Configuration} />

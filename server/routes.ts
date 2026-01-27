@@ -9721,12 +9721,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const record = todayRecord[0];
 
+      // Check if current time is within lunch window (1:00 PM - 2:00 PM)
+      // TEMP: Always allow lunch for testing
+      const isLunchWindow = true;
+      // const now = new Date();
+      // const currentHour = now.getHours();
+      // const isLunchWindow = currentHour >= 13 && currentHour < 14;
+
       res.json({
         checkedIn: !!record?.clockIn,
         horaEntrada: record?.clockIn || null,
         horaSalida: record?.clockOut || null,
+        lunchOut: record?.lunchOut || null,
+        lunchIn: record?.lunchIn || null,
         canCheckIn: !record?.clockIn,
-        canCheckOut: !!record?.clockIn && !record?.clockOut,
+        canCheckOut: !!record?.clockIn && !record?.clockOut && (!record?.lunchOut || !!record?.lunchIn),
+        canLunchOut: isLunchWindow && !!record?.clockIn && !record?.lunchOut && !record?.clockOut,
+        canLunchIn: !!record?.lunchOut && !record?.lunchIn,
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -9846,8 +9857,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No tienes una empresa asignada. Contacta a Recursos Humanos." });
       }
 
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
+      // Use client's local time if provided, otherwise fallback to server time
+      const { localTime, localDate } = req.body || {};
+      const today = localDate || new Date().toISOString().split('T')[0];
 
       // Check if already checked in today
       const existing = await db
@@ -9865,7 +9877,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Ya registraste tu entrada hoy" });
       }
 
-      const clockIn = now.toTimeString().slice(0, 8);
+      const clockIn = localTime || new Date().toTimeString().slice(0, 8);
 
       if (existing[0]) {
         // Update existing record
@@ -9899,8 +9911,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
 
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
+      // Use client's local time if provided, otherwise fallback to server time
+      const { localTime, localDate } = req.body || {};
+      const today = localDate || new Date().toISOString().split('T')[0];
 
       // Find today's record
       const existing = await db
@@ -9922,7 +9935,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Ya registraste tu salida hoy" });
       }
 
-      const clockOut = now.toTimeString().slice(0, 8);
+      const clockOut = localTime || new Date().toTimeString().slice(0, 8);
 
       await db
         .update(attendance)
@@ -9930,6 +9943,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(attendance.id, existing[0].id));
 
       res.json({ success: true, horaSalida: clockOut });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Lunch out (salida a comida)
+  app.post("/api/portal/asistencia/lunch-out", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Check if current time is within lunch window (1:00 PM - 2:00 PM)
+      // TEMP: Disabled for testing
+      // const now = new Date();
+      // const currentHour = now.getHours();
+      // if (currentHour < 13 || currentHour >= 14) {
+      //   return res.status(400).json({ message: "El horario de comida es de 1:00 PM a 2:00 PM" });
+      // }
+
+      const { localTime, localDate } = req.body || {};
+      const today = localDate || new Date().toISOString().split('T')[0];
+
+      // Find today's record
+      const existing = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            eq(attendance.date, today)
+          )
+        )
+        .limit(1);
+
+      if (!existing[0]?.clockIn) {
+        return res.status(400).json({ message: "Primero debes registrar tu entrada" });
+      }
+
+      if (existing[0]?.lunchOut) {
+        return res.status(400).json({ message: "Ya registraste tu salida a comida hoy" });
+      }
+
+      if (existing[0]?.clockOut) {
+        return res.status(400).json({ message: "Ya registraste tu salida final" });
+      }
+
+      const lunchOut = localTime || new Date().toTimeString().slice(0, 8);
+
+      await db
+        .update(attendance)
+        .set({ lunchOut })
+        .where(eq(attendance.id, existing[0].id));
+
+      res.json({ success: true, lunchOut });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Lunch in (regreso de comida)
+  app.post("/api/portal/asistencia/lunch-in", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { localTime, localDate } = req.body || {};
+      const today = localDate || new Date().toISOString().split('T')[0];
+
+      // Find today's record
+      const existing = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            eq(attendance.date, today)
+          )
+        )
+        .limit(1);
+
+      if (!existing[0]?.lunchOut) {
+        return res.status(400).json({ message: "Primero debes registrar tu salida a comida" });
+      }
+
+      if (existing[0]?.lunchIn) {
+        return res.status(400).json({ message: "Ya registraste tu regreso de comida hoy" });
+      }
+
+      const lunchIn = localTime || new Date().toTimeString().slice(0, 8);
+
+      await db
+        .update(attendance)
+        .set({ lunchIn })
+        .where(eq(attendance.id, existing[0].id));
+
+      res.json({ success: true, lunchIn });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
