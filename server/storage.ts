@@ -260,7 +260,7 @@ import {
   catSatTiposPercepcion,
   catSatTiposDeduccion,
   catSatTiposOtroPago,
-  // Cursos y Capacitaciones
+  // Cursos y Evaluaciones
   type CategoriaCurso,
   type InsertCategoriaCurso,
   categoriasCursos,
@@ -312,7 +312,11 @@ import {
   reglasAsignacionPlantilla,
   type DocumentoGenerado,
   type InsertDocumentoGenerado,
-  documentosGenerados
+  documentosGenerados,
+  // Supervisor-Centro assignments
+  type SupervisorCentroTrabajo,
+  type InsertSupervisorCentroTrabajo,
+  supervisorCentrosTrabajo
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -417,6 +421,7 @@ export interface IStorage {
   getCentroTrabajo(id: string): Promise<CentroTrabajo | undefined>;
   getCentrosTrabajo(): Promise<CentroTrabajo[]>;
   getCentrosTrabajoByEmpresa(empresaId: string): Promise<CentroTrabajo[]>;
+  getCentrosTrabajoByCliente(clienteId: string): Promise<CentroTrabajo[]>;
   updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo>;
   deleteCentroTrabajo(id: string): Promise<void>;
   
@@ -450,6 +455,7 @@ export interface IStorage {
   getAttendance(id: string): Promise<Attendance | undefined>;
   getAttendances(): Promise<Attendance[]>;
   getAttendancesByEmpleado(empleadoId: string): Promise<Attendance[]>;
+  getAttendanceByEmpleadoAndDate(empleadoId: string, date: string): Promise<Attendance | undefined>;
   getAttendancesByCentro(centroTrabajoId: string): Promise<Attendance[]>;
   getAttendancesByDate(date: string): Promise<Attendance[]>;
   updateAttendance(id: string, updates: Partial<InsertAttendance>): Promise<Attendance>;
@@ -884,9 +890,17 @@ export interface IStorage {
   getAllUsers(): Promise<PublicUser[]>;
   updateUser(id: string, updates: UpdateUser): Promise<User>;
   deleteUser(id: string, actingUserId: string): Promise<void>;
+
+  // Cliente Admin - User management
+  getUsersByClienteId(clienteId: string): Promise<PublicUser[]>;
   createAdminAuditLog(log: InsertAdminAuditLog): Promise<AdminAuditLog>;
   getAdminAuditLogs(limit?: number): Promise<AdminAuditLog[]>;
-  
+
+  // Supervisor-Centro de Trabajo assignments
+  getSupervisorCentros(usuarioId: string): Promise<CentroTrabajo[]>;
+  getSupervisorCentroIds(usuarioId: string): Promise<string[]>;
+  setSupervisorCentros(usuarioId: string, centroTrabajoIds: string[]): Promise<void>;
+
   // Layouts Generados (Bank layouts generated from approved payroll)
   createLayoutGenerado(layout: InsertLayoutGenerado): Promise<LayoutGenerado>;
   getLayoutGenerado(id: string): Promise<LayoutGenerado | undefined>;
@@ -1995,6 +2009,25 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(centrosTrabajo.createdAt));
   }
 
+  async getCentrosTrabajoByCliente(clienteId: string): Promise<CentroTrabajo[]> {
+    // Get all empresas for this client first
+    const clienteEmpresas = await this.getEmpresasByCliente(clienteId);
+    if (clienteEmpresas.length === 0) {
+      return [];
+    }
+
+    // Get all centros from those empresas
+    const empresaIds = clienteEmpresas.map(e => e.id);
+    const allCentros: CentroTrabajo[] = [];
+
+    for (const empresaId of empresaIds) {
+      const centros = await this.getCentrosTrabajoByEmpresa(empresaId);
+      allCentros.push(...centros);
+    }
+
+    return allCentros;
+  }
+
   async updateCentroTrabajo(id: string, updates: Partial<InsertCentroTrabajo>): Promise<CentroTrabajo> {
     const [updated] = await db
       .update(centrosTrabajo)
@@ -2189,6 +2222,17 @@ export class DatabaseStorage implements IStorage {
       .from(attendance)
       .where(eq(attendance.employeeId, empleadoId))
       .orderBy(desc(attendance.date));
+  }
+
+  async getAttendanceByEmpleadoAndDate(empleadoId: string, date: string): Promise<Attendance | undefined> {
+    const [record] = await db
+      .select()
+      .from(attendance)
+      .where(and(
+        eq(attendance.employeeId, empleadoId),
+        eq(attendance.date, date)
+      ));
+    return record || undefined;
   }
 
   async getAttendancesByCentro(centroTrabajoId: string): Promise<Attendance[]> {
@@ -4797,20 +4841,109 @@ export class DatabaseStorage implements IStorage {
     }).from(users);
   }
 
+  // Cliente Admin - User management
+  async getUsersByClienteId(clienteId: string): Promise<PublicUser[]> {
+    // Get only users belonging to this client with tipoUsuario = 'cliente'
+    return db.select({
+      id: users.id,
+      username: users.username,
+      nombre: users.nombre,
+      email: users.email,
+      tipoUsuario: users.tipoUsuario,
+      clienteId: users.clienteId,
+      role: users.role,
+      activo: users.activo,
+      isSuperAdmin: users.isSuperAdmin,
+      createdAt: users.createdAt,
+      updatedAt: users.updatedAt,
+    }).from(users)
+      .where(and(
+        eq(users.clienteId, clienteId),
+        eq(users.tipoUsuario, 'cliente')
+      ));
+  }
+
+  // Supervisor-Centro de Trabajo assignments
+  async getSupervisorCentros(usuarioId: string): Promise<CentroTrabajo[]> {
+    // Get all centros de trabajo assigned to this supervisor user
+    const assignments = await db
+      .select({
+        centroTrabajo: centrosTrabajo
+      })
+      .from(supervisorCentrosTrabajo)
+      .innerJoin(centrosTrabajo, eq(supervisorCentrosTrabajo.centroTrabajoId, centrosTrabajo.id))
+      .where(eq(supervisorCentrosTrabajo.usuarioId, usuarioId));
+
+    return assignments.map(a => a.centroTrabajo);
+  }
+
+  async getSupervisorCentroIds(usuarioId: string): Promise<string[]> {
+    // Get just the IDs of assigned centros for quick permission checks
+    const assignments = await db
+      .select({ centroTrabajoId: supervisorCentrosTrabajo.centroTrabajoId })
+      .from(supervisorCentrosTrabajo)
+      .where(eq(supervisorCentrosTrabajo.usuarioId, usuarioId));
+
+    return assignments.map(a => a.centroTrabajoId);
+  }
+
+  async setSupervisorCentros(usuarioId: string, centroTrabajoIds: string[]): Promise<void> {
+    // Replace all centro assignments for this supervisor
+    // First delete existing assignments
+    await db.delete(supervisorCentrosTrabajo)
+      .where(eq(supervisorCentrosTrabajo.usuarioId, usuarioId));
+
+    // Then insert new assignments if any
+    if (centroTrabajoIds.length > 0) {
+      const assignments = centroTrabajoIds.map(centroTrabajoId => ({
+        usuarioId,
+        centroTrabajoId
+      }));
+      await db.insert(supervisorCentrosTrabajo).values(assignments);
+    }
+  }
+
   async updateUser(id: string, updates: UpdateUser): Promise<User> {
+    // Guard against null/undefined updates
+    if (!updates || typeof updates !== 'object') {
+      throw new Error('Datos de actualización inválidos');
+    }
+
     // Validate updates at runtime - only allows safe fields
     const validatedUpdates = updateUserSchema.parse(updates);
-    
+
+    // Guard against null result from parse (shouldn't happen but defensive)
+    if (!validatedUpdates || typeof validatedUpdates !== 'object') {
+      throw new Error('Error validando datos de actualización');
+    }
+
+    // Filter out undefined values to avoid Drizzle issues
+    const cleanUpdates: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(validatedUpdates)) {
+      if (value !== undefined) {
+        cleanUpdates[key] = value;
+      }
+    }
+
+    // If no updates, just return the existing user
+    if (Object.keys(cleanUpdates).length === 0) {
+      const existingUser = await this.getUser(id);
+      if (!existingUser) {
+        throw new Error(`Usuario con ID ${id} no encontrado`);
+      }
+      return existingUser;
+    }
+
     const [result] = await db
       .update(users)
-      .set(validatedUpdates)
+      .set(cleanUpdates)
       .where(eq(users.id, id))
       .returning();
-    
+
     if (!result) {
       throw new Error(`Usuario con ID ${id} no encontrado`);
     }
-    
+
     return result;
   }
 

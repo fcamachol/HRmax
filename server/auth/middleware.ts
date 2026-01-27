@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { checkUserPermission } from "./permissions";
+import { storage } from "../storage";
 
 declare module "express-session" {
   interface SessionData {
@@ -14,6 +15,7 @@ declare module "express-session" {
       isSuperAdmin?: boolean;
       // Portal de empleados
       empleadoId?: string | null;
+      empresaId?: string | null;
       portalActivo?: boolean;
     };
   }
@@ -216,6 +218,56 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
   next();
 }
 
+export function requireClienteAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      message: "No autenticado. Inicie sesión para continuar.",
+    });
+  }
+
+  if (!req.user.clienteId) {
+    return res.status(403).json({
+      message: "Usuario no tiene cliente asignado.",
+    });
+  }
+
+  // Both cliente_master and cliente_admin can access admin functions
+  if (req.user.role !== "cliente_admin" && req.user.role !== "cliente_master") {
+    return res.status(403).json({
+      message: "Acceso denegado. Esta acción requiere privilegios de Administrador de Cliente.",
+    });
+  }
+
+  next();
+}
+
+/**
+ * Middleware to allow supervisor users or higher (cliente_admin, cliente_master, maxtalent, superadmin).
+ * Use this for endpoints that supervisors can access with scoped data.
+ */
+export function requireSupervisorOrAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({
+      message: "No autenticado. Inicie sesión para continuar.",
+    });
+  }
+
+  // Allow maxtalent and superadmins full access
+  if (req.user.tipoUsuario === "maxtalent" || req.user.isSuperAdmin) {
+    return next();
+  }
+
+  // For cliente users, check if they have supervisor or admin role
+  const allowedRoles = ["supervisor", "cliente_admin", "cliente_master"];
+  if (allowedRoles.includes(req.user.role || "")) {
+    return next();
+  }
+
+  return res.status(403).json({
+    message: "Acceso denegado. Esta acción requiere privilegios de Supervisor o Administrador.",
+  });
+}
+
 // ============================================================================
 // PORTAL DE EMPLEADOS - Employee Portal Authentication
 // ============================================================================
@@ -261,4 +313,46 @@ export function requireAuthOrEmployee(req: Request, res: Response, next: NextFun
   }
 
   next();
+}
+
+// ============================================================================
+// SUPERVISOR SCOPE HELPER
+// ============================================================================
+
+export interface SupervisorScope {
+  isFullAccess: boolean;
+  centroIds?: string[];
+}
+
+/**
+ * Helper function to determine what data a user can access based on their role.
+ * - superadmin/maxtalent: full access to all data
+ * - cliente_admin/cliente_master: full access within their client
+ * - supervisor: only data in their assigned centros de trabajo
+ * - user: no access (should be handled separately with permissions)
+ */
+export async function getSupervisorScope(
+  userId: string,
+  role: string | undefined,
+  tipoUsuario: string | undefined,
+  isSuperAdmin?: boolean
+): Promise<SupervisorScope> {
+  // Super admins and maxtalent have full access
+  if (isSuperAdmin || tipoUsuario === "maxtalent") {
+    return { isFullAccess: true };
+  }
+
+  // Cliente admins have full access within their client
+  if (role === "cliente_admin" || role === "cliente_master") {
+    return { isFullAccess: true };
+  }
+
+  // Supervisors have scoped access to their assigned centros
+  if (role === "supervisor") {
+    const centroIds = await storage.getSupervisorCentroIds(userId);
+    return { isFullAccess: false, centroIds };
+  }
+
+  // Regular users have no automatic access (use permissions)
+  return { isFullAccess: false, centroIds: [] };
 }

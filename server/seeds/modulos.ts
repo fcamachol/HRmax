@@ -111,7 +111,7 @@ const modulosSeed: ModuloSeed[] = [
   },
   {
     codigo: "cursos_capacitaciones",
-    nombre: "Cursos y Capacitaciones",
+    nombre: "Cursos y Evaluaciones",
     descripcion: "Gestión de cursos, capacitaciones y desarrollo del personal",
     icono: "GraduationCap",
     orden: 15,

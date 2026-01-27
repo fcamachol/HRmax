@@ -2,6 +2,8 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { z } from "zod";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq, and, gte, lte, ne, inArray, desc, sql } from "drizzle-orm";
 import { VARIABLES_FORMULA } from "./seeds/conceptosLegales";
 import { generarLayoutsBancarios, getLayoutsGeneradosForNomina, getLayoutContent } from "./layoutGenerator";
 import { 
@@ -91,7 +93,7 @@ import {
   insertExentoCapConfigSchema,
   insertEmployeeExentoCapSchema,
   insertPayrollExentoLedgerSchema,
-  // Cursos y Capacitaciones
+  // Cursos y Evaluaciones
   insertCategoriaCursoSchema,
   insertCursoSchema,
   insertModuloCursoSchema,
@@ -102,12 +104,22 @@ import {
   insertAsignacionCursoSchema,
   insertProgresoLeccionSchema,
   insertIntentoQuizSchema,
-  insertCertificadoCursoSchema
+  insertCertificadoCursoSchema,
+  // Portal API tables
+  attendance,
+  incidenciasAsistencia,
+  employees,
+  departamentos,
+  puestos,
+  documentosGenerados,
+  solicitudesDocumentos,
+  solicitudesVacaciones,
+  solicitudesPermisos
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
 import { ObjectStorageService } from "./objectStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
-import { requireSuperAdmin, requireEmployeeAuth } from "./auth/middleware";
+import { requireSuperAdmin, requireEmployeeAuth, requireClienteAdmin, requireAuth, requireSupervisorOrAdmin, getSupervisorScope } from "./auth/middleware";
 import bcrypt from "bcrypt";
 
 // Helper function to get the effective clienteId for data filtering
@@ -371,7 +383,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { centroTrabajoId, grupoNominaId, empresaId, activo } = req.query;
       const effectiveClienteId = getEffectiveClienteId(req);
-      
+
+      // Get supervisor scope if user is authenticated
+      let supervisorScope: { isFullAccess: boolean; centroIds?: string[] } | null = null;
+      if (req.user?.id) {
+        supervisorScope = await getSupervisorScope(req.user.id, req.user.role, req.user.tipoUsuario, req.user.isSuperAdmin);
+      }
+
+      // Helper function to filter employees by supervisor scope
+      const filterBySupervisorScope = (employees: any[]) => {
+        if (!supervisorScope || supervisorScope.isFullAccess) return employees;
+        if (!supervisorScope.centroIds || supervisorScope.centroIds.length === 0) return [];
+        return employees.filter(e => e.centroTrabajoId && supervisorScope!.centroIds!.includes(e.centroTrabajoId));
+      };
+
       // Filtrar por empresa (returns active employees by default)
       if (empresaId) {
         // Verify access if user is a client user
@@ -379,27 +404,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (empresa?.clienteId && !canAccessCliente(req, empresa.clienteId)) {
           return res.status(403).json({ message: "No tienes acceso a los empleados de esta empresa" });
         }
-        
+
         // Get all centros for this empresa
         const centros = await storage.getCentrosTrabajoByEmpresa(empresaId as string);
-        const centroIds = centros.map(c => c.id);
-        
+        let centroIds = centros.map(c => c.id);
+
+        // For supervisors, only include their assigned centros
+        if (supervisorScope && !supervisorScope.isFullAccess && supervisorScope.centroIds) {
+          centroIds = centroIds.filter(cid => supervisorScope!.centroIds!.includes(cid));
+        }
+
         // Get employees from all centros
         const allEmployees = [];
         for (const centroId of centroIds) {
           const empsByCentro = await storage.getEmployeesByCentroTrabajo(centroId);
           allEmployees.push(...empsByCentro);
         }
-        
+
         // Filter by active status if specified
         if (activo === "true") {
           const activeEmployees = allEmployees.filter(e => e.estatus === "activo");
           return res.json(serializeEmployees(activeEmployees));
         }
-        
+
         return res.json(serializeEmployees(allEmployees));
       }
-      
+
       // Filtrar por ambos: centro y grupo
       if (centroTrabajoId && grupoNominaId) {
         // Verify centro access for client users
@@ -410,14 +440,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
           }
         }
-        
+
+        // For supervisors, verify they have access to this centro
+        if (supervisorScope && !supervisorScope.isFullAccess && !supervisorScope.centroIds?.includes(centroTrabajoId as string)) {
+          return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
+        }
+
         const employees = await storage.getEmployeesByCentroAndGrupo(
-          centroTrabajoId as string, 
+          centroTrabajoId as string,
           grupoNominaId as string
         );
         return res.json(serializeEmployees(employees));
       }
-      
+
       // Filtrar solo por centro
       if (centroTrabajoId) {
         // Verify centro access for client users
@@ -428,11 +463,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
           }
         }
-        
+
+        // For supervisors, verify they have access to this centro
+        if (supervisorScope && !supervisorScope.isFullAccess && !supervisorScope.centroIds?.includes(centroTrabajoId as string)) {
+          return res.status(403).json({ message: "No tienes acceso a este centro de trabajo" });
+        }
+
         const employees = await storage.getEmployeesByCentroTrabajo(centroTrabajoId as string);
         return res.json(serializeEmployees(employees));
       }
-      
+
       // Filtrar solo por grupo de nómina
       if (grupoNominaId) {
         // Verify grupo access for client users
@@ -440,19 +480,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (grupo?.clienteId && !canAccessCliente(req, grupo.clienteId)) {
           return res.status(403).json({ message: "No tienes acceso a este grupo de nómina" });
         }
-        
-        const employees = await storage.getEmployeesByGrupoNomina(grupoNominaId as string);
+
+        let employees = await storage.getEmployeesByGrupoNomina(grupoNominaId as string);
+        // Apply supervisor scoping
+        employees = filterBySupervisorScope(employees);
         return res.json(serializeEmployees(employees));
       }
-      
+
       // If user has a clienteId restriction, filter employees
       if (effectiveClienteId) {
-        const employees = await storage.getEmployeesByCliente(effectiveClienteId);
+        let employees = await storage.getEmployeesByCliente(effectiveClienteId);
+        // Apply supervisor scoping
+        employees = filterBySupervisorScope(employees);
         return res.json(serializeEmployees(employees));
       }
-      
+
       // MaxTalent users without specific client filter get all employees
-      const employees = await storage.getEmployees();
+      let employees = await storage.getEmployees();
+      // Apply supervisor scoping (in case a supervisor somehow doesn't have clienteId set)
+      employees = filterBySupervisorScope(employees);
       res.json(serializeEmployees(employees));
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -466,12 +512,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!employee) {
         return res.status(404).json({ message: "Employee not found" });
       }
-      
+
       // Verify access for client users
       if (employee.clienteId && !canAccessCliente(req, employee.clienteId)) {
         return res.status(403).json({ message: "No tienes acceso a este empleado" });
       }
-      
+
+      // For supervisors, verify they have access to this employee's centro
+      if (req.user?.id) {
+        const scope = await getSupervisorScope(req.user.id, req.user.role, req.user.tipoUsuario, req.user.isSuperAdmin);
+        if (!scope.isFullAccess && employee.centroTrabajoId && !scope.centroIds?.includes(employee.centroTrabajoId)) {
+          return res.status(403).json({ message: "No tienes acceso a este empleado" });
+        }
+      }
+
       res.json(serializeEmployee(employee));
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -1358,13 +1412,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/centros-trabajo", async (req, res) => {
+  app.get("/api/centros-trabajo", requireAuth, async (req, res) => {
     try {
       const { empresaId } = req.query;
       if (empresaId) {
         const centros = await storage.getCentrosTrabajoByEmpresa(empresaId as string);
         return res.json(centros);
       }
+      // If user has clienteId, filter centros to only show their client's
+      if (req.user?.clienteId) {
+        const centros = await storage.getCentrosTrabajoByCliente(req.user.clienteId);
+        return res.json(centros);
+      }
+      // Fallback for super admins or users without clienteId
       const centros = await storage.getCentrosTrabajo();
       res.json(centros);
     } catch (error: any) {
@@ -1642,9 +1702,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Incidencias de Asistencia
-  app.post("/api/incidencias-asistencia", async (req, res) => {
+  app.post("/api/incidencias-asistencia", requireSupervisorOrAdmin, async (req, res) => {
     try {
       const validatedData = insertIncidenciaAsistenciaSchema.parse(req.body);
+
+      // For supervisors, validate they can access this employee's centro
+      if (req.user!.role === 'supervisor') {
+        const scope = await getSupervisorScope(req.user!.id, req.user!.role, req.user!.tipoUsuario, req.user!.isSuperAdmin);
+        if (!scope.isFullAccess && validatedData.centroTrabajoId) {
+          if (!scope.centroIds?.includes(validatedData.centroTrabajoId)) {
+            return res.status(403).json({ message: "No tiene acceso a este centro de trabajo" });
+          }
+        }
+      }
+
       const incidencia = await storage.createIncidenciaAsistencia(validatedData);
       res.json(incidencia);
     } catch (error: any) {
@@ -1652,47 +1723,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/incidencias-asistencia", async (req, res) => {
+  app.get("/api/incidencias-asistencia", requireSupervisorOrAdmin, async (req, res) => {
     try {
       const effectiveClienteId = getEffectiveClienteId(req);
       const { fechaInicio, fechaFin, centroTrabajoId, empleadoId } = req.query;
 
+      // Get supervisor scope to filter results
+      const scope = await getSupervisorScope(req.user!.id, req.user!.role, req.user!.tipoUsuario, req.user!.isSuperAdmin);
+
       if (fechaInicio && fechaFin) {
-        const incidencias = await storage.getIncidenciasAsistenciaByPeriodo(
+        let incidencias = await storage.getIncidenciasAsistenciaByPeriodo(
           fechaInicio as string,
           fechaFin as string,
           centroTrabajoId as string | undefined,
           effectiveClienteId || undefined
         );
+
+        // Filter by supervisor's centros if not full access
+        if (!scope.isFullAccess && scope.centroIds) {
+          incidencias = incidencias.filter(i => i.centroTrabajoId && scope.centroIds!.includes(i.centroTrabajoId));
+        }
+
         return res.json(incidencias);
       }
 
       if (empleadoId) {
+        // For supervisors, verify employee belongs to their centros
+        if (!scope.isFullAccess) {
+          const employee = await storage.getEmployee(empleadoId as string);
+          if (employee && employee.centroTrabajoId && !scope.centroIds?.includes(employee.centroTrabajoId)) {
+            return res.status(403).json({ message: "No tiene acceso a este empleado" });
+          }
+        }
         const incidencias = await storage.getIncidenciasAsistenciaByEmpleado(empleadoId as string);
         return res.json(incidencias);
       }
 
-      const incidencias = await storage.getIncidenciasAsistencia();
+      let incidencias = await storage.getIncidenciasAsistencia();
+
+      // Filter by supervisor's centros if not full access
+      if (!scope.isFullAccess && scope.centroIds) {
+        incidencias = incidencias.filter(i => i.centroTrabajoId && scope.centroIds!.includes(i.centroTrabajoId));
+      }
+
       res.json(incidencias);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/incidencias-asistencia/:id", async (req, res) => {
+  app.get("/api/incidencias-asistencia/:id", requireSupervisorOrAdmin, async (req, res) => {
     try {
       const incidencia = await storage.getIncidenciaAsistencia(req.params.id);
       if (!incidencia) {
         return res.status(404).json({ message: "Incidencia de asistencia no encontrada" });
       }
+
+      // For supervisors, verify incidencia belongs to their centros
+      const scope = await getSupervisorScope(req.user!.id, req.user!.role, req.user!.tipoUsuario, req.user!.isSuperAdmin);
+      if (!scope.isFullAccess && incidencia.centroTrabajoId && !scope.centroIds?.includes(incidencia.centroTrabajoId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
+      }
+
       res.json(incidencia);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.patch("/api/incidencias-asistencia/:id", async (req, res) => {
+  app.patch("/api/incidencias-asistencia/:id", requireSupervisorOrAdmin, async (req, res) => {
     try {
+      // Verify supervisor access before updating
+      const existingIncidencia = await storage.getIncidenciaAsistencia(req.params.id);
+      if (!existingIncidencia) {
+        return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+
+      const scope = await getSupervisorScope(req.user!.id, req.user!.role, req.user!.tipoUsuario, req.user!.isSuperAdmin);
+      if (!scope.isFullAccess && existingIncidencia.centroTrabajoId && !scope.centroIds?.includes(existingIncidencia.centroTrabajoId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
+      }
+
       const validatedData = updateIncidenciaAsistenciaSchema.parse(req.body);
       const incidencia = await storage.updateIncidenciaAsistencia(req.params.id, validatedData);
       res.json(incidencia);
@@ -1701,8 +1812,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/incidencias-asistencia/:id", async (req, res) => {
+  app.delete("/api/incidencias-asistencia/:id", requireSupervisorOrAdmin, async (req, res) => {
     try {
+      // Verify supervisor access before deleting
+      const existingIncidencia = await storage.getIncidenciaAsistencia(req.params.id);
+      if (!existingIncidencia) {
+        return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+
+      const scope = await getSupervisorScope(req.user!.id, req.user!.role, req.user!.tipoUsuario, req.user!.isSuperAdmin);
+      if (!scope.isFullAccess && existingIncidencia.centroTrabajoId && !scope.centroIds?.includes(existingIncidencia.centroTrabajoId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
+      }
+
       await storage.deleteIncidenciaAsistencia(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -4185,22 +4307,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       // Step 1: Validate partial update
       const partialUpdate = updateSolicitudVacacionesSchema.parse(req.body);
-      
+
       // Step 2: Load existing record
       const existing = await storage.getSolicitudVacaciones(req.params.id);
       if (!existing) {
         return res.status(404).json({ message: "Solicitud de vacaciones no encontrada" });
       }
-      
+
       // Step 3: Merge partial update with existing record
       const merged = {
         ...existing,
         ...partialUpdate,
       };
-      
+
       // Step 4: Re-validate the complete merged object with cross-field checks
       const fullyValidated = insertSolicitudVacacionesSchema.parse(merged);
-      
+
       // Step 5: Check for overlaps if dates changed
       if (partialUpdate.fechaInicio || partialUpdate.fechaFin) {
         const overlaps = await storage.checkVacacionesOverlap(
@@ -4209,17 +4331,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fullyValidated.fechaFin,
           req.params.id
         );
-        
+
         if (overlaps.length > 0) {
-          return res.status(409).json({ 
+          return res.status(409).json({
             message: "Ya existe una solicitud de vacaciones en este período",
             conflictos: overlaps
           });
         }
       }
-      
+
       // Step 6: Persist the validated update
       const solicitud = await storage.updateSolicitudVacaciones(req.params.id, partialUpdate);
+
+      // Step 7: Auto-mark attendance as "vacaciones" when approved
+      if (partialUpdate.estatus === "aprobada" && existing.estatus !== "aprobada") {
+        try {
+          const employee = await storage.getEmployee(existing.empleadoId);
+          if (employee) {
+            // Generate all dates between fechaInicio and fechaFin
+            const startDate = new Date(existing.fechaInicio);
+            const endDate = new Date(existing.fechaFin);
+
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+              const dateStr = d.toISOString().split('T')[0];
+
+              // Check if attendance already exists for this date
+              const existingAttendance = await storage.getAttendanceByEmpleadoAndDate(
+                existing.empleadoId,
+                dateStr
+              );
+
+              if (!existingAttendance) {
+                // Create attendance record with status "vacaciones"
+                await storage.createAttendance({
+                  clienteId: existing.clienteId,
+                  empresaId: existing.empresaId,
+                  employeeId: existing.empleadoId,
+                  date: dateStr,
+                  status: "vacaciones",
+                  notas: `Vacaciones aprobadas - Solicitud #${existing.id}`,
+                });
+              }
+            }
+          }
+        } catch (attendanceError) {
+          // Log error but don't fail the request - vacation was approved
+          console.error("Error creating attendance records for vacation:", attendanceError);
+        }
+      }
+
       res.json(solicitud);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4240,22 +4400,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/incapacidades", async (req, res) => {
     try {
       const validated = insertIncapacidadSchema.parse(req.body);
-      
+
       // Check for overlapping incapacidades
       const overlaps = await storage.checkIncapacidadesOverlap(
         validated.empleadoId,
         validated.fechaInicio,
         validated.fechaFin
       );
-      
+
       if (overlaps.length > 0) {
-        return res.status(409).json({ 
+        return res.status(409).json({
           message: "Ya existe una incapacidad registrada en este período",
           conflictos: overlaps
         });
       }
-      
+
       const incapacidad = await storage.createIncapacidad(validated);
+
+      // Auto-mark attendance as "incapacidad" for all days in the period
+      try {
+        const startDate = new Date(validated.fechaInicio);
+        const endDate = new Date(validated.fechaFin);
+
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+
+          // Check if attendance already exists for this date
+          const existingAttendance = await storage.getAttendanceByEmpleadoAndDate(
+            validated.empleadoId,
+            dateStr
+          );
+
+          if (!existingAttendance) {
+            // Create attendance record with status "incapacidad"
+            await storage.createAttendance({
+              clienteId: validated.clienteId,
+              empresaId: validated.empresaId,
+              employeeId: validated.empleadoId,
+              date: dateStr,
+              status: "incapacidad",
+              notas: `Incapacidad ${validated.tipo} - Folio: ${validated.numeroCertificado || 'Sin folio'}`,
+            });
+          }
+        }
+      } catch (attendanceError) {
+        // Log error but don't fail the request - incapacidad was created
+        console.error("Error creating attendance records for incapacidad:", attendanceError);
+      }
+
       res.status(201).json(incapacidad);
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -4944,6 +5136,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: user.email,
         tipoUsuario: user.tipoUsuario,
         clienteId: user.clienteId,
+        role: user.role,
         isSuperAdmin: user.isSuperAdmin,
       };
 
@@ -5190,6 +5383,340 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error.message?.includes("tiene permisos asignados") || error.message?.includes("violates foreign key")) {
         return res.status(409).json({ message: "No se puede eliminar el usuario porque tiene permisos asignados. Elimine los permisos primero." });
       }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== CLIENTE ADMIN - USER MANAGEMENT ====================
+  // These endpoints allow cliente_admin users to manage users within their own client account
+
+  app.get("/api/usuarios", requireClienteAdmin, async (req, res) => {
+    try {
+      const clienteId = req.user!.clienteId!;
+      const users = await storage.getUsersByClienteId(clienteId);
+      res.json(users);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/usuarios", requireClienteAdmin, async (req, res) => {
+    try {
+      const clienteId = req.user!.clienteId!;
+      const actingUserRole = req.user!.role;
+      const validated = insertUserSchema.parse(req.body);
+
+      // Force tipoUsuario to 'cliente' and clienteId to user's cliente
+      validated.tipoUsuario = 'cliente';
+      validated.clienteId = clienteId;
+
+      // Prevent creating super admins
+      if (validated.isSuperAdmin) {
+        return res.status(403).json({ message: "No puede crear usuarios super administrador" });
+      }
+
+      // Role hierarchy enforcement:
+      // - cliente_master can create any role (user, cliente_admin)
+      // - cliente_admin can only create 'user' role
+      // - No one can create cliente_master (only super admin can do that)
+      if (validated.role === 'cliente_master') {
+        return res.status(403).json({ message: "No puede crear usuarios con rol de Administrador Principal" });
+      }
+      if (validated.role === 'cliente_admin' && actingUserRole !== 'cliente_master') {
+        return res.status(403).json({ message: "Solo el Administrador Principal puede crear otros administradores" });
+      }
+
+      // Check username uniqueness
+      const existingUser = await storage.getUserByUsername(validated.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "El nombre de usuario ya existe" });
+      }
+
+      // Hash password with bcrypt (cost factor 12)
+      const hashedPassword = await bcrypt.hash(validated.password, 12);
+
+      const newUser = await storage.createUser({
+        ...validated,
+        password: hashedPassword,
+        isSuperAdmin: false, // Ensure cannot create super admins
+      });
+
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'create_user',
+        resourceType: 'user',
+        resourceId: newUser.id,
+        newValue: {
+          username: newUser.username,
+          tipoUsuario: newUser.tipoUsuario,
+          role: newUser.role,
+        },
+        targetClienteId: clienteId,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null,
+      });
+
+      // Return public user (without password)
+      const { password, ...publicUser } = newUser;
+      res.status(201).json(publicUser);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.patch("/api/usuarios/:id", requireClienteAdmin, async (req, res) => {
+    try {
+      console.log("PATCH /api/usuarios/:id - req.body:", JSON.stringify(req.body));
+      const { id } = req.params;
+      const clienteId = req.user!.clienteId!;
+      const actingUserRole = req.user!.role;
+
+      // Get user and verify they belong to this client
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      if (targetUser.clienteId !== clienteId) {
+        return res.status(403).json({ message: "No tiene permisos para modificar este usuario" });
+      }
+
+      // Ensure req.body is an object
+      if (!req.body || typeof req.body !== 'object') {
+        return res.status(400).json({ message: "Datos de actualización inválidos" });
+      }
+
+      // Validate only safe fields can be updated
+      const validated = updateUserSchema.parse(req.body);
+
+      // Prevent setting isSuperAdmin
+      if (validated.isSuperAdmin) {
+        return res.status(403).json({ message: "No puede elevar usuarios a super administrador" });
+      }
+
+      // Role hierarchy enforcement for editing:
+      // - cliente_master can edit anyone (except changing to cliente_master)
+      // - cliente_admin can only edit 'user' role users
+      if (targetUser.role === 'cliente_master' && actingUserRole !== 'cliente_master') {
+        return res.status(403).json({ message: "No tiene permisos para modificar al Administrador Principal" });
+      }
+      if (targetUser.role === 'cliente_admin' && actingUserRole !== 'cliente_master') {
+        return res.status(403).json({ message: "Solo el Administrador Principal puede modificar otros administradores" });
+      }
+      if (validated.role === 'cliente_master') {
+        return res.status(403).json({ message: "No puede asignar el rol de Administrador Principal" });
+      }
+      if (validated.role === 'cliente_admin' && actingUserRole !== 'cliente_master') {
+        return res.status(403).json({ message: "Solo el Administrador Principal puede asignar el rol de administrador" });
+      }
+
+      // If user is modifying their own account, prevent role change (lock-out prevention)
+      if (id === req.user!.id && validated.role && validated.role !== req.user!.role) {
+        return res.status(403).json({ message: "No puede cambiar su propio rol" });
+      }
+
+      const updatedUser = await storage.updateUser(id, validated);
+
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'update_user',
+        resourceType: 'user',
+        resourceId: id,
+        previousValue: {
+          nombre: targetUser.nombre ?? null,
+          email: targetUser.email ?? null,
+          role: targetUser.role ?? null,
+          activo: targetUser.activo ?? null,
+        },
+        newValue: validated ? { ...validated } : {},
+        targetClienteId: clienteId,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null,
+      });
+
+      const { password, ...publicUser } = updatedUser;
+      res.json(publicUser);
+    } catch (error: any) {
+      console.error("PATCH /api/usuarios/:id - ERROR:", error);
+      console.error("Stack trace:", error.stack);
+      if (error.message?.includes("no encontrado")) {
+        return res.status(404).json({ message: error.message });
+      }
+      res.status(400).json({ message: error.message });
+    }
+  });
+
+  app.delete("/api/usuarios/:id", requireClienteAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const clienteId = req.user!.clienteId!;
+      const actingUserRole = req.user!.role;
+
+      // Prevent self-deletion
+      if (id === req.user!.id) {
+        return res.status(403).json({ message: "No puede eliminar su propia cuenta" });
+      }
+
+      // Get user and verify they belong to this client
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      if (targetUser.clienteId !== clienteId) {
+        return res.status(403).json({ message: "No tiene permisos para eliminar este usuario" });
+      }
+
+      // Role hierarchy enforcement for deletion:
+      // - cliente_master cannot be deleted (only deactivated or deleted by super admin)
+      // - cliente_admin can only be deleted by cliente_master
+      // - user can be deleted by cliente_admin or cliente_master
+      if (targetUser.role === 'cliente_master') {
+        return res.status(403).json({ message: "No se puede eliminar al Administrador Principal" });
+      }
+      if (targetUser.role === 'cliente_admin' && actingUserRole !== 'cliente_master') {
+        return res.status(403).json({ message: "Solo el Administrador Principal puede eliminar otros administradores" });
+      }
+
+      // Delete user
+      await storage.deleteUser(id, req.user!.id);
+
+      // Create audit log
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'delete_user',
+        resourceType: 'user',
+        resourceId: id,
+        previousValue: {
+          username: targetUser.username,
+          tipoUsuario: targetUser.tipoUsuario,
+          role: targetUser.role,
+        },
+        targetClienteId: clienteId,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null,
+      });
+
+      res.json({ success: true, message: "Usuario eliminado correctamente" });
+    } catch (error: any) {
+      if (error.message?.includes("no encontrado")) {
+        return res.status(404).json({ message: error.message });
+      }
+      if (error.message?.includes("tiene registros asociados") || error.message?.includes("violates foreign key")) {
+        return res.status(409).json({ message: "No se puede eliminar el usuario porque tiene permisos asignados. Elimine los permisos primero." });
+      }
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SUPERVISOR-CENTRO ASSIGNMENTS ====================
+  // These endpoints manage which centros de trabajo a supervisor user can manage
+
+  // Get centros assigned to a user (for supervisor role)
+  app.get("/api/usuarios/:id/centros", requireClienteAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const clienteId = req.user!.clienteId!;
+
+      // Verify the target user belongs to this client
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      if (targetUser.clienteId !== clienteId) {
+        return res.status(403).json({ message: "No tiene permisos para ver este usuario" });
+      }
+
+      // Get assigned centros
+      const centros = await storage.getSupervisorCentros(id);
+      res.json(centros);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Set centros for a supervisor user (replace all assignments)
+  app.post("/api/usuarios/:id/centros", requireClienteAdmin, async (req, res) => {
+    try {
+      console.log("POST /api/usuarios/:id/centros - START");
+      console.log("req.body:", JSON.stringify(req.body));
+      console.log("req.params:", JSON.stringify(req.params));
+
+      const { id } = req.params;
+      const { centroIds } = req.body as { centroIds: string[] };
+      const clienteId = req.user!.clienteId!;
+      console.log("clienteId:", clienteId);
+
+      if (!Array.isArray(centroIds)) {
+        console.log("centroIds is not an array");
+        return res.status(400).json({ message: "centroIds debe ser un arreglo" });
+      }
+      console.log("centroIds:", centroIds);
+
+      // Verify the target user belongs to this client
+      console.log("Getting target user...");
+      const targetUser = await storage.getUser(id);
+      if (!targetUser) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+      console.log("targetUser found:", targetUser.id);
+
+      if (targetUser.clienteId !== clienteId) {
+        return res.status(403).json({ message: "No tiene permisos para modificar este usuario" });
+      }
+
+      // Verify all centros belong to this client
+      if (centroIds.length > 0) {
+        console.log("Getting centros for client...");
+        const allCentros = await storage.getCentrosTrabajoByCliente(clienteId);
+        console.log("allCentros count:", allCentros.length);
+        const validCentroIds = new Set(allCentros.map(c => c.id));
+        const invalidCentros = centroIds.filter(cid => !validCentroIds.has(cid));
+        if (invalidCentros.length > 0) {
+          return res.status(400).json({ message: "Algunos centros de trabajo no pertenecen a este cliente" });
+        }
+      }
+
+      // Set the supervisor's centro assignments
+      console.log("Setting supervisor centros...");
+      await storage.setSupervisorCentros(id, centroIds);
+      console.log("Supervisor centros set successfully");
+
+      // Create audit log
+      console.log("Creating audit log...");
+      await storage.createAdminAuditLog({
+        adminUserId: req.user!.id,
+        adminUsername: req.user!.username,
+        action: 'set_supervisor_centros',
+        resourceType: 'user',
+        resourceId: id,
+        newValue: { centroIds },
+        targetClienteId: clienteId,
+        targetEmpresaId: null,
+        targetCentroTrabajoId: null,
+      });
+      console.log("Audit log created");
+
+      res.json({ success: true, message: "Centros de trabajo asignados correctamente" });
+    } catch (error: any) {
+      console.error("POST /api/usuarios/:id/centros - ERROR:", error);
+      console.error("Stack trace:", error.stack);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get current user's assigned centros (for supervisors to know their scope)
+  app.get("/api/usuarios/me/centros", requireAuth, async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const centros = await storage.getSupervisorCentros(userId);
+      res.json(centros);
+    } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
@@ -7267,9 +7794,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         email: employee.email || employee.correo,
         tipoUsuario: "empleado",
         clienteId: employee.clienteId,
+        empresaId: employee.empresaId,
         empleadoId: employee.id,
         portalActivo: employee.portalActivo,
       };
+
+      // Explicitly save session to ensure it's persisted before response
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       res.json({
         success: true,
@@ -7408,7 +7944,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Dashboard - Get dashboard data for employee
   app.get("/api/portal/dashboard", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7422,12 +7958,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const vacacionesDisponibles = employee.diasVacacionesDisponibles || 0;
 
       // Get pending requests count (vacaciones + permisos)
-      const vacacionesPendientes = await storage.getVacacionesByEmpleado(empleadoId);
-      const permisosPendientes = await storage.getPermisosByEmpleado(empleadoId);
-      const solicitudesPendientes = [
-        ...vacacionesPendientes.filter(v => v.estatus === "pendiente"),
-        ...permisosPendientes.filter(p => p.estatus === "pendiente"),
-      ].length;
+      let solicitudesPendientes = 0;
+      try {
+        const vacacionesPendientes = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(solicitudesVacaciones)
+          .where(
+            and(
+              eq(solicitudesVacaciones.empleadoId, empleadoId),
+              eq(solicitudesVacaciones.estatus, 'pendiente')
+            )
+          );
+        const permisosPendientes = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(solicitudesPermisos)
+          .where(
+            and(
+              eq(solicitudesPermisos.empleadoId, empleadoId),
+              eq(solicitudesPermisos.estatus, 'pendiente')
+            )
+          );
+        solicitudesPendientes = Number(vacacionesPendientes[0]?.count || 0) + Number(permisosPendientes[0]?.count || 0);
+      } catch (e) {
+        // Tables might not exist, default to 0
+        solicitudesPendientes = 0;
+      }
 
       // TODO: Get latest payslip when nominas endpoint is ready
       const ultimoRecibo = null;
@@ -7449,7 +8004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Profile - Get employee profile
   app.get("/api/portal/profile", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7465,15 +8020,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Portal Vacaciones - Get employee's vacation requests
-  app.get("/api/portal/vacaciones", requireEmployeeAuth, async (req, res) => {
+  // Portal Profile - Update employee profile (identification & banking)
+  app.patch("/api/portal/profile", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
 
-      const vacaciones = await storage.getVacacionesByEmpleado(empleadoId);
+      const employee = await storage.getEmployee(empleadoId);
+      if (!employee) {
+        return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      const { rfc, curp, nss, banco, clabe } = req.body;
+
+      // Build update object with only allowed fields
+      const updateData: Record<string, string | undefined> = {};
+
+      // Validate RFC format (13 chars for persona física)
+      if (rfc !== undefined) {
+        if (rfc && rfc.length !== 13) {
+          return res.status(400).json({ message: "El RFC debe tener 13 caracteres" });
+        }
+        updateData.rfc = rfc || undefined;
+      }
+
+      // Validate CURP format (18 chars)
+      if (curp !== undefined) {
+        if (curp && curp.length !== 18) {
+          return res.status(400).json({ message: "El CURP debe tener 18 caracteres" });
+        }
+        updateData.curp = curp || undefined;
+      }
+
+      // Validate NSS format (11 digits)
+      if (nss !== undefined) {
+        if (nss && (nss.length !== 11 || !/^\d+$/.test(nss))) {
+          return res.status(400).json({ message: "El NSS debe tener 11 dígitos" });
+        }
+        updateData.nss = nss || undefined;
+      }
+
+      // Validate CLABE format (18 digits)
+      if (clabe !== undefined) {
+        if (clabe && (clabe.length !== 18 || !/^\d+$/.test(clabe))) {
+          return res.status(400).json({ message: "La CLABE debe tener 18 dígitos" });
+        }
+        updateData.clabe = clabe || undefined;
+      }
+
+      // Banco doesn't need validation
+      if (banco !== undefined) {
+        updateData.banco = banco || undefined;
+      }
+
+      // Update employee
+      if (Object.keys(updateData).length > 0) {
+        await storage.updateEmployee(empleadoId, updateData);
+      }
+
+      const updatedEmployee = await storage.getEmployee(empleadoId);
+      res.json({
+        success: true,
+        message: "Perfil actualizado correctamente",
+        employee: updatedEmployee
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Portal Vacaciones - Get employee's vacation requests
+  app.get("/api/portal/vacaciones", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const vacaciones = await storage.getSolicitudesVacacionesByEmpleado(empleadoId);
       res.json(vacaciones);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -7483,7 +8109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Vacaciones - Get vacation balance
   app.get("/api/portal/vacaciones/saldo", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7506,7 +8132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Vacaciones - Create vacation request
   app.post("/api/portal/vacaciones", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7514,6 +8140,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const employee = await storage.getEmployee(empleadoId);
       if (!employee) {
         return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      if (!employee.clienteId) {
+        return res.status(400).json({ message: "El empleado no tiene cliente asignado" });
+      }
+
+      if (!employee.empresaId) {
+        return res.status(400).json({ message: "El empleado no tiene empresa asignada. Contacta a Recursos Humanos." });
       }
 
       const validated = insertSolicitudVacacionesSchema.parse({
@@ -7545,7 +8179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Permisos - Get employee's permission requests
   app.get("/api/portal/permisos", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7560,7 +8194,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Permisos - Create permission request
   app.post("/api/portal/permisos", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7568,6 +8202,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const employee = await storage.getEmployee(empleadoId);
       if (!employee) {
         return res.status(404).json({ message: "Empleado no encontrado" });
+      }
+
+      if (!employee.clienteId) {
+        return res.status(400).json({ message: "El empleado no tiene cliente asignado" });
+      }
+
+      if (!employee.empresaId) {
+        return res.status(400).json({ message: "El empleado no tiene empresa asignada. Contacta a Recursos Humanos." });
       }
 
       const validated = insertSolicitudPermisoSchema.parse({
@@ -7591,7 +8233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Incapacidades - Get employee's incapacidades (read-only)
   app.get("/api/portal/incapacidades", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -7616,18 +8258,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Portal Solicitudes - Get all requests (vacaciones + permisos)
   app.get("/api/portal/solicitudes", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
 
       const tipo = req.query.tipo as string | undefined;
 
-      let vacaciones: any[] = [];
-      let permisos: any[] = [];
+      let vacacionesList: any[] = [];
+      let permisosList: any[] = [];
 
+      // Query database directly like dashboard does
       if (!tipo || tipo === "all" || tipo === "vacaciones") {
-        vacaciones = (await storage.getVacacionesByEmpleado(empleadoId)).map(v => ({
+        const vacacionesData = await db
+          .select()
+          .from(solicitudesVacaciones)
+          .where(eq(solicitudesVacaciones.empleadoId, empleadoId))
+          .orderBy(desc(solicitudesVacaciones.fechaSolicitud));
+
+        vacacionesList = vacacionesData.map(v => ({
           ...v,
           tipo: "vacaciones",
           dias: v.diasSolicitados,
@@ -7635,7 +8284,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       if (!tipo || tipo === "all" || tipo === "permisos") {
-        permisos = (await storage.getPermisosByEmpleado(empleadoId)).map(p => ({
+        const permisosData = await db
+          .select()
+          .from(solicitudesPermisos)
+          .where(eq(solicitudesPermisos.empleadoId, empleadoId))
+          .orderBy(desc(solicitudesPermisos.fechaSolicitud));
+
+        permisosList = permisosData.map(p => ({
           ...p,
           tipo: "permiso",
           dias: Number(p.diasSolicitados),
@@ -7643,12 +8298,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Combine and sort by date
-      const solicitudes = [...vacaciones, ...permisos].sort(
+      const solicitudes = [...vacacionesList, ...permisosList].sort(
         (a, b) => new Date(b.fechaSolicitud).getTime() - new Date(a.fechaSolicitud).getTime()
       );
 
       res.json(solicitudes);
     } catch (error: any) {
+      console.error("Error fetching solicitudes:", error);
       res.status(500).json({ message: error.message });
     }
   });
@@ -8391,13 +9047,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // PORTAL - Cursos y Capacitaciones (Employee Portal)
+  // PORTAL - Cursos y Evaluaciones (Employee Portal)
   // ============================================================================
 
   // Get employee's assigned courses
   app.get("/api/portal/mis-cursos", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -8529,7 +9185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Start quiz attempt
   app.post("/api/portal/quizzes/:quizId/iniciar", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       const { asignacionId } = req.body;
 
       if (!empleadoId) {
@@ -8671,7 +9327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get employee's certificates
   app.get("/api/portal/certificados", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       if (!empleadoId) {
         return res.status(400).json({ message: "No hay empleado asociado" });
       }
@@ -8686,7 +9342,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit quiz (combined init + submit for simpler UX)
   app.post("/api/portal/quiz/:quizId/submit", requireEmployeeAuth, async (req, res) => {
     try {
-      const empleadoId = req.session?.user?.empleadoId;
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
       const { asignacionId, respuestas } = req.body;
 
       if (!empleadoId) {
@@ -8809,6 +9465,875 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minScore,
         correctAnswers
       });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - ASISTENCIA (Attendance)
+  // ============================================================================
+
+  // Get today's attendance status
+  app.get("/api/portal/asistencia/hoy", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      // Check if there's an attendance record for today
+      const todayRecord = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            eq(attendance.date, today)
+          )
+        )
+        .limit(1);
+
+      const record = todayRecord[0];
+
+      res.json({
+        checkedIn: !!record?.clockIn,
+        horaEntrada: record?.clockIn || null,
+        horaSalida: record?.clockOut || null,
+        canCheckIn: !record?.clockIn,
+        canCheckOut: !!record?.clockIn && !record?.clockOut,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get attendance records for a week
+  app.get("/api/portal/asistencia", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const weekStart = req.query.weekStart
+        ? new Date(req.query.weekStart as string).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+      const weekEndStr = weekEnd.toISOString().split('T')[0];
+
+      const records = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            gte(attendance.date, weekStart),
+            lte(attendance.date, weekEndStr)
+          )
+        )
+        .orderBy(attendance.date);
+
+      // Map to frontend format
+      res.json(records.map(r => ({
+        id: r.id,
+        fecha: r.date,
+        horaEntrada: r.clockIn,
+        horaSalida: r.clockOut,
+        estado: r.status,
+        tipoIncidencia: r.status, // For color mapping (vacaciones, incapacidad, falta, retardo, etc.)
+      })));
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get monthly attendance summary
+  app.get("/api/portal/asistencia/resumen", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+
+      const records = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            gte(attendance.date, monthStart),
+            lte(attendance.date, monthEnd)
+          )
+        );
+
+      // Also get incidences
+      const incidencias = await db
+        .select()
+        .from(incidenciasAsistencia)
+        .where(
+          and(
+            eq(incidenciasAsistencia.empleadoId, empleadoId),
+            gte(incidenciasAsistencia.fecha, monthStart),
+            lte(incidenciasAsistencia.fecha, monthEnd)
+          )
+        );
+
+      const diasTrabajados = records.filter(r => r.clockIn && r.clockOut).length;
+      const diasFaltas = incidencias.filter(i => i.tipoIncidencia === 'falta').length;
+      const diasRetardos = incidencias.filter(i => i.tipoIncidencia === 'retardo').length;
+      const horasExtrasTotal = incidencias
+        .filter(i => i.tipoIncidencia === 'horas_extra')
+        .reduce((sum, i) => sum + (Number(i.horasExtras) || 0), 0);
+
+      res.json({
+        diasTrabajados,
+        diasFaltas,
+        diasRetardos,
+        horasExtrasTotal,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Check in
+  app.post("/api/portal/asistencia/checkin", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      const clienteId = req.user?.clienteId || req.session?.user?.clienteId;
+
+      if (!empleadoId || !clienteId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Fetch empresaId from employee record
+      const emp = await db.select({ empresaId: employees.empresaId }).from(employees).where(eq(employees.id, empleadoId)).limit(1);
+      const empresaId = emp[0]?.empresaId;
+
+      if (!empresaId) {
+        return res.status(400).json({ message: "No tienes una empresa asignada. Contacta a Recursos Humanos." });
+      }
+
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+
+      // Check if already checked in today
+      const existing = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            eq(attendance.date, today)
+          )
+        )
+        .limit(1);
+
+      if (existing[0]?.clockIn) {
+        return res.status(400).json({ message: "Ya registraste tu entrada hoy" });
+      }
+
+      const clockIn = now.toTimeString().slice(0, 8);
+
+      if (existing[0]) {
+        // Update existing record
+        await db
+          .update(attendance)
+          .set({ clockIn, status: 'presente' })
+          .where(eq(attendance.id, existing[0].id));
+      } else {
+        // Create new record
+        await db.insert(attendance).values({
+          employeeId: empleadoId,
+          clienteId,
+          empresaId,
+          date: today,
+          clockIn,
+          status: 'presente',
+        });
+      }
+
+      res.json({ success: true, horaEntrada: clockIn });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Check out
+  app.post("/api/portal/asistencia/checkout", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const now = new Date();
+      const today = now.toISOString().split('T')[0];
+
+      // Find today's record
+      const existing = await db
+        .select()
+        .from(attendance)
+        .where(
+          and(
+            eq(attendance.employeeId, empleadoId),
+            eq(attendance.date, today)
+          )
+        )
+        .limit(1);
+
+      if (!existing[0]?.clockIn) {
+        return res.status(400).json({ message: "Primero debes registrar tu entrada" });
+      }
+
+      if (existing[0]?.clockOut) {
+        return res.status(400).json({ message: "Ya registraste tu salida hoy" });
+      }
+
+      const clockOut = now.toTimeString().slice(0, 8);
+
+      await db
+        .update(attendance)
+        .set({ clockOut })
+        .where(eq(attendance.id, existing[0].id));
+
+      res.json({ success: true, horaSalida: clockOut });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - DOCUMENTOS (Documents)
+  // ============================================================================
+
+  // Get employee's documents
+  app.get("/api/portal/documentos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Get documents from solicitudesDocumentos (portal requests)
+      const docs = await db
+        .select()
+        .from(solicitudesDocumentos)
+        .where(eq(solicitudesDocumentos.empleadoId, empleadoId))
+        .orderBy(desc(solicitudesDocumentos.fechaSolicitud));
+
+      res.json(docs.map(doc => ({
+        id: doc.id,
+        tipo: doc.tipoDocumento,
+        tipoLabel: doc.nombre,
+        nombre: doc.nombre,
+        fechaGeneracion: doc.fechaGeneracion || doc.fechaSolicitud,
+        estado: doc.estado,
+        urlDescarga: doc.urlDescarga,
+        tamanio: doc.tamanio,
+        categoria: doc.categoria,
+      })));
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get available document types
+  app.get("/api/portal/documentos/tipos", requireEmployeeAuth, async (req, res) => {
+    try {
+      // Return standard document types employees can request
+      res.json([
+        {
+          id: "constancia_laboral",
+          nombre: "Constancia Laboral",
+          descripcion: "Documento que acredita tu relación laboral",
+          tiempoEstimado: "1-2 días hábiles",
+        },
+        {
+          id: "constancia_ingresos",
+          nombre: "Constancia de Ingresos",
+          descripcion: "Documento con tu información salarial",
+          tiempoEstimado: "1-2 días hábiles",
+        },
+        {
+          id: "carta_recomendacion",
+          nombre: "Carta de Recomendación",
+          descripcion: "Carta oficial de recomendación laboral",
+          tiempoEstimado: "3-5 días hábiles",
+        },
+      ]);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Request a document
+  app.post("/api/portal/documentos/solicitar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      const clienteId = req.user?.clienteId || req.session?.user?.clienteId;
+      if (!empleadoId || !clienteId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { tipoDocumento } = req.body;
+      if (!tipoDocumento) {
+        return res.status(400).json({ message: "Tipo de documento requerido" });
+      }
+
+      // Map document type to readable name
+      const nombreMap: Record<string, string> = {
+        constancia_laboral: "Constancia Laboral",
+        constancia_ingresos: "Constancia de Ingresos",
+        carta_recomendacion: "Carta de Recomendación",
+      };
+
+      const nombre = nombreMap[tipoDocumento] || tipoDocumento.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
+
+      // Create a pending document request
+      const doc = await db.insert(solicitudesDocumentos).values({
+        empleadoId,
+        clienteId,
+        tipoDocumento,
+        nombre,
+        estado: 'pendiente',
+        categoria: 'otros',
+      }).returning();
+
+      res.json({ success: true, documento: doc[0] });
+    } catch (error: any) {
+      console.error("Error creating document request:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - DIRECTORIO (Employee Directory)
+  // ============================================================================
+
+  // Get departments for filter - derive from employee data
+  app.get("/api/portal/directorio/departamentos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente no identificado" });
+      }
+
+      // Get distinct departments from employees
+      const empDepts = await db
+        .selectDistinct({ departamento: employees.departamento })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.clienteId, clienteId),
+            eq(employees.estatus, 'activo')
+          )
+        );
+
+      // Get counts for each department
+      const deptsWithCounts = await Promise.all(
+        empDepts
+          .filter(d => d.departamento)
+          .map(async (dept, index) => {
+            const count = await db
+              .select({ count: sql<number>`count(*)` })
+              .from(employees)
+              .where(
+                and(
+                  eq(employees.clienteId, clienteId),
+                  eq(employees.departamento, dept.departamento!),
+                  eq(employees.estatus, 'activo')
+                )
+              );
+            return {
+              id: index + 1,
+              nombre: dept.departamento,
+              empleadosCount: Number(count[0]?.count) || 0,
+            };
+          })
+      );
+
+      res.json(deptsWithCounts.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')));
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get employee directory
+  app.get("/api/portal/directorio", requireEmployeeAuth, async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente no identificado" });
+      }
+
+      const { departamento, buscar } = req.query;
+
+      let query = db
+        .select({
+          id: employees.id,
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          email: employees.email,
+          telefono: employees.telefono,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.clienteId, clienteId),
+            eq(employees.estatus, 'activo'),
+            eq(employees.portalActivo, true)
+          )
+        )
+        .orderBy(employees.nombre);
+
+      let results = await query;
+
+      // Filter by department if specified
+      if (departamento && departamento !== 'todos') {
+        results = results.filter(e =>
+          e.departamento && String(e.departamento).toLowerCase().includes(String(departamento).toLowerCase())
+        );
+      }
+
+      // Search filter
+      if (buscar) {
+        const searchLower = (buscar as string).toLowerCase();
+        results = results.filter(e => {
+          const fullName = `${e.nombre} ${e.apellidoPaterno} ${e.apellidoMaterno || ''}`.toLowerCase();
+          return fullName.includes(searchLower);
+        });
+      }
+
+      // Map to expected format
+      res.json(results.map(e => ({
+        id: e.id,
+        nombre: e.nombre,
+        apellidoPaterno: e.apellidoPaterno,
+        apellidoMaterno: e.apellidoMaterno,
+        email: e.email,
+        telefonoExtension: e.telefono,
+        fotoUrl: null,
+        puesto: e.puesto,
+        departamento: e.departamento,
+      })));
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - APROBACIONES (Manager Approvals)
+  // ============================================================================
+
+  // Get pending approvals count (for header badge)
+  app.get("/api/portal/aprobaciones/count", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      const clienteId = req.session?.user?.clienteId;
+      if (!empleadoId || !clienteId) {
+        return res.json({ count: 0, isManager: false });
+      }
+
+      // Check if this employee is a manager (has subordinates)
+      const subordinates = await db
+        .select({ id: employees.id })
+        .from(employees)
+        .where(
+          and(
+            eq(employees.jefeDirectoId, empleadoId),
+            eq(employees.estatus, 'activo')
+          )
+        );
+
+      if (subordinates.length === 0) {
+        return res.json({ count: 0, isManager: false });
+      }
+
+      const subordinateIds = subordinates.map(s => s.id);
+
+      // Count pending vacation requests from subordinates
+      const pendingVacaciones = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(solicitudesVacaciones)
+        .where(
+          and(
+            inArray(solicitudesVacaciones.empleadoId, subordinateIds),
+            eq(solicitudesVacaciones.estatus, 'pendiente')
+          )
+        );
+
+      // Count pending permission requests from subordinates
+      const pendingPermisos = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(solicitudesPermisos)
+        .where(
+          and(
+            inArray(solicitudesPermisos.empleadoId, subordinateIds),
+            eq(solicitudesPermisos.estatus, 'pendiente')
+          )
+        );
+
+      const total = (pendingVacaciones[0]?.count || 0) + (pendingPermisos[0]?.count || 0);
+
+      res.json({ count: total, isManager: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get pending approvals for manager
+  app.get("/api/portal/aprobaciones", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Get subordinates
+      const subordinates = await db
+        .select()
+        .from(employees)
+        .where(
+          and(
+            eq(employees.jefeDirectoId, empleadoId),
+            eq(employees.estatus, 'activo')
+          )
+        );
+
+      if (subordinates.length === 0) {
+        return res.json([]);
+      }
+
+      const subordinateIds = subordinates.map(s => s.id);
+      const subordinateMap = new Map(subordinates.map(s => [s.id, s]));
+
+      // Get pending vacation requests
+      const vacaciones = await db
+        .select()
+        .from(solicitudesVacaciones)
+        .where(
+          and(
+            inArray(solicitudesVacaciones.empleadoId, subordinateIds),
+            eq(solicitudesVacaciones.estatus, 'pendiente')
+          )
+        );
+
+      // Get pending permission requests
+      const permisos = await db
+        .select()
+        .from(solicitudesPermisos)
+        .where(
+          and(
+            inArray(solicitudesPermisos.empleadoId, subordinateIds),
+            eq(solicitudesPermisos.estatus, 'pendiente')
+          )
+        );
+
+      const results = [
+        ...vacaciones.map(v => {
+          const emp = subordinateMap.get(v.empleadoId);
+          return {
+            id: v.id,
+            tipo: 'vacaciones' as const,
+            empleadoId: v.empleadoId,
+            empleadoNombre: emp ? `${emp.nombre} ${emp.apellidoPaterno}` : 'Empleado',
+            empleadoFoto: emp?.fotoUrl,
+            empleadoPuesto: '',
+            fechaSolicitud: v.fechaSolicitud,
+            fechaInicio: v.fechaInicio,
+            fechaFin: v.fechaFin,
+            diasSolicitados: v.diasSolicitados,
+            motivo: v.comentarios,
+            estado: v.estatus,
+          };
+        }),
+        ...permisos.map(p => {
+          const emp = subordinateMap.get(p.empleadoId);
+          return {
+            id: p.id,
+            tipo: 'permiso' as const,
+            empleadoId: p.empleadoId,
+            empleadoNombre: emp ? `${emp.nombre} ${emp.apellidoPaterno}` : 'Empleado',
+            empleadoFoto: emp?.fotoUrl,
+            empleadoPuesto: '',
+            fechaSolicitud: p.fechaSolicitud,
+            fechaInicio: p.fechaInicio,
+            fechaFin: p.fechaFin,
+            diasSolicitados: null,
+            motivo: p.motivo,
+            estado: p.estatus,
+          };
+        }),
+      ].sort((a, b) =>
+        new Date(b.fechaSolicitud).getTime() - new Date(a.fechaSolicitud).getTime()
+      );
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get approval history
+  app.get("/api/portal/aprobaciones/historial", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Get subordinates
+      const subordinates = await db
+        .select()
+        .from(employees)
+        .where(eq(employees.jefeDirectoId, empleadoId));
+
+      if (subordinates.length === 0) {
+        return res.json([]);
+      }
+
+      const subordinateIds = subordinates.map(s => s.id);
+      const subordinateMap = new Map(subordinates.map(s => [s.id, s]));
+
+      // Get processed requests (not pending)
+      const vacaciones = await db
+        .select()
+        .from(solicitudesVacaciones)
+        .where(
+          and(
+            inArray(solicitudesVacaciones.empleadoId, subordinateIds),
+            ne(solicitudesVacaciones.estatus, 'pendiente')
+          )
+        )
+        .orderBy(desc(solicitudesVacaciones.fechaSolicitud))
+        .limit(50);
+
+      const permisos = await db
+        .select()
+        .from(solicitudesPermisos)
+        .where(
+          and(
+            inArray(solicitudesPermisos.empleadoId, subordinateIds),
+            ne(solicitudesPermisos.estatus, 'pendiente')
+          )
+        )
+        .orderBy(desc(solicitudesPermisos.fechaSolicitud))
+        .limit(50);
+
+      const results = [
+        ...vacaciones.map(v => {
+          const emp = subordinateMap.get(v.empleadoId);
+          return {
+            id: v.id,
+            tipo: 'vacaciones' as const,
+            empleadoId: v.empleadoId,
+            empleadoNombre: emp ? `${emp.nombre} ${emp.apellidoPaterno}` : 'Empleado',
+            empleadoFoto: emp?.fotoUrl,
+            empleadoPuesto: '',
+            fechaSolicitud: v.fechaSolicitud,
+            fechaInicio: v.fechaInicio,
+            fechaFin: v.fechaFin,
+            diasSolicitados: v.diasSolicitados,
+            motivo: v.comentarios,
+            estado: v.estatus,
+            comentarioAprobador: v.comentariosAprobador,
+          };
+        }),
+        ...permisos.map(p => {
+          const emp = subordinateMap.get(p.empleadoId);
+          return {
+            id: p.id,
+            tipo: 'permiso' as const,
+            empleadoId: p.empleadoId,
+            empleadoNombre: emp ? `${emp.nombre} ${emp.apellidoPaterno}` : 'Empleado',
+            empleadoFoto: emp?.fotoUrl,
+            empleadoPuesto: '',
+            fechaSolicitud: p.fechaSolicitud,
+            fechaInicio: p.fechaInicio,
+            fechaFin: p.fechaFin,
+            diasSolicitados: null,
+            motivo: p.motivo,
+            estado: p.estatus,
+            comentarioAprobador: p.comentariosAprobador,
+          };
+        }),
+      ].sort((a, b) =>
+        new Date(b.fechaSolicitud).getTime() - new Date(a.fechaSolicitud).getTime()
+      );
+
+      res.json(results);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Approve a request
+  app.post("/api/portal/aprobaciones/:id/aprobar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { comentario } = req.body;
+      const requestId = parseInt(req.params.id);
+
+      // Try to find and update vacation request first
+      const vacacion = await db
+        .select()
+        .from(solicitudesVacaciones)
+        .where(eq(solicitudesVacaciones.id, requestId))
+        .limit(1);
+
+      if (vacacion[0]) {
+        // Verify manager has authority
+        const emp = await db
+          .select()
+          .from(employees)
+          .where(eq(employees.id, vacacion[0].empleadoId))
+          .limit(1);
+
+        if (emp[0]?.jefeDirectoId !== empleadoId) {
+          return res.status(403).json({ message: "No tienes permiso para aprobar esta solicitud" });
+        }
+
+        await db
+          .update(solicitudesVacaciones)
+          .set({
+            estatus: 'aprobado',
+            fechaAprobacion: new Date(),
+            aprobadorId: empleadoId,
+            comentariosAprobador: comentario,
+          })
+          .where(eq(solicitudesVacaciones.id, requestId));
+
+        return res.json({ success: true });
+      }
+
+      // Try permission request
+      const permiso = await db
+        .select()
+        .from(solicitudesPermisos)
+        .where(eq(solicitudesPermisos.id, requestId))
+        .limit(1);
+
+      if (permiso[0]) {
+        const emp = await db
+          .select()
+          .from(employees)
+          .where(eq(employees.id, permiso[0].empleadoId))
+          .limit(1);
+
+        if (emp[0]?.jefeDirectoId !== empleadoId) {
+          return res.status(403).json({ message: "No tienes permiso para aprobar esta solicitud" });
+        }
+
+        await db
+          .update(solicitudesPermisos)
+          .set({
+            estatus: 'aprobado',
+            fechaAprobacion: new Date(),
+            aprobadorId: empleadoId,
+            comentariosAprobador: comentario,
+          })
+          .where(eq(solicitudesPermisos.id, requestId));
+
+        return res.json({ success: true });
+      }
+
+      res.status(404).json({ message: "Solicitud no encontrada" });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Reject a request
+  app.post("/api/portal/aprobaciones/:id/rechazar", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { comentario } = req.body;
+      const requestId = parseInt(req.params.id);
+
+      // Try vacation request first
+      const vacacion = await db
+        .select()
+        .from(solicitudesVacaciones)
+        .where(eq(solicitudesVacaciones.id, requestId))
+        .limit(1);
+
+      if (vacacion[0]) {
+        const emp = await db
+          .select()
+          .from(employees)
+          .where(eq(employees.id, vacacion[0].empleadoId))
+          .limit(1);
+
+        if (emp[0]?.jefeDirectoId !== empleadoId) {
+          return res.status(403).json({ message: "No tienes permiso para rechazar esta solicitud" });
+        }
+
+        await db
+          .update(solicitudesVacaciones)
+          .set({
+            estatus: 'rechazado',
+            fechaAprobacion: new Date(),
+            aprobadorId: empleadoId,
+            comentariosAprobador: comentario,
+          })
+          .where(eq(solicitudesVacaciones.id, requestId));
+
+        return res.json({ success: true });
+      }
+
+      // Try permission request
+      const permiso = await db
+        .select()
+        .from(solicitudesPermisos)
+        .where(eq(solicitudesPermisos.id, requestId))
+        .limit(1);
+
+      if (permiso[0]) {
+        const emp = await db
+          .select()
+          .from(employees)
+          .where(eq(employees.id, permiso[0].empleadoId))
+          .limit(1);
+
+        if (emp[0]?.jefeDirectoId !== empleadoId) {
+          return res.status(403).json({ message: "No tienes permiso para rechazar esta solicitud" });
+        }
+
+        await db
+          .update(solicitudesPermisos)
+          .set({
+            estatus: 'rechazado',
+            fechaAprobacion: new Date(),
+            aprobadorId: empleadoId,
+            comentariosAprobador: comentario,
+          })
+          .where(eq(solicitudesPermisos.id, requestId));
+
+        return res.json({ success: true });
+      }
+
+      res.status(404).json({ message: "Solicitud no encontrada" });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
