@@ -195,6 +195,12 @@ const configuracionSubItems = [
     icon: Settings,
   },
   {
+    title: "Usuarios",
+    url: "/configuration/usuarios",
+    icon: UserCog,
+    requiresAdmin: true,
+  },
+  {
     title: "Prestaciones",
     url: "/configuration/prestaciones",
     icon: Gift,
@@ -270,6 +276,18 @@ const mainMenuItems = [
 export function AppSidebar() {
   const [location] = useLocation();
   const { clienteId } = useCliente();
+  const { user } = useAuth();
+
+  // Check if user is a supervisor (limited menu)
+  const isSupervisor = user?.role === 'supervisor';
+
+  // Filter configuration items based on user role
+  const filteredConfiguracionSubItems = configuracionSubItems.filter(item => {
+    if ('requiresAdmin' in item && item.requiresAdmin) {
+      return user?.role === 'cliente_admin' || user?.role === 'cliente_master';
+    }
+    return true;
+  });
 
   // Helper to build cliente-scoped URLs
   const url = (path: string) => clienteId ? `/${clienteId}${path}` : path;
@@ -288,6 +306,98 @@ export function AppSidebar() {
   const isDocumentosActive = startsWithPath("/documentos");
   const isImssActive = startsWithPath("/imss");
   const isConfiguracionActive = startsWithPath("/configuration");
+
+  // Supervisor limited menu
+  if (isSupervisor) {
+    return (
+      <Sidebar>
+        <SidebarHeader className="p-4">
+          <div className="flex items-center gap-2 px-2 mb-2">
+            <Building2 className="h-6 w-6 text-primary" />
+            <div>
+              <h1 className="text-base font-semibold">PeopleOps</h1>
+              <span className="text-xs text-muted-foreground">Supervisor</span>
+            </div>
+          </div>
+          <Separator className="mt-2" />
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarGroup>
+            <SidebarGroupLabel>Menú</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathWithoutCliente === "" || pathWithoutCliente === "/"}
+                    data-testid="link-dashboard"
+                  >
+                    <Link href={url("")}>
+                      <LayoutDashboard className="h-4 w-4" />
+                      <span>Dashboard</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isEmployeesActive}
+                    data-testid="link-empleados"
+                  >
+                    <Link href={url("/employees")}>
+                      <Users className="h-4 w-4" />
+                      <span>Empleados</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={startsWithPath("/attendance")}
+                    data-testid="link-incidencias"
+                  >
+                    <Link href={url("/attendance")}>
+                      <Calendar className="h-4 w-4" />
+                      <span>Incidencias</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={startsWithPath("/vacaciones")}
+                    data-testid="link-vacaciones"
+                  >
+                    <Link href={url("/vacaciones")}>
+                      <Umbrella className="h-4 w-4" />
+                      <span>Vacaciones</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={startsWithPath("/permisos")}
+                    data-testid="link-permisos"
+                  >
+                    <Link href={url("/permisos")}>
+                      <Clock className="h-4 w-4" />
+                      <span>Permisos</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </SidebarContent>
+        <UserFooter />
+      </Sidebar>
+    );
+  }
 
   return (
     <Sidebar>
@@ -459,7 +569,7 @@ export function AppSidebar() {
                 >
                   <Link href={url("/cursos-capacitaciones")}>
                     <GraduationCap className="h-4 w-4" />
-                    <span>Cursos y Capacitaciones</span>
+                    <span>Cursos y Evaluaciones</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
@@ -577,7 +687,7 @@ export function AppSidebar() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarMenuSub>
-                      {configuracionSubItems.map((subItem) => (
+                      {filteredConfiguracionSubItems.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
                           <SidebarMenuSubButton
                             asChild

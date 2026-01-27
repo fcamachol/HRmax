@@ -45,6 +45,7 @@ import Prestaciones from "@/pages/configuracion/Prestaciones";
 import PlantillasNomina from "@/pages/configuracion/PlantillasNomina";
 import ConceptosNomina from "@/pages/configuracion/ConceptosNomina";
 import CatalogosBase from "@/pages/configuracion/CatalogosBase";
+import Usuarios from "@/pages/configuracion/Usuarios";
 import ImssMovimientos from "@/pages/imss/Movimientos";
 import SuaBimestres from "@/pages/imss/SuaBimestres";
 import RelojChecador from "@/components/RelojChecador";
@@ -55,7 +56,7 @@ import SuperAdminClientes from "@/pages/super-admin/Clientes";
 import OnboardingWizard from "@/pages/onboarding-wizard";
 import NotFound from "@/pages/not-found";
 
-// Cursos y Capacitaciones
+// Cursos y Evaluaciones
 import Cursos from "@/pages/cursos-capacitaciones/Cursos";
 import CursoBuilder from "@/pages/cursos-capacitaciones/CursoBuilder";
 import Asignaciones from "@/pages/cursos-capacitaciones/Asignaciones";
@@ -63,6 +64,7 @@ import ReglasAsignacion from "@/pages/cursos-capacitaciones/ReglasAsignacion";
 import ReportesCursos from "@/pages/cursos-capacitaciones/Reportes";
 import CertificadosCursos from "@/pages/cursos-capacitaciones/Certificados";
 import CursoPreview from "@/pages/cursos-capacitaciones/CursoPreview";
+import CategoriasPage from "@/pages/cursos-capacitaciones/Categorias";
 
 // Documentos (Templates)
 import {
@@ -81,6 +83,11 @@ import PortalMas from "@/pages/portal/Mas";
 import PortalProfile from "@/pages/portal/Profile";
 import PortalMisCursos from "@/pages/portal/MisCursos";
 import PortalCursoPlayer from "@/pages/portal/CursoPlayer";
+import PortalAsistencia from "@/pages/portal/Asistencia";
+import PortalDocumentos from "@/pages/portal/Documentos";
+import PortalDirectorio from "@/pages/portal/Directorio";
+import PortalAprobaciones from "@/pages/portal/Aprobaciones";
+import PortalNotificaciones from "@/pages/portal/Notificaciones";
 import AgencyDashboard from "@/pages/AgencyDashboard";
 
 // Agency routes (for MaxTalent users without a specific client selected)
@@ -117,6 +124,7 @@ function ClienteRouter() {
       <Route path="/:clienteId/incapacidades" component={Incapacidades} />
       <Route path="/:clienteId/permisos" component={Permisos} />
       <Route path="/:clienteId/actas-administrativas" component={ActasAdministrativas} />
+      <Route path="/:clienteId/configuration/usuarios" component={Usuarios} />
       <Route path="/:clienteId/configuration/medios-pago" component={MediosPago} />
       <Route path="/:clienteId/configuration/prestaciones" component={Prestaciones} />
       <Route path="/:clienteId/configuration/plantillas-nomina" component={PlantillasNomina} />
@@ -130,6 +138,7 @@ function ClienteRouter() {
       <Route path="/:clienteId/creditos" component={Creditos} />
       <Route path="/:clienteId/configuration" component={Configuration} />
       <Route path="/:clienteId/empresas" component={Empresas} />
+      <Route path="/:clienteId/cursos-capacitaciones/categorias" component={CategoriasPage} />
       <Route path="/:clienteId/cursos-capacitaciones/asignaciones" component={Asignaciones} />
       <Route path="/:clienteId/cursos-capacitaciones/reglas" component={ReglasAsignacion} />
       <Route path="/:clienteId/cursos-capacitaciones/reportes" component={ReportesCursos} />
@@ -251,6 +260,51 @@ export default function App() {
                   <PortalAuthProvider clienteId={params.clienteId}>
                     <RequirePortalAuth>
                       <PortalMisCursos />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId/asistencia">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <RequirePortalAuth>
+                      <PortalAsistencia />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId/documentos">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <RequirePortalAuth>
+                      <PortalDocumentos />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId/directorio">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <RequirePortalAuth>
+                      <PortalDirectorio />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId/aprobaciones">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <RequirePortalAuth>
+                      <PortalAprobaciones />
+                    </RequirePortalAuth>
+                  </PortalAuthProvider>
+                )}
+              </Route>
+              <Route path="/portal/:clienteId/notificaciones">
+                {(params) => (
+                  <PortalAuthProvider clienteId={params.clienteId}>
+                    <RequirePortalAuth>
+                      <PortalNotificaciones />
                     </RequirePortalAuth>
                   </PortalAuthProvider>
                 )}

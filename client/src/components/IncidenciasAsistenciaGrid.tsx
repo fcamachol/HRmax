@@ -654,7 +654,7 @@ export function IncidenciasAsistenciaGrid({
                             <Input
                               type="number"
                               min="0"
-                              max={tipo === "diasDomingo" || tipo === "diasFestivos" ? "1" : undefined}
+                              max={tipo === "diasDomingo" || tipo === "diasFestivos" || tipo === "faltas" ? "1" : undefined}
                               step={tipo === "horasExtra" || tipo === "horasDescontadas" ? "0.5" : "1"}
                               value={dayData[tipo]}
                               onChange={(e) =>

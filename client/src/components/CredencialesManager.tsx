@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Trash2, Pencil, Key, Shield, ExternalLink, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Pencil, Key, Shield, ExternalLink, AlertTriangle, Upload, FileKey, X, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -282,6 +282,134 @@ interface CredencialFormProps {
   onCancel?: () => void;
 }
 
+interface CertFileUploaderProps {
+  accept: string;
+  value: string;
+  onChange: (url: string) => void;
+  label: string;
+  disabled?: boolean;
+}
+
+function CertFileUploader({ accept, value, onChange, label, disabled }: CertFileUploaderProps) {
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Max 5MB for cert files
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Archivo muy grande",
+        description: "El archivo debe ser menor a 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      // Get signed upload URL from backend
+      const response = await apiRequest("POST", "/api/objects/upload");
+      const { uploadURL } = await response.json() as { uploadURL: string };
+
+      // Upload file to storage
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Error al subir archivo");
+      }
+
+      // Get the URL without query params (signed URL params)
+      const storedUrl = uploadURL.split('?')[0];
+      onChange(storedUrl);
+
+      toast({
+        title: "Archivo subido",
+        description: `${file.name} se subió correctamente`,
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Error al subir",
+        description: "No se pudo subir el archivo",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const handleRemove = () => {
+    onChange("");
+  };
+
+  const inputId = `cert-upload-${label.replace(/\s/g, '-').toLowerCase()}`;
+
+  return (
+    <div className="space-y-2">
+      {value ? (
+        <div className="flex items-center gap-2 p-2 border rounded-md bg-green-50 dark:bg-green-950/20">
+          <CheckCircle className="h-4 w-4 text-green-600 flex-shrink-0" />
+          <span className="text-sm truncate flex-1 text-green-700 dark:text-green-400">
+            Archivo cargado
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={handleRemove}
+            disabled={disabled}
+            className="h-6 w-6 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      ) : (
+        <>
+          <input
+            type="file"
+            id={inputId}
+            className="hidden"
+            onChange={handleFileSelect}
+            accept={accept}
+            disabled={isUploading || disabled}
+          />
+          <label htmlFor={inputId} className="block">
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById(inputId)?.click();
+              }}
+              disabled={isUploading || disabled}
+            >
+              {isUploading ? (
+                <>Subiendo...</>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  {label}
+                </>
+              )}
+            </Button>
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CredencialForm({ empresaId, credencial, onSuccess, onCancel }: CredencialFormProps) {
   const { toast } = useToast();
   const isEditing = !!credencial;
@@ -489,12 +617,18 @@ function CredencialForm({ empresaId, credencial, onSuccess, onCancel }: Credenci
               name="efirmaCertPath"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ruta archivo .cer</FormLabel>
+                  <FormLabel>Archivo .cer (Certificado)</FormLabel>
                   <FormControl>
-                    <Input {...field} value={field.value || ""} placeholder="Ruta al certificado .cer" data-testid="input-efirma-cert-path" />
+                    <CertFileUploader
+                      accept=".cer"
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                      label="Subir archivo .cer"
+                      disabled={saveMutation.isPending}
+                    />
                   </FormControl>
                   <FormDescription className="text-xs">
-                    Ruta en object storage del archivo .cer
+                    Certificado de la e.firma (.cer)
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -506,12 +640,18 @@ function CredencialForm({ empresaId, credencial, onSuccess, onCancel }: Credenci
               name="efirmaKeyPath"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Ruta archivo .key</FormLabel>
+                  <FormLabel>Archivo .key (Llave privada)</FormLabel>
                   <FormControl>
-                    <Input {...field} value={field.value || ""} placeholder="Ruta a la clave privada .key" data-testid="input-efirma-key-path" />
+                    <CertFileUploader
+                      accept=".key"
+                      value={field.value || ""}
+                      onChange={field.onChange}
+                      label="Subir archivo .key"
+                      disabled={saveMutation.isPending}
+                    />
                   </FormControl>
                   <FormDescription className="text-xs">
-                    Ruta en object storage del archivo .key
+                    Llave privada de la e.firma (.key)
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

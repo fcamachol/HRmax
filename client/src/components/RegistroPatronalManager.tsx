@@ -175,7 +175,7 @@ export default function RegistroPatronalManager({ empresaId }: RegistroPatronalM
                   {registro.primaRiesgo && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Prima de Riesgo:</span>
-                      <span className="font-medium">{parseFloat(registro.primaRiesgo).toFixed(4)}%</span>
+                      <span className="font-medium">{parseFloat(registro.primaRiesgo).toFixed(5)}%</span>
                     </div>
                   )}
                   {registro.municipio && registro.estado && (
@@ -270,7 +270,7 @@ function RegistroPatronalForm({ empresaId, registro, onSuccess, onCancel }: Regi
       estado: "",
       codigoPostal: "",
       claseRiesgo: "I",
-      primaRiesgo: "0.5000",
+      primaRiesgo: "0.50000",
       divisionEconomica: "",
       grupoActividad: "",
       fraccionActividad: "",
@@ -285,7 +285,7 @@ function RegistroPatronalForm({ empresaId, registro, onSuccess, onCancel }: Regi
       // Convert numeric fields to strings
       const payload = {
         ...data,
-        primaRiesgo: data.primaRiesgo?.toString() || "0.5000",
+        primaRiesgo: data.primaRiesgo?.toString() || "0.50000",
       };
       
       const endpoint = isEditing ? `/api/registros-patronales/${registro.id}` : "/api/registros-patronales";
@@ -399,15 +399,15 @@ function RegistroPatronalForm({ empresaId, registro, onSuccess, onCancel }: Regi
                     {...field}
                     value={field.value || ""}
                     type="number"
-                    step="0.0001"
+                    step="0.00001"
                     min="0"
                     max="15"
-                    placeholder="0.5000"
+                    placeholder="0.50000"
                     data-testid="input-prima-riesgo"
                   />
                 </FormControl>
                 <FormDescription className="text-xs">
-                  Porcentaje de prima (ej: 0.5000 = 0.5%)
+                  Porcentaje de prima (ej: 1.51952 = 1.51952%)
                 </FormDescription>
                 <FormMessage />
               </FormItem>

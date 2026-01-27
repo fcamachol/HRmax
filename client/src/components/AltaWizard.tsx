@@ -14,7 +14,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { HiringProcess } from "@shared/schema";
 import { extraerDatosCURP, validarFormatoCURP, obtenerNombreEstado } from "@shared/curpUtils";
-import { ESTADOS_MEXICO, BANCOS_MEXICO, FORMAS_PAGO, TIPOS_CONTRATO, PARENTESCOS, DIAS_PRUEBA } from "@shared/catalogos";
+import { ESTADOS_MEXICO, BANCOS_MEXICO, FORMAS_PAGO, TIPOS_CONTRATO, PARENTESCOS, DIAS_PRUEBA, PERIODICIDAD_PAGO } from "@shared/catalogos";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { 
   CheckCircle2, 
@@ -63,7 +63,7 @@ interface AltaFormData {
   genero: string;
   fechaNacimiento: string;
   lugarNacimiento: string;
-  
+
   // Paso 2: Datos de la Oferta
   empresaId: string; // ID de la empresa (FK)
   registroPatronalId: string; // ID del registro patronal (FK)
@@ -71,6 +71,10 @@ interface AltaFormData {
   departamentoId: string; // ID del departamento (FK)
   centroTrabajoId: string; // ID del centro de trabajo (FK)
   proposedSalary: string;
+  // Nuevos campos de salario
+  salarioDiarioNominal: string; // Salario diario nominal (base para IMSS)
+  salarioDiarioExento: string; // Salario diario exento (porción no gravable)
+  periodicidadPago: string; // Periodicidad de pago (semanal, quincenal, etc.)
   contractType: string;
   contractDuration: string;
   diasPrueba: string; // Días de prueba (30, 60, 90)
@@ -173,7 +177,7 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     genero: "",
     fechaNacimiento: "",
     lugarNacimiento: "",
-    
+
     // Paso 2
     empresaId: "",
     registroPatronalId: "",
@@ -181,6 +185,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     departamentoId: "",
     centroTrabajoId: "",
     proposedSalary: "",
+    salarioDiarioNominal: "",
+    salarioDiarioExento: "",
+    periodicidadPago: "quincenal",
     contractType: "indeterminado",
     contractDuration: "",
     diasPrueba: "",
@@ -278,6 +285,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         departamentoId: (existingProcess as any).departamentoId || "",
         centroTrabajoId: (existingProcess as any).centroTrabajoId || "",
         proposedSalary: existingProcess.proposedSalary || "",
+        salarioDiarioNominal: (existingProcess as any).salarioDiarioNominal || "",
+        salarioDiarioExento: (existingProcess as any).salarioDiarioExento || "",
+        periodicidadPago: (existingProcess as any).periodicidadPago || "quincenal",
         contractType: existingProcess.contractType || "indeterminado",
         contractDuration: existingProcess.contractDuration || "",
         diasPrueba: (existingProcess as any).diasPrueba || "",
@@ -327,6 +337,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       departamentoId: "",
       centroTrabajoId: "",
       proposedSalary: "",
+      salarioDiarioNominal: "",
+      salarioDiarioExento: "",
+      periodicidadPago: "quincenal",
       contractType: "indeterminado",
       contractDuration: "",
       diasPrueba: "",
@@ -395,6 +408,12 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
       const positionName = selectedPuesto ? `${selectedPuesto.clavePuesto} - ${selectedPuesto.nombrePuesto}` : "";
       const departmentName = selectedDepartamento?.nombre || "";
 
+      // Calcular SDI y determinar esquema de pago
+      const salarioDiarioNominal = parseFloat(data.salarioDiarioNominal) || 0;
+      const salarioDiarioExento = parseFloat(data.salarioDiarioExento) || 0;
+      const sdiCalculado = salarioDiarioNominal * 1.0493; // Factor mínimo legal
+      const esquemaPago = salarioDiarioExento > 0 ? "mixto" : "tradicional";
+
       const payload = {
         clienteId: "209b253d-42ac-4ab6-8e1f-f6bfa0f801d3",
         empresaId: data.empresaId,
@@ -406,6 +425,12 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
         puestoId: data.puestoId,
         departamentoId: data.departamentoId,
         proposedSalary: data.proposedSalary,
+        // Nuevos campos de salario
+        salarioDiarioNominal: data.salarioDiarioNominal || null,
+        salarioDiarioExento: data.salarioDiarioExento || null,
+        sdi: sdiCalculado.toFixed(2),
+        esquemaPago: esquemaPago,
+        periodicidadPago: data.periodicidadPago,
         startDate: data.startDate,
         endDate: data.endDate || null,
         contractType: data.contractType,
@@ -614,10 +639,19 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
     }
 
     if (currentStep === 2) {
-      if (!formData.puestoId || !formData.proposedSalary) {
+      if (!formData.puestoId || !formData.proposedSalary || !formData.salarioDiarioNominal) {
         toast({
           title: "Campos requeridos",
-          description: "El puesto y salario son obligatorios",
+          description: "El puesto, salario mensual neto y salario diario nominal son obligatorios",
+          variant: "destructive",
+        });
+        return;
+      }
+      // Validar que el salario diario nominal sea mayor a 0
+      if (parseFloat(formData.salarioDiarioNominal) <= 0) {
+        toast({
+          title: "Salario inválido",
+          description: "El salario diario nominal debe ser mayor a cero",
           variant: "destructive",
         });
         return;
@@ -1017,6 +1051,9 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
               </Select>
             </div>
 
+            <Separator className="my-4" />
+            <h4 className="text-sm font-medium mb-3">Compensación</h4>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="proposedSalary" data-testid="label-salary">
@@ -1032,7 +1069,106 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                   step="0.01"
                 />
               </div>
-              
+
+              <div>
+                <Label htmlFor="periodicidadPago" data-testid="label-periodicidad">
+                  Periodicidad de Pago <span className="text-destructive">*</span>
+                </Label>
+                <Select
+                  value={formData.periodicidadPago}
+                  onValueChange={(value) => setFormData({ ...formData, periodicidadPago: value })}
+                >
+                  <SelectTrigger data-testid="select-periodicidad">
+                    <SelectValue placeholder="Selecciona periodicidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PERIODICIDAD_PAGO.map((periodo) => (
+                      <SelectItem key={periodo.value} value={periodo.value}>
+                        {periodo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="salarioDiarioNominal" data-testid="label-salario-diario-nominal">
+                  Salario Diario Nominal <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="salarioDiarioNominal"
+                  type="number"
+                  data-testid="input-salario-diario-nominal"
+                  value={formData.salarioDiarioNominal}
+                  onChange={(e) => setFormData({ ...formData, salarioDiarioNominal: e.target.value })}
+                  placeholder="0.00"
+                  step="0.01"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Base para IMSS y cálculos fiscales
+                </p>
+              </div>
+
+              <div>
+                <Label htmlFor="salarioDiarioExento" data-testid="label-salario-diario-exento">
+                  Salario Diario Exento
+                </Label>
+                <Input
+                  id="salarioDiarioExento"
+                  type="number"
+                  data-testid="input-salario-diario-exento"
+                  value={formData.salarioDiarioExento}
+                  onChange={(e) => setFormData({ ...formData, salarioDiarioExento: e.target.value })}
+                  placeholder="0.00"
+                  step="0.01"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Porción no gravable (dejar vacío si no aplica)
+                </p>
+              </div>
+            </div>
+
+            {/* Valores calculados */}
+            {formData.salarioDiarioNominal && parseFloat(formData.salarioDiarioNominal) > 0 && (
+              <Card className="bg-muted/50">
+                <CardContent className="pt-4 pb-3">
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">SDI (Salario Diario Integrado):</span>
+                      <p className="font-medium">
+                        ${(parseFloat(formData.salarioDiarioNominal) * 1.0493).toLocaleString('es-MX', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })} MXN
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Factor: 1.0493 (Año 1: 15 días aguinaldo + 12 días vacaciones × 25%)
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Esquema de Pago:</span>
+                      <p className="font-medium">
+                        {formData.salarioDiarioExento && parseFloat(formData.salarioDiarioExento) > 0
+                          ? "Mixto"
+                          : "Tradicional"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formData.salarioDiarioExento && parseFloat(formData.salarioDiarioExento) > 0
+                          ? "Nómina con porción exenta"
+                          : "100% nominal"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <Separator className="my-4" />
+            <h4 className="text-sm font-medium mb-3">Contrato</h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="startDate" data-testid="label-start-date">
                   Fecha de Inicio <span className="text-destructive">*</span>
@@ -1564,6 +1700,18 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                     </p>
                   </div>
                   <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Periodicidad de Pago</h4>
+                    <p className="text-base" data-testid="text-summary-periodicidad">
+                      {PERIODICIDAD_PAGO.find(p => p.value === formData.periodicidadPago)?.label || formData.periodicidadPago}
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
+                <h4 className="font-medium text-sm text-muted-foreground">Compensación</h4>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
                     <h4 className="font-medium text-sm text-muted-foreground">Salario Mensual Neto</h4>
                     <p className="text-base" data-testid="text-summary-salary">
                       ${parseFloat(formData.proposedSalary || "0").toLocaleString('es-MX', {
@@ -1572,7 +1720,55 @@ export function AltaWizard({ open, onOpenChange, existingProcess }: AltaWizardPr
                       })} MXN
                     </p>
                   </div>
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Salario Diario Nominal</h4>
+                    <p className="text-base" data-testid="text-summary-salario-nominal">
+                      ${parseFloat(formData.salarioDiarioNominal || "0").toLocaleString('es-MX', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} MXN
+                    </p>
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Salario Diario Exento</h4>
+                    <p className="text-base" data-testid="text-summary-salario-exento">
+                      {formData.salarioDiarioExento && parseFloat(formData.salarioDiarioExento) > 0
+                        ? `$${parseFloat(formData.salarioDiarioExento).toLocaleString('es-MX', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })} MXN`
+                        : "No aplica"}
+                    </p>
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">SDI (Salario Diario Integrado)</h4>
+                    <p className="text-base" data-testid="text-summary-sdi">
+                      ${(parseFloat(formData.salarioDiarioNominal || "0") * 1.0493).toLocaleString('es-MX', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })} MXN
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Factor 1.0493 (Año 1: 12 días vacaciones)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h4 className="font-medium text-sm text-muted-foreground">Esquema de Pago</h4>
+                    <p className="text-base" data-testid="text-summary-esquema">
+                      {formData.salarioDiarioExento && parseFloat(formData.salarioDiarioExento) > 0
+                        ? "Mixto"
+                        : "Tradicional"}
+                    </p>
+                  </div>
+                </div>
+
+                <Separator />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
