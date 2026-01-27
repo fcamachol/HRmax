@@ -28,6 +28,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortalAuth } from "@/contexts/PortalAuthContext";
 import type { Curso, ModuloCurso, LeccionCurso, AsignacionCurso, ProgresoLeccion, QuizCurso, PreguntaQuiz } from "@shared/schema";
@@ -284,8 +285,11 @@ export default function CursoPlayer() {
   const renderLeccionContent = () => {
     if (!currentLeccion) {
       return (
-        <div className="flex items-center justify-center h-64 text-muted-foreground">
-          <p>Selecciona una lección para comenzar</p>
+        <div className="flex flex-col items-center justify-center h-64 text-center">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-3">
+            <PlayCircle className="h-8 w-8 text-gray-400" />
+          </div>
+          <p className="text-gray-500">Selecciona una lección para comenzar</p>
         </div>
       );
     }
@@ -295,9 +299,9 @@ export default function CursoPlayer() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">{currentLeccion.nombre}</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{currentLeccion.nombre}</h2>
           {isCompleted && (
-            <Badge variant="secondary" className="text-green-600 bg-green-100">
+            <Badge className="text-green-700 bg-green-100 hover:bg-green-100 border-0">
               <CheckCircle className="h-3 w-3 mr-1" />
               Completado
             </Badge>
@@ -305,7 +309,7 @@ export default function CursoPlayer() {
         </div>
 
         {currentLeccion.descripcion && (
-          <p className="text-sm text-muted-foreground">{currentLeccion.descripcion}</p>
+          <p className="text-sm text-gray-500">{currentLeccion.descripcion}</p>
         )}
 
         {/* Content based on type */}
@@ -559,7 +563,7 @@ export default function CursoPlayer() {
         {/* Mark as complete button */}
         {!isCompleted && currentLeccion.tipoContenido !== "quiz" && (
           <Button
-            className="w-full"
+            className="w-full h-12 bg-[#135bec] hover:bg-[#0f4ed8] text-white"
             onClick={handleCompletarLeccion}
             disabled={completarLeccionMutation.isPending}
           >
@@ -568,19 +572,21 @@ export default function CursoPlayer() {
         )}
 
         {/* Navigation buttons */}
-        <div className="flex justify-between items-center pt-6 border-t mt-6">
+        <div className="flex justify-between items-center pt-6 border-t border-gray-100 mt-6">
           <Button
             variant="outline"
+            className="border-gray-200"
             onClick={handlePreviousLeccion}
             disabled={!hasPreviousLeccion}
           >
             <ChevronLeft className="h-4 w-4 mr-2" />
             Anterior
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-gray-500 font-medium">
             {getCurrentLeccionIndex() + 1} de {getAllLecciones().length}
           </span>
           <Button
+            className="bg-[#135bec] hover:bg-[#0f4ed8] text-white"
             onClick={handleNextLeccion}
             disabled={!hasNextLeccion}
           >
@@ -594,11 +600,11 @@ export default function CursoPlayer() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[#f6f6f8]">
         <div className="p-4">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3" />
-            <div className="h-64 bg-muted rounded" />
+            <div className="h-8 bg-white rounded-xl w-1/3" />
+            <div className="h-64 bg-white rounded-xl" />
           </div>
         </div>
       </div>
@@ -607,14 +613,20 @@ export default function CursoPlayer() {
 
   if (!contenido) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-          <p className="text-muted-foreground mb-4">Curso no encontrado</p>
-          <Link href={`/portal/${clienteId}/cursos`}>
-            <Button>Volver a Mis Cursos</Button>
-          </Link>
-        </div>
+      <div className="min-h-screen bg-[#f6f6f8] flex items-center justify-center">
+        <Card className="bg-white border-0 shadow-sm mx-4">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="h-8 w-8 text-gray-400" />
+            </div>
+            <p className="text-gray-600 font-medium mb-4">Curso no encontrado</p>
+            <Link href={`/portal/${clienteId}/cursos`}>
+              <Button className="bg-[#135bec] hover:bg-[#0f4ed8] text-white">
+                Volver a Mis Cursos
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -622,20 +634,20 @@ export default function CursoPlayer() {
   const { curso, modulos, asignacion } = contenido;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[#f6f6f8]">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-background border-b">
+      <div className="sticky top-0 z-10 bg-white border-b shadow-sm">
         <div className="flex items-center gap-3 p-4">
           <Link href={`/portal/${clienteId}/cursos`}>
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
+            <button className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 transition-colors">
+              <ArrowLeft className="h-5 w-5 text-gray-600" />
+            </button>
           </Link>
           <div className="flex-1 min-w-0">
-            <h1 className="font-semibold truncate">{curso.nombre}</h1>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Progress value={asignacion.porcentajeProgreso || 0} className="w-20 h-1.5" />
-              <span>{asignacion.porcentajeProgreso || 0}% completado</span>
+            <h1 className="font-semibold text-gray-900 truncate">{curso.nombre}</h1>
+            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+              <Progress value={asignacion.porcentajeProgreso || 0} className="w-24 h-2" />
+              <span className="font-medium">{asignacion.porcentajeProgreso || 0}%</span>
             </div>
           </div>
         </div>
@@ -644,15 +656,15 @@ export default function CursoPlayer() {
       <div className="flex flex-col lg:flex-row">
         {/* Main content area */}
         <div className="flex-1 p-4">
-          <Card>
+          <Card className="bg-white border-0 shadow-sm">
             <CardContent className="p-4">{renderLeccionContent()}</CardContent>
           </Card>
         </div>
 
         {/* Sidebar - Course structure */}
-        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l bg-muted/30">
+        <div className="lg:w-80 border-t lg:border-t-0 lg:border-l bg-white">
           <div className="p-4">
-            <h3 className="font-semibold mb-3">Contenido del curso</h3>
+            <h3 className="font-semibold text-gray-900 mb-3">Contenido del curso</h3>
             <div className="space-y-2">
               {modulos.map((modulo, moduloIndex) => (
                 <Collapsible
@@ -661,21 +673,20 @@ export default function CursoPlayer() {
                   onOpenChange={() => toggleModulo(modulo.id)}
                 >
                   <CollapsibleTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start p-2 h-auto"
+                    <button
+                      className="w-full flex items-center gap-2 p-3 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors text-left"
                     >
                       {expandedModulos.has(modulo.id) ? (
-                        <ChevronDown className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
                       ) : (
-                        <ChevronRight className="h-4 w-4 mr-2 flex-shrink-0" />
+                        <ChevronRight className="h-4 w-4 text-gray-500 flex-shrink-0" />
                       )}
-                      <span className="text-sm font-medium truncate">
+                      <span className="text-sm font-semibold text-gray-900 truncate">
                         {moduloIndex + 1}. {modulo.nombre}
                       </span>
-                    </Button>
+                    </button>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="pl-6 space-y-1">
+                  <CollapsibleContent className="pl-4 space-y-1 mt-1">
                     {modulo.lecciones.map((leccion, leccionIndex) => {
                       const isActive = currentLeccion?.id === leccion.id;
                       const completed = isLeccionCompleted(leccion.id);
@@ -684,24 +695,25 @@ export default function CursoPlayer() {
                         <button
                           key={leccion.id}
                           onClick={() => handleSelectLeccion(leccion)}
-                          className={`w-full flex items-center gap-2 p-2 rounded-md text-left text-sm transition-colors ${
+                          className={cn(
+                            "w-full flex items-center gap-2 p-2.5 rounded-lg text-left text-sm transition-colors",
                             isActive
-                              ? "bg-primary/10 text-primary"
-                              : "hover:bg-muted"
-                          }`}
+                              ? "bg-[#135bec]/10 text-[#135bec]"
+                              : "hover:bg-gray-50 text-gray-700"
+                          )}
                         >
                           {completed ? (
                             <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                           ) : isActive ? (
-                            <PlayCircle className="h-4 w-4 flex-shrink-0" />
+                            <PlayCircle className="h-4 w-4 text-[#135bec] flex-shrink-0" />
                           ) : (
-                            <Circle className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                            <Circle className="h-4 w-4 flex-shrink-0 text-gray-300" />
                           )}
                           <span className="truncate flex-1">
                             {moduloIndex + 1}.{leccionIndex + 1} {leccion.nombre}
                           </span>
                           {leccion.duracionEstimadaMinutos && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-xs text-gray-400">
                               {leccion.duracionEstimadaMinutos}m
                             </span>
                           )}

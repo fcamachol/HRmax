@@ -1,70 +1,63 @@
-import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { Link, useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Umbrella,
-  Clock,
-  FileText,
+  Bell,
+  Timer,
   Receipt,
-  Folder,
-  ChevronRight,
-  CalendarDays,
-  AlertCircle,
+  Calendar,
+  FolderOpen,
+  ClipboardList,
+  GraduationCap,
+  Users,
+  LogIn,
+  LogOut,
+  Loader2,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalMobileLayout } from "@/components/portal/layout/PortalMobileLayout";
 import { PullToRefresh } from "@/components/portal/layout/PullToRefresh";
 import { usePortalAuth } from "@/contexts/PortalAuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 
-interface QuickAction {
-  title: string;
-  description: string;
-  icon: React.ComponentType<{ className?: string }>;
-  path: string;
-  color: string;
+interface Anuncio {
+  id: number;
+  titulo: string;
+  contenido: string;
+  tipo: "info" | "alerta" | "cultural";
+  imagen?: string;
+  etiqueta?: string;
 }
 
-const quickActionsConfig: QuickAction[] = [
-  {
-    title: "Vacaciones",
-    description: "Solicitar días",
-    icon: Umbrella,
-    path: "/solicitudes?tab=vacaciones",
-    color: "bg-blue-500",
-  },
-  {
-    title: "Permiso",
-    description: "Solicitar permiso",
-    icon: Clock,
-    path: "/solicitudes?tab=permisos",
-    color: "bg-purple-500",
-  },
-  {
-    title: "Recibos",
-    description: "Ver nómina",
-    icon: Receipt,
-    path: "/recibos",
-    color: "bg-green-500",
-  },
-  {
-    title: "Documentos",
-    description: "Mis archivos",
-    icon: Folder,
-    path: "/mas/documentos",
-    color: "bg-orange-500",
-  },
-];
+interface TodayStatus {
+  checkedIn: boolean;
+  horaEntrada: string | null;
+  horaSalida: string | null;
+  canCheckIn: boolean;
+  canCheckOut: boolean;
+}
 
 export default function PortalHome() {
+  const [, navigate] = useLocation();
   const { employee, clienteId } = usePortalAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [currentTime, setCurrentTime] = useState(format(new Date(), "hh:mm a"));
+  const today = new Date();
+  const formattedDate = format(today, "EEEE, d MMM", { locale: es });
+  const capitalizedDate = formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1);
 
-  const quickActions = quickActionsConfig.map(action => ({
-    ...action,
-    href: `/portal/${clienteId}${action.path}`,
-  }));
+  // Update time every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(format(new Date(), "hh:mm a"));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Fetch dashboard data
   const { data: dashboardData, refetch, isLoading } = useQuery({
@@ -74,180 +67,349 @@ export default function PortalHome() {
         credentials: "include",
       });
       if (!res.ok) {
-        // Return default data if endpoint doesn't exist yet
         return {
           vacacionesDisponibles: employee?.diasVacacionesDisponibles || 0,
           solicitudesPendientes: 0,
+          pendientesAprobar: 0,
           ultimoRecibo: null,
           anunciosPendientes: 0,
+          anuncios: [] as Anuncio[],
+          esAprobador: false,
+          ultimaEntrada: null,
+          documentosNuevos: 0,
         };
       }
       return res.json();
     },
   });
 
+  // Fetch today's attendance status
+  const { data: todayStatus, refetch: refetchTodayStatus } = useQuery({
+    queryKey: ["/api/portal/asistencia/hoy"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/asistencia/hoy", {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        return {
+          checkedIn: false,
+          horaEntrada: null,
+          horaSalida: null,
+          canCheckIn: true,
+          canCheckOut: false,
+        } as TodayStatus;
+      }
+      return res.json() as Promise<TodayStatus>;
+    },
+  });
+
+  // Check-in mutation
+  const checkInMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/asistencia/checkin", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar entrada");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Entrada registrada",
+        description: `Hora de entrada: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
+      refetchTodayStatus();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Check-out mutation
+  const checkOutMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/portal/asistencia/checkout", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al registrar salida");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Salida registrada",
+        description: `Hora de salida: ${format(new Date(), "HH:mm")}`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/asistencia"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
+      refetchTodayStatus();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRefresh = async () => {
-    await refetch();
+    await Promise.all([refetch(), refetchTodayStatus()]);
   };
 
-  return (
-    <PortalMobileLayout>
-      <PullToRefresh onRefresh={handleRefresh}>
-        <div className="px-4 py-4 space-y-6">
-          {/* Vacation Balance Card */}
-          <Card className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm opacity-90">Días de vacaciones</p>
-                  {isLoading ? (
-                    <Skeleton className="h-10 w-16 bg-primary-foreground/20 mt-1" />
-                  ) : (
-                    <p className="text-4xl font-bold mt-1">
-                      {dashboardData?.vacacionesDisponibles || 0}
-                    </p>
-                  )}
-                  <p className="text-xs opacity-75 mt-1">disponibles</p>
-                </div>
-                <CalendarDays className="h-12 w-12 opacity-50" />
-              </div>
-              <Link href={`/portal/${clienteId}/solicitudes?tab=vacaciones`}>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-4 w-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground border-0"
-                >
-                  Solicitar vacaciones
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+  const getFirstName = () => {
+    return employee?.nombre?.split(" ")[0] || "Usuario";
+  };
 
-          {/* Quick Actions Grid */}
-          <div>
-            <h2 className="text-sm font-semibold text-muted-foreground mb-3 px-1">
-              Acciones rápidas
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {quickActions.map((action) => (
-                <Link key={action.href} href={action.href}>
-                  <Card className="h-full hover:bg-accent/50 transition-colors active:scale-[0.98] touch-manipulation">
-                    <CardContent className="p-4">
-                      <div
-                        className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center mb-3",
-                          action.color
-                        )}
-                      >
-                        <action.icon className="h-5 w-5 text-white" />
-                      </div>
-                      <p className="font-medium text-sm">{action.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {action.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
+  const anuncios: Anuncio[] = (dashboardData?.anuncios as Anuncio[]) || [];
+
+  // Determine button state
+  const canCheckIn = todayStatus?.canCheckIn ?? true;
+  const canCheckOut = todayStatus?.canCheckOut ?? false;
+  const isProcessing = checkInMutation.isPending || checkOutMutation.isPending;
+
+  const handleAttendanceAction = () => {
+    if (canCheckIn) {
+      checkInMutation.mutate();
+    } else if (canCheckOut) {
+      checkOutMutation.mutate();
+    }
+  };
+
+  // Dashboard tiles config
+  const dashboardTiles = [
+    {
+      id: "recibos",
+      title: "Recibos",
+      subtitle: "Ver último pago",
+      icon: Receipt,
+      iconBg: "bg-green-50",
+      iconColor: "text-green-600",
+      path: `/portal/${clienteId}/recibos`,
+    },
+    {
+      id: "asistencias",
+      title: "Asistencias",
+      subtitle: todayStatus?.horaEntrada
+        ? `Check-in: ${todayStatus.horaEntrada}`
+        : "Sin registro hoy",
+      subtitleColor: todayStatus?.horaEntrada ? "text-green-600 font-bold" : "text-gray-500",
+      icon: Calendar,
+      iconBg: "bg-blue-50",
+      iconColor: "text-[#135bec]",
+      path: `/portal/${clienteId}/asistencia`,
+    },
+    {
+      id: "documentos",
+      title: "Documentos",
+      subtitle: dashboardData?.documentosNuevos
+        ? `${dashboardData.documentosNuevos} nuevos`
+        : "Ver documentos",
+      showDot: (dashboardData?.documentosNuevos || 0) > 0,
+      icon: FolderOpen,
+      iconBg: "bg-orange-50",
+      iconColor: "text-orange-600",
+      path: `/portal/${clienteId}/documentos`,
+    },
+    {
+      id: "solicitudes",
+      title: "Solicitudes",
+      subtitle: dashboardData?.solicitudesPendientes
+        ? "Vacaciones pendientes"
+        : "Sin pendientes",
+      subtitleColor: dashboardData?.solicitudesPendientes ? "text-orange-500" : "text-gray-500",
+      icon: ClipboardList,
+      iconBg: "bg-cyan-50",
+      iconColor: "text-cyan-600",
+      path: `/portal/${clienteId}/solicitudes`,
+    },
+    {
+      id: "capacitacion",
+      title: "Capacitación",
+      subtitle: "Mis cursos",
+      icon: GraduationCap,
+      iconBg: "bg-purple-50",
+      iconColor: "text-purple-600",
+      path: `/portal/${clienteId}/cursos`,
+    },
+    {
+      id: "directorio",
+      title: "Directorio",
+      subtitle: "Buscar colegas",
+      icon: Users,
+      iconBg: "bg-indigo-50",
+      iconColor: "text-indigo-600",
+      path: `/portal/${clienteId}/directorio`,
+    },
+  ];
+
+  return (
+    <PortalMobileLayout showHeader={false}>
+      <PullToRefresh onRefresh={handleRefresh}>
+        <div className="bg-[#f6f6f8] min-h-screen pb-24">
+          {/* Top App Bar */}
+          <div className="sticky top-0 z-40 bg-[#f6f6f8]/95 backdrop-blur-sm border-b border-gray-200/50 px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="relative shrink-0">
+                <div
+                  className="bg-center bg-no-repeat bg-cover rounded-full w-10 h-10 border-2 border-white shadow-sm bg-gradient-to-br from-[#135bec] to-blue-400 flex items-center justify-center text-white font-bold text-sm"
+                >
+                  {getFirstName().charAt(0)}
+                </div>
+                <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+              </div>
+              <div>
+                <p className="text-xs text-gray-500 font-medium">Bienvenido</p>
+                <h2 className="text-gray-900 text-lg font-bold leading-tight tracking-tight">
+                  Hola, {getFirstName()}
+                </h2>
+              </div>
+            </div>
+            <button
+              onClick={() => navigate(`/portal/${clienteId}/notificaciones`)}
+              className="relative p-2 text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <Bell className="h-6 w-6" />
+              {(dashboardData?.anunciosPendientes || 0) > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-white" />
+              )}
+            </button>
+          </div>
+
+          {/* Clock In / Quick Action */}
+          <div className="px-4 mt-5">
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-500 font-medium">{capitalizedDate}</span>
+                <span className="text-xl font-bold text-gray-900">{currentTime}</span>
+              </div>
+              <Button
+                className={cn(
+                  "flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold shadow-lg transition-all active:scale-95",
+                  canCheckOut
+                    ? "bg-orange-500 hover:bg-orange-600 shadow-orange-500/20 text-white"
+                    : "bg-[#135bec] hover:bg-[#135bec]/90 shadow-[#135bec]/20 text-white"
+                )}
+                disabled={isProcessing || (!canCheckIn && !canCheckOut)}
+                onClick={handleAttendanceAction}
+              >
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span>Registrando...</span>
+                  </>
+                ) : canCheckOut ? (
+                  <>
+                    <LogOut className="h-5 w-5" />
+                    <span>Registrar Salida</span>
+                  </>
+                ) : (
+                  <>
+                    <LogIn className="h-5 w-5" />
+                    <span>Registrar Entrada</span>
+                  </>
+                )}
+              </Button>
             </div>
           </div>
 
-          {/* Pending Requests */}
-          {(dashboardData?.solicitudesPendientes || 0) > 0 && (
-            <Link href={`/portal/${clienteId}/solicitudes`}>
-              <Card className="border-yellow-500/50 bg-yellow-50 dark:bg-yellow-900/10">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                    <AlertCircle className="h-5 w-5 text-yellow-600" />
+          {/* Section: Anuncios Importantes */}
+          {anuncios.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between px-4 pb-3">
+                <h3 className="text-gray-900 text-lg font-bold tracking-tight">Anuncios Importantes</h3>
+                <Link href={`/portal/${clienteId}/mas/anuncios`}>
+                  <span className="text-sm font-medium text-[#135bec] hover:text-[#135bec]/80">Ver todo</span>
+                </Link>
+              </div>
+              <div className="flex overflow-x-auto no-scrollbar gap-4 px-4 pb-4 snap-x snap-mandatory">
+                {anuncios.slice(0, 5).map((anuncio) => (
+                  <div
+                    key={anuncio.id}
+                    className="snap-center shrink-0 w-[280px] flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm border border-gray-100"
+                  >
+                    <div
+                      className="w-full h-36 bg-center bg-cover rounded-lg relative overflow-hidden bg-gradient-to-br from-[#135bec] to-blue-400"
+                      style={anuncio.imagen ? { backgroundImage: `url("${anuncio.imagen}")` } : {}}
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                      {anuncio.etiqueta && (
+                        <span className="absolute bottom-2 left-2 bg-[#135bec]/90 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                          {anuncio.etiqueta}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-gray-900 text-base font-bold leading-tight">{anuncio.titulo}</p>
+                      <p className="text-gray-500 text-sm mt-1 line-clamp-1">{anuncio.contenido}</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">Solicitudes pendientes</p>
-                    <p className="text-xs text-muted-foreground">
-                      Tienes {dashboardData?.solicitudesPendientes} solicitud(es)
-                      en proceso
-                    </p>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </Link>
+                ))}
+              </div>
+            </div>
           )}
 
-          {/* Recent Payslip Preview */}
-          <div>
-            <div className="flex items-center justify-between mb-3 px-1">
-              <h2 className="text-sm font-semibold text-muted-foreground">
-                Último recibo
-              </h2>
-              <Link href={`/portal/${clienteId}/recibos`}>
-                <Button variant="ghost" size="sm" className="text-xs h-7">
-                  Ver todos
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </Button>
-              </Link>
-            </div>
+          {/* Section: Dashboard Tiles */}
+          <div className="mt-4 px-4">
+            <h3 className="text-gray-900 text-lg font-bold tracking-tight mb-3">Mi Resumen</h3>
             {isLoading ? (
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-3">
-                    <Skeleton className="w-10 h-10 rounded-lg" />
-                    <div className="flex-1">
-                      <Skeleton className="h-4 w-32 mb-2" />
+              <div className="grid grid-cols-2 gap-3">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="flex flex-col gap-3 rounded-xl bg-white p-4 border border-gray-100 shadow-sm">
+                    <Skeleton className="w-12 h-12 rounded-lg" />
+                    <div className="flex flex-col gap-1">
+                      <Skeleton className="h-5 w-20" />
                       <Skeleton className="h-3 w-24" />
                     </div>
-                    <Skeleton className="h-6 w-20" />
                   </div>
-                </CardContent>
-              </Card>
-            ) : dashboardData?.ultimoRecibo ? (
-              <Link href={`/portal/${clienteId}/recibos/${dashboardData.ultimoRecibo.id}`}>
-                <Card className="hover:bg-accent/50 transition-colors active:scale-[0.98] touch-manipulation">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                      <FileText className="h-5 w-5 text-green-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">
-                        {dashboardData.ultimoRecibo.periodo}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {dashboardData.ultimoRecibo.fecha}
-                      </p>
-                    </div>
-                    <Badge variant="secondary" className="font-mono">
-                      ${Number(dashboardData.ultimoRecibo.neto).toLocaleString()}
-                    </Badge>
-                  </CardContent>
-                </Card>
-              </Link>
+                ))}
+              </div>
             ) : (
-              <Card>
-                <CardContent className="p-6 text-center">
-                  <FileText className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    No hay recibos disponibles
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="grid grid-cols-2 gap-3">
+                {dashboardTiles.map((tile) => (
+                  <Link key={tile.id} href={tile.path}>
+                    <div className="flex flex-col gap-3 rounded-xl bg-white p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-pointer group active:scale-[0.98]">
+                      <div className={cn(
+                        "w-12 h-12 rounded-lg flex items-center justify-center",
+                        tile.iconBg || "bg-blue-50"
+                      )}>
+                        <tile.icon className={cn("h-6 w-6", tile.iconColor || "text-[#135bec]")} />
+                      </div>
+                      <div className="flex flex-col gap-0.5">
+                        <h2 className="text-gray-900 text-base font-semibold">{tile.title}</h2>
+                        <div className="flex items-center gap-1.5">
+                          {tile.showDot && (
+                            <span className="flex w-2 h-2 rounded-full bg-red-500" />
+                          )}
+                          <p className={cn(
+                            "text-xs font-medium",
+                            tile.subtitleColor || "text-gray-500"
+                          )}>
+                            {tile.subtitle}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
             )}
           </div>
 
-          {/* Announcements Preview */}
-          {(dashboardData?.anunciosPendientes || 0) > 0 && (
-            <Link href={`/portal/${clienteId}/mas/anuncios`}>
-              <Card>
-                <CardContent className="p-4 flex items-center gap-3">
-                  <Badge variant="destructive" className="h-6 min-w-6 px-2">
-                    {dashboardData?.anunciosPendientes}
-                  </Badge>
-                  <p className="text-sm">
-                    Anuncio(s) sin leer
-                  </p>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground ml-auto" />
-                </CardContent>
-              </Card>
-            </Link>
-          )}
+          {/* Additional Content Spacing */}
+          <div className="h-8" />
         </div>
       </PullToRefresh>
     </PortalMobileLayout>

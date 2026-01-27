@@ -149,19 +149,19 @@ export default function PortalLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex flex-col">
+    <div className="min-h-screen bg-gradient-to-b from-[#135bec]/5 to-white flex flex-col">
       {/* Logo area */}
       <div className="flex-1 flex items-end justify-center pb-8 pt-safe">
         <div className="text-center">
-          <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <span className="text-3xl font-bold text-primary-foreground">
+          <div className="w-20 h-20 bg-[#135bec] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-[#135bec]/30">
+            <span className="text-3xl font-bold text-white">
               HR
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-2xl font-bold text-gray-900">
             {clientInfo ? `Portal ${clientInfo.nombreComercial}` : "Portal Empleados"}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             {setupMode ? "Configura tu contraseña" : "Accede a tu información laboral"}
           </p>
         </div>
@@ -173,8 +173,8 @@ export default function PortalLogin() {
           {setupMode ? (
             // Password Setup Form
             <>
-              <div className="mb-6 p-4 bg-muted/50 rounded-lg">
-                <div className="flex items-center gap-2 text-primary mb-2">
+              <div className="mb-6 p-4 bg-[#135bec]/5 rounded-xl border border-[#135bec]/10">
+                <div className="flex items-center gap-2 text-[#135bec] mb-2">
                   <CheckCircle className="h-5 w-5" />
                   <span className="font-medium">RFC verificado</span>
                 </div>
@@ -257,7 +257,7 @@ export default function PortalLogin() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold"
+                    className="w-full h-12 text-base font-semibold bg-[#135bec] hover:bg-[#0f4ed8] text-white"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -350,7 +350,7 @@ export default function PortalLogin() {
 
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold"
+                    className="w-full h-12 text-base font-semibold bg-[#135bec] hover:bg-[#0f4ed8] text-white"
                     disabled={isLoading}
                   >
                     {isLoading ? (
@@ -366,12 +366,12 @@ export default function PortalLogin() {
               </Form>
 
               <div className="mt-6 text-center">
-                <Button variant="ghost" className="text-sm text-muted-foreground">
+                <Button variant="ghost" className="text-sm text-[#135bec] hover:text-[#0f4ed8] hover:bg-[#135bec]/5">
                   ¿Olvidaste tu contraseña?
                 </Button>
               </div>
 
-              <p className="mt-8 text-center text-xs text-muted-foreground">
+              <p className="mt-8 text-center text-xs text-gray-400">
                 Si no tienes acceso, contacta a Recursos Humanos
               </p>
             </>
