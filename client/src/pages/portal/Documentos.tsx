@@ -27,7 +27,6 @@ import {
   FileImage,
   Trash2,
   Eye,
-  Camera,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -138,7 +137,6 @@ export default function PortalDocumentos() {
   const [selectedPersonalDocType, setSelectedPersonalDocType] = useState<string>("");
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch documents
   const { data: documents, isLoading, refetch } = useQuery({
@@ -765,7 +763,6 @@ export default function PortalDocumentos() {
         height="auto"
       >
         <div className="space-y-4">
-          {/* Hidden file inputs */}
           <input
             ref={fileInputRef}
             type="file"
@@ -773,48 +770,20 @@ export default function PortalDocumentos() {
             onChange={handleFileSelect}
             className="hidden"
           />
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handleFileSelect}
-            className="hidden"
-          />
 
-          {/* Upload options */}
+          {/* Upload area */}
           {!uploadingFile ? (
-            <div className="space-y-3">
-              {/* Two action buttons */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Take Photo button */}
-                <button
-                  onClick={() => cameraInputRef.current?.click()}
-                  className="flex flex-col items-center gap-3 p-5 rounded-xl border-2 border-dashed border-purple-200 bg-purple-50/50 hover:border-purple-400 hover:bg-purple-100/50 transition-all active:scale-[0.98]"
-                >
-                  <div className="w-14 h-14 bg-purple-100 rounded-full flex items-center justify-center">
-                    <Camera className="h-7 w-7 text-purple-600" />
-                  </div>
-                  <span className="font-semibold text-sm text-purple-700">
-                    Tomar Foto
-                  </span>
-                </button>
-
-                {/* Select File button */}
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex flex-col items-center gap-3 p-5 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-100/50 transition-all active:scale-[0.98]"
-                >
-                  <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center">
-                    <FolderOpen className="h-7 w-7 text-gray-600" />
-                  </div>
-                  <span className="font-semibold text-sm text-gray-700">
-                    Seleccionar Archivo
-                  </span>
-                </button>
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-purple-300 hover:bg-purple-50/50 transition-all"
+            >
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Upload className="h-8 w-8 text-purple-600" />
               </div>
-
-              <p className="text-xs text-center text-gray-500">
+              <p className="font-semibold text-gray-900 mb-1">
+                Toca para seleccionar archivo
+              </p>
+              <p className="text-sm text-gray-500">
                 PDF o imagen, máximo 5MB
               </p>
             </div>

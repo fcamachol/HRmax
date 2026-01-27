@@ -57,7 +57,7 @@ export function BottomSheet({
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-50 bg-black/50 animate-in fade-in-0 duration-200"
+        className="fixed inset-0 z-[60] bg-black/50 animate-in fade-in-0 duration-200"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -69,7 +69,7 @@ export function BottomSheet({
         aria-modal="true"
         aria-labelledby={title ? "bottom-sheet-title" : undefined}
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 bg-background rounded-t-2xl shadow-xl",
+          "fixed inset-x-0 bottom-0 z-[60] bg-background rounded-t-2xl shadow-xl",
           "animate-in slide-in-from-bottom duration-300 ease-out",
           "flex flex-col",
           heightClasses[height]
@@ -106,7 +106,7 @@ export function BottomSheet({
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-6 safe-area-bottom">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 pb-24 safe-area-bottom">
           {children}
         </div>
       </div>

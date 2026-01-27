@@ -316,7 +316,23 @@ import {
   // Supervisor-Centro assignments
   type SupervisorCentroTrabajo,
   type InsertSupervisorCentroTrabajo,
-  supervisorCentrosTrabajo
+  supervisorCentrosTrabajo,
+  // Anonymous Reporting System (Denuncias)
+  type DenunciaAnonima,
+  type InsertDenunciaAnonima,
+  denunciasAnonimas,
+  type DenunciaMensaje,
+  type InsertDenunciaMensaje,
+  denunciaMensajes,
+  type DenunciaAdjunto,
+  type InsertDenunciaAdjunto,
+  denunciaAdjuntos,
+  type DenunciaAuditLog,
+  type InsertDenunciaAuditLog,
+  denunciaAuditLog,
+  type DenunciaConfiguracion,
+  type InsertDenunciaConfiguracion,
+  denunciaConfiguracion
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
@@ -881,7 +897,12 @@ export interface IStorage {
   checkIncapacidadesOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<Incapacidad[]>;
   getIncapacidadesScopedByUser(userId: string, isAdmin: boolean): Promise<Incapacidad[]>; // Access control for sensitive data
   getIncapacidadSecure(id: string, userId: string, isAdmin: boolean): Promise<Incapacidad | undefined>; // Masked data for non-admins
-  
+
+  // Incapacidades - Portal Verification Workflow
+  getIncapacidadesPendientesVerificacion(): Promise<Incapacidad[]>;
+  verificarIncapacidad(id: string, verificadoPor: string): Promise<Incapacidad>;
+  rechazarIncapacidad(id: string, motivoRechazo: string): Promise<Incapacidad>;
+
   // Permisos helpers
   checkPermisosOverlap(empleadoId: string, fechaInicio: string, fechaFin: string, excludeId?: string): Promise<SolicitudPermiso[]>;
   getPendingPermisosApprovals(): Promise<SolicitudPermiso[]>;
@@ -1041,6 +1062,30 @@ export interface IStorage {
   getOnboardingAuditByCliente(clienteId: string): Promise<OnboardingAuditRecord | undefined>;
   createOnboardingAudit(audit: InsertOnboardingAudit): Promise<OnboardingAuditRecord>;
   updateOnboardingAudit(id: string, updates: Partial<InsertOnboardingAudit>): Promise<OnboardingAuditRecord>;
+
+  // Anonymous Reporting System (Denuncias)
+  createDenuncia(denuncia: InsertDenunciaAnonima): Promise<DenunciaAnonima>;
+  getDenuncia(id: string): Promise<DenunciaAnonima | undefined>;
+  getDenunciaByCaseNumber(caseNumber: string): Promise<DenunciaAnonima | undefined>;
+  getDenunciasByCliente(clienteId: string): Promise<DenunciaAnonima[]>;
+  getDenunciasByEmpresa(empresaId: string): Promise<DenunciaAnonima[]>;
+  updateDenuncia(id: string, updates: Partial<InsertDenunciaAnonima>): Promise<DenunciaAnonima>;
+
+  // Denuncia Messages
+  createDenunciaMensaje(mensaje: InsertDenunciaMensaje): Promise<DenunciaMensaje>;
+  getDenunciaMensajes(denunciaId: string): Promise<DenunciaMensaje[]>;
+
+  // Denuncia Attachments
+  createDenunciaAdjunto(adjunto: InsertDenunciaAdjunto): Promise<DenunciaAdjunto>;
+  getDenunciaAdjuntos(denunciaId: string): Promise<DenunciaAdjunto[]>;
+
+  // Denuncia Audit Log
+  createDenunciaAuditLog(log: InsertDenunciaAuditLog): Promise<DenunciaAuditLog>;
+  getDenunciaAuditLog(denunciaId: string): Promise<DenunciaAuditLog[]>;
+
+  // Denuncia Configuration
+  getDenunciaConfiguracion(clienteId: string): Promise<DenunciaConfiguracion | undefined>;
+  upsertDenunciaConfiguracion(config: InsertDenunciaConfiguracion): Promise<DenunciaConfiguracion>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1066,10 +1111,13 @@ export class DatabaseStorage implements IStorage {
   async createEmployee(employee: InsertEmployee): Promise<Employee> {
     // Calculate salarioDiarioExento automatically
     const employeeWithExento = this.calculateSalarioDiarioExento(employee);
-    
+
     const [newEmployee] = await db
       .insert(employees)
-      .values(employeeWithExento)
+      .values({
+        ...employeeWithExento,
+        id: nanoid(10),
+      })
       .returning();
     return newEmployee;
   }
@@ -1102,10 +1150,13 @@ export class DatabaseStorage implements IStorage {
     if (employeeList.length === 0) {
       return [];
     }
-    
-    // Calculate salarioDiarioExento for all employees
-    const employeesWithExento = employeeList.map(emp => this.calculateSalarioDiarioExento(emp));
-    
+
+    // Calculate salarioDiarioExento and generate nanoid for all employees
+    const employeesWithExento = employeeList.map(emp => ({
+      ...this.calculateSalarioDiarioExento(emp),
+      id: nanoid(10),
+    }));
+
     const newEmployees = await db
       .insert(employees)
       .values(employeesWithExento)
@@ -1832,7 +1883,10 @@ export class DatabaseStorage implements IStorage {
   async createEmpresa(empresa: InsertEmpresa): Promise<Empresa> {
     const [newEmpresa] = await db
       .insert(empresas)
-      .values(empresa)
+      .values({
+        ...empresa,
+        id: nanoid(10),
+      })
       .returning();
     return newEmpresa;
   }
@@ -4062,6 +4116,63 @@ export class DatabaseStorage implements IStorage {
     await db.delete(incapacidades).where(eq(incapacidades.id, id));
   }
 
+  // Incapacidades - Portal Verification Workflow
+  async getIncapacidadesPendientesVerificacion(): Promise<Incapacidad[]> {
+    const results = await db
+      .select({
+        incapacidad: incapacidades,
+        empleado: {
+          nombre: employees.nombre,
+          apellidoPaterno: employees.apellidoPaterno,
+          apellidoMaterno: employees.apellidoMaterno,
+          numeroEmpleado: employees.numeroEmpleado,
+          puesto: employees.puesto,
+          departamento: employees.departamento,
+        },
+      })
+      .from(incapacidades)
+      .leftJoin(employees, eq(incapacidades.empleadoId, employees.id))
+      .where(
+        and(
+          eq(incapacidades.verificado, false),
+          eq(incapacidades.origenRegistro, "portal")
+        )
+      )
+      .orderBy(desc(incapacidades.createdAt));
+
+    return results.map((r) => ({
+      ...r.incapacidad,
+      empleado: r.empleado as any,
+    })) as any;
+  }
+
+  async verificarIncapacidad(id: string, verificadoPor: string): Promise<Incapacidad> {
+    const [updated] = await db
+      .update(incapacidades)
+      .set({
+        verificado: true,
+        verificadoPor,
+        fechaVerificacion: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(incapacidades.id, id))
+      .returning();
+    return updated;
+  }
+
+  async rechazarIncapacidad(id: string, motivoRechazo: string): Promise<Incapacidad> {
+    const [updated] = await db
+      .update(incapacidades)
+      .set({
+        estatus: "rechazada_documentos",
+        motivoRechazo,
+        updatedAt: new Date(),
+      })
+      .where(eq(incapacidades.id, id))
+      .returning();
+    return updated;
+  }
+
   // ==================== Permisos (Permission Requests) ====================
   
   async createSolicitudPermiso(solicitud: InsertSolicitudPermiso): Promise<SolicitudPermiso> {
@@ -4704,6 +4815,7 @@ export class DatabaseStorage implements IStorage {
   // Clientes
   async createCliente(cliente: InsertCliente): Promise<Cliente> {
     // Generate short ID (10 chars) for new clients instead of UUID
+    // Also generate URL-safe slug (12 chars) for public portals
     const [result] = await db.insert(clientes).values({
       ...cliente,
       id: nanoid(10),
@@ -7211,6 +7323,123 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.update(documentosGenerados)
       .set(updates)
       .where(eq(documentosGenerados.id, id))
+      .returning();
+    return result;
+  }
+
+  // ============================================================================
+  // Anonymous Reporting System (Denuncias)
+  // ============================================================================
+
+  async createDenuncia(denuncia: InsertDenunciaAnonima): Promise<DenunciaAnonima> {
+    const [result] = await db.insert(denunciasAnonimas)
+      .values(denuncia)
+      .returning();
+    return result;
+  }
+
+  async getDenuncia(id: string): Promise<DenunciaAnonima | undefined> {
+    const [result] = await db.select()
+      .from(denunciasAnonimas)
+      .where(eq(denunciasAnonimas.id, id));
+    return result || undefined;
+  }
+
+  async getDenunciaByCaseNumber(caseNumber: string): Promise<DenunciaAnonima | undefined> {
+    const [result] = await db.select()
+      .from(denunciasAnonimas)
+      .where(eq(denunciasAnonimas.caseNumber, caseNumber));
+    return result || undefined;
+  }
+
+  async getDenunciasByCliente(clienteId: string): Promise<DenunciaAnonima[]> {
+    return db.select()
+      .from(denunciasAnonimas)
+      .where(eq(denunciasAnonimas.clienteId, clienteId))
+      .orderBy(desc(denunciasAnonimas.createdAt));
+  }
+
+  async getDenunciasByEmpresa(empresaId: string): Promise<DenunciaAnonima[]> {
+    return db.select()
+      .from(denunciasAnonimas)
+      .where(eq(denunciasAnonimas.empresaId, empresaId))
+      .orderBy(desc(denunciasAnonimas.createdAt));
+  }
+
+  async updateDenuncia(id: string, updates: Partial<InsertDenunciaAnonima>): Promise<DenunciaAnonima> {
+    const [result] = await db.update(denunciasAnonimas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(denunciasAnonimas.id, id))
+      .returning();
+    return result;
+  }
+
+  // Denuncia Messages
+  async createDenunciaMensaje(mensaje: InsertDenunciaMensaje): Promise<DenunciaMensaje> {
+    const [result] = await db.insert(denunciaMensajes)
+      .values(mensaje)
+      .returning();
+    return result;
+  }
+
+  async getDenunciaMensajes(denunciaId: string): Promise<DenunciaMensaje[]> {
+    return db.select()
+      .from(denunciaMensajes)
+      .where(eq(denunciaMensajes.denunciaId, denunciaId))
+      .orderBy(denunciaMensajes.createdAt);
+  }
+
+  // Denuncia Attachments
+  async createDenunciaAdjunto(adjunto: InsertDenunciaAdjunto): Promise<DenunciaAdjunto> {
+    const [result] = await db.insert(denunciaAdjuntos)
+      .values(adjunto)
+      .returning();
+    return result;
+  }
+
+  async getDenunciaAdjuntos(denunciaId: string): Promise<DenunciaAdjunto[]> {
+    return db.select()
+      .from(denunciaAdjuntos)
+      .where(eq(denunciaAdjuntos.denunciaId, denunciaId))
+      .orderBy(denunciaAdjuntos.createdAt);
+  }
+
+  // Denuncia Audit Log
+  async createDenunciaAuditLog(log: InsertDenunciaAuditLog): Promise<DenunciaAuditLog> {
+    const [result] = await db.insert(denunciaAuditLog)
+      .values(log)
+      .returning();
+    return result;
+  }
+
+  async getDenunciaAuditLog(denunciaId: string): Promise<DenunciaAuditLog[]> {
+    return db.select()
+      .from(denunciaAuditLog)
+      .where(eq(denunciaAuditLog.denunciaId, denunciaId))
+      .orderBy(desc(denunciaAuditLog.createdAt));
+  }
+
+  // Denuncia Configuration
+  async getDenunciaConfiguracion(clienteId: string): Promise<DenunciaConfiguracion | undefined> {
+    const [result] = await db.select()
+      .from(denunciaConfiguracion)
+      .where(eq(denunciaConfiguracion.clienteId, clienteId));
+    return result || undefined;
+  }
+
+  async upsertDenunciaConfiguracion(config: InsertDenunciaConfiguracion): Promise<DenunciaConfiguracion> {
+    // Try to update existing config
+    const existing = await this.getDenunciaConfiguracion(config.clienteId);
+    if (existing) {
+      const [result] = await db.update(denunciaConfiguracion)
+        .set({ ...config, updatedAt: new Date() })
+        .where(eq(denunciaConfiguracion.clienteId, config.clienteId))
+        .returning();
+      return result;
+    }
+    // Create new config
+    const [result] = await db.insert(denunciaConfiguracion)
+      .values(config)
       .returning();
     return result;
   }

@@ -1142,11 +1142,11 @@ export const clientes = pgTable("clientes", {
   rfc: varchar("rfc", { length: 13 }).notNull().unique(),
   activo: boolean("activo").notNull().default(true),
   fechaAlta: date("fecha_alta").notNull().default(sql`CURRENT_DATE`),
-  
+
   // Datos de contacto
   telefono: varchar("telefono"),
   email: varchar("email"),
-  
+
   // Notas
   notas: text("notas"),
 
@@ -2592,8 +2592,12 @@ export const tiposIncapacidad = ["enfermedad_general", "riesgo_trabajo", "matern
 export type TipoIncapacidad = typeof tiposIncapacidad[number];
 
 // Estados de incapacidades
-export const estatusIncapacidad = ["activa", "cerrada", "rechazada_imss"] as const;
+export const estatusIncapacidad = ["activa", "cerrada", "rechazada_imss", "rechazada_documentos"] as const;
 export type EstatusIncapacidad = typeof estatusIncapacidad[number];
+
+// Origen del registro
+export const origenRegistroIncapacidad = ["admin", "portal"] as const;
+export type OrigenRegistroIncapacidad = typeof origenRegistroIncapacidad[number];
 
 export const incapacidades = pgTable("incapacidades", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2620,10 +2624,17 @@ export const incapacidades = pgTable("incapacidades", {
   pagoIMSSDesde: date("pago_imss_desde"), // IMSS paga desde 4to día en enfermedad general, 1er día en otros
   
   // Control y notas
-  estatus: varchar("estatus").notNull().default("activa"), // activa, cerrada, rechazada_imss
+  estatus: varchar("estatus").notNull().default("activa"), // activa, cerrada, rechazada_imss, rechazada_documentos
   notasInternas: text("notas_internas"),
   registradoPor: varchar("registrado_por"), // ID de quien lo registró - idealmente FK a employees/users
-  
+
+  // Verificación (para registros del portal)
+  verificado: boolean("verificado").notNull().default(true), // true para admin, false para portal hasta verificación
+  verificadoPor: varchar("verificado_por"), // ID del usuario de RH que verificó
+  fechaVerificacion: timestamp("fecha_verificacion"),
+  motivoRechazo: text("motivo_rechazo"), // Si fue rechazado por documentos incompletos
+  origenRegistro: varchar("origen_registro").notNull().default("admin"), // "admin" | "portal"
+
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
 }, (table) => ({
@@ -2632,6 +2643,7 @@ export const incapacidades = pgTable("incapacidades", {
   empleadoEstatusIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_estatus_idx ON ${table} (empleado_id, estatus)`,
   empleadoTipoIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_empleado_tipo_idx ON ${table} (empleado_id, tipo)`,
   clienteEmpresaIdx: index("incapacidades_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  verificadoIdx: sql`CREATE INDEX IF NOT EXISTS incapacidades_verificado_idx ON ${table} (verificado, origen_registro)`,
 }));
 
 // ============================================================================
@@ -2732,6 +2744,7 @@ const baseIncapacidadSchema = createInsertSchema(incapacidades).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+  fechaVerificacion: true,
 }).extend({
   tipo: z.enum(["enfermedad_general", "riesgo_trabajo", "maternidad"], {
     errorMap: () => ({ message: "Tipo de incapacidad inválido" }),
@@ -2740,8 +2753,32 @@ const baseIncapacidadSchema = createInsertSchema(incapacidades).omit({
   porcentajePago: z.union([z.coerce.number().int().min(0).max(100), z.literal("").transform(() => undefined)]).optional(),
   fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
   fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
-  estatus: z.enum(["activa", "cerrada", "rechazada_imss"]).default("activa"),
+  estatus: z.enum(["activa", "cerrada", "rechazada_imss", "rechazada_documentos"]).default("activa"),
+  verificado: z.boolean().default(true),
+  origenRegistro: z.enum(["admin", "portal"]).default("admin"),
 });
+
+// Schema for portal submissions (fewer required fields)
+export const insertIncapacidadPortalSchema = z.object({
+  tipo: z.enum(["enfermedad_general", "riesgo_trabajo", "maternidad"], {
+    errorMap: () => ({ message: "Tipo de incapacidad inválido" }),
+  }),
+  fechaInicio: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de inicio inválida"),
+  fechaFin: z.string().refine((val) => !isNaN(Date.parse(val)), "Fecha de fin inválida"),
+  diasIncapacidad: z.coerce.number().int().positive("Debe tener al menos 1 día de incapacidad"),
+  numeroCertificado: z.string().optional(),
+  certificadoMedicoUrl: z.string().optional(),
+  unidadMedica: z.string().optional(),
+  medicoNombre: z.string().optional(),
+}).refine(
+  (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),
+  {
+    message: "La fecha de fin debe ser posterior o igual a la fecha de inicio",
+    path: ["fechaFin"],
+  }
+);
+
+export type InsertIncapacidadPortal = z.infer<typeof insertIncapacidadPortalSchema>;
 
 export const insertIncapacidadSchema = baseIncapacidadSchema.refine(
   (data) => new Date(data.fechaFin) >= new Date(data.fechaInicio),

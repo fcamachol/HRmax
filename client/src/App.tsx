@@ -90,6 +90,10 @@ import PortalAprobaciones from "@/pages/portal/Aprobaciones";
 import PortalNotificaciones from "@/pages/portal/Notificaciones";
 import AgencyDashboard from "@/pages/AgencyDashboard";
 
+// Anonymous Denuncia (Public) Pages
+import DenunciaSubmit from "@/pages/denuncia/Submit";
+import DenunciaTrack from "@/pages/denuncia/Track";
+
 // Agency routes (for MaxTalent users without a specific client selected)
 function AgencyRouter() {
   return (
@@ -309,6 +313,11 @@ export default function App() {
                   </PortalAuthProvider>
                 )}
               </Route>
+
+              {/* Anonymous Denuncia (Public) routes - no auth required */}
+              <Route path="/denuncia/:clienteId/:empresaId/seguimiento" component={DenunciaTrack} />
+              <Route path="/denuncia/:clienteId/:empresaId" component={DenunciaSubmit} />
+
             <Route path="/super-admin/users">
               {() => (
                 <SuperAdminLayout>

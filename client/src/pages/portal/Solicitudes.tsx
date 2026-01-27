@@ -14,7 +14,9 @@ import {
   Ban,
   Home,
   FileText,
+  HeartPulse,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,7 +41,7 @@ type FilterTab = "todos" | "vacaciones" | "permisos" | "horas_extra";
 
 interface Request {
   id: string;
-  tipo: "vacaciones" | "permiso" | "horas_extra" | "home_office";
+  tipo: "vacaciones" | "permiso" | "horas_extra" | "home_office" | "incapacidad";
   fechaInicio: string;
   fechaFin: string;
   dias: number;
@@ -61,7 +63,14 @@ const tipoConfig: Record<string, { label: string; icon: typeof Plane; bgColor: s
   permiso: { label: "Permiso Personal", icon: Ban, bgColor: "bg-red-50", iconColor: "text-red-600" },
   horas_extra: { label: "Horas Extra", icon: Clock, bgColor: "bg-green-50", iconColor: "text-green-600" },
   home_office: { label: "Home Office", icon: Home, bgColor: "bg-purple-50", iconColor: "text-purple-600" },
+  incapacidad: { label: "Incapacidad", icon: HeartPulse, bgColor: "bg-orange-50", iconColor: "text-orange-600" },
 };
+
+const tiposIncapacidad = [
+  { value: "enfermedad_general", label: "Enfermedad General", pago: 60, info: "IMSS paga 60% desde el día 4" },
+  { value: "riesgo_trabajo", label: "Riesgo de Trabajo", pago: 100, info: "IMSS paga 100% desde el día 1" },
+  { value: "maternidad", label: "Maternidad", pago: 100, info: "IMSS paga 100% (subsidio)" },
+];
 
 const tiposPermiso = [
   { value: "personal", label: "Personal" },
@@ -159,7 +168,7 @@ export default function PortalSolicitudes() {
   const [mainTab, setMainTab] = useState<MainTab>("mis_solicitudes");
   const [filterTab, setFilterTab] = useState<FilterTab>("todos");
   const [showNewRequest, setShowNewRequest] = useState(false);
-  const [requestType, setRequestType] = useState<"vacaciones" | "permiso" | null>(null);
+  const [requestType, setRequestType] = useState<"vacaciones" | "permiso" | "incapacidad" | null>(null);
 
   // Vacation form state
   const [vacFechaInicio, setVacFechaInicio] = useState<Date | undefined>();
@@ -172,6 +181,15 @@ export default function PortalSolicitudes() {
   const [permFechaInicio, setPermFechaInicio] = useState<Date | undefined>();
   const [permFechaFin, setPermFechaFin] = useState<Date | undefined>();
   const [permMotivo, setPermMotivo] = useState("");
+
+  // Incapacidad form state
+  const [incTipo, setIncTipo] = useState("");
+  const [incFechaInicio, setIncFechaInicio] = useState<Date | undefined>();
+  const [incFechaFin, setIncFechaFin] = useState<Date | undefined>();
+  const [incNumeroCertificado, setIncNumeroCertificado] = useState("");
+  const [incUnidadMedica, setIncUnidadMedica] = useState("");
+  const [incMedicoNombre, setIncMedicoNombre] = useState("");
+  const [incDiagnostico, setIncDiagnostico] = useState("");
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -200,6 +218,11 @@ export default function PortalSolicitudes() {
   // Calculate days for permission
   const diasPermiso = permFechaInicio && permFechaFin
     ? Math.max(1, differenceInCalendarDays(permFechaFin, permFechaInicio) + 1)
+    : 0;
+
+  // Calculate days for incapacidad
+  const diasIncapacidad = incFechaInicio && incFechaFin
+    ? Math.max(1, differenceInCalendarDays(incFechaFin, incFechaInicio) + 1)
     : 0;
 
   // Vacation mutation
@@ -276,6 +299,49 @@ export default function PortalSolicitudes() {
     },
   });
 
+  // Incapacidad mutation
+  const incapacidadMutation = useMutation({
+    mutationFn: async (data: {
+      tipo: string;
+      fechaInicio: string;
+      fechaFin: string;
+      diasIncapacidad: number;
+      numeroCertificado?: string;
+      unidadMedica?: string;
+      medicoNombre?: string;
+      certificadoMedicoUrl?: string;
+    }) => {
+      const res = await fetch("/api/portal/incapacidades", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al reportar incapacidad");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Incapacidad reportada",
+        description: "Tu incapacidad será verificada por RH",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/solicitudes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/incapacidades"] });
+      resetIncapacidadForm();
+      setRequestType(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const resetVacationForm = () => {
     setVacFechaInicio(undefined);
     setVacFechaFin(undefined);
@@ -290,7 +356,17 @@ export default function PortalSolicitudes() {
     setPermMotivo("");
   };
 
-  const handleNewRequest = (type: "vacaciones" | "permiso") => {
+  const resetIncapacidadForm = () => {
+    setIncTipo("");
+    setIncFechaInicio(undefined);
+    setIncFechaFin(undefined);
+    setIncNumeroCertificado("");
+    setIncUnidadMedica("");
+    setIncMedicoNombre("");
+    setIncDiagnostico("");
+  };
+
+  const handleNewRequest = (type: "vacaciones" | "permiso" | "incapacidad") => {
     setRequestType(type);
     setShowNewRequest(true);
   };
@@ -299,6 +375,7 @@ export default function PortalSolicitudes() {
     setRequestType(null);
     resetVacationForm();
     resetPermissionForm();
+    resetIncapacidadForm();
   };
 
   const handleSubmitVacaciones = () => {
@@ -363,6 +440,36 @@ export default function PortalSolicitudes() {
       fechaFin: format(permFechaFin, "yyyy-MM-dd"),
       diasSolicitados: diasPermiso,
       motivo: permMotivo,
+    });
+  };
+
+  const handleSubmitIncapacidad = () => {
+    if (!incTipo) {
+      toast({
+        title: "Error",
+        description: "Selecciona el tipo de incapacidad",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!incFechaInicio || !incFechaFin) {
+      toast({
+        title: "Error",
+        description: "Selecciona las fechas de inicio y fin",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    incapacidadMutation.mutate({
+      tipo: incTipo,
+      fechaInicio: format(incFechaInicio, "yyyy-MM-dd"),
+      fechaFin: format(incFechaFin, "yyyy-MM-dd"),
+      diasIncapacidad: diasIncapacidad,
+      numeroCertificado: incNumeroCertificado || undefined,
+      unidadMedica: incUnidadMedica || undefined,
+      medicoNombre: incMedicoNombre || undefined,
     });
   };
 
@@ -581,6 +688,25 @@ export default function PortalSolicitudes() {
                   <p className="font-semibold text-sm text-gray-900">Permiso</p>
                   <p className="text-xs text-gray-500">
                     Solicitar permiso especial
+                  </p>
+                </div>
+                <ChevronRight className="h-5 w-5 text-gray-400" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card
+            className="bg-white border-0 shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-[0.98]"
+            onClick={() => handleNewRequest("incapacidad")}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-orange-50 flex items-center justify-center">
+                  <HeartPulse className="h-5 w-5 text-orange-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm text-gray-900">Incapacidad</p>
+                  <p className="text-xs text-gray-500">
+                    Reportar incapacidad médica
                   </p>
                 </div>
                 <ChevronRight className="h-5 w-5 text-gray-400" />
@@ -904,6 +1030,182 @@ export default function PortalSolicitudes() {
               </>
             ) : (
               "Solicitar permiso"
+            )}
+          </Button>
+        </div>
+      </BottomSheet>
+
+      {/* Incapacidad Request Form */}
+      <BottomSheet
+        isOpen={requestType === "incapacidad"}
+        onClose={handleCloseSheet}
+        title="Reportar incapacidad"
+        height="full"
+      >
+        <div className="p-4 space-y-5 pb-8">
+          {/* Info Card */}
+          <Card className="bg-orange-50 border-orange-200">
+            <CardContent className="p-4 flex gap-3">
+              <Info className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-orange-800">
+                Tu incapacidad será verificada por RH. Asegúrate de subir el certificado IMSS.
+              </p>
+            </CardContent>
+          </Card>
+
+          {/* Type Selection */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Tipo de incapacidad <span className="text-red-500">*</span></Label>
+            <Select value={incTipo} onValueChange={setIncTipo}>
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Selecciona el tipo de incapacidad" />
+              </SelectTrigger>
+              <SelectContent>
+                {tiposIncapacidad.map((tipo) => (
+                  <SelectItem key={tipo.value} value={tipo.value}>
+                    {tipo.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {incTipo && (
+              <p className="text-xs text-gray-500">
+                {tiposIncapacidad.find(t => t.value === incTipo)?.info}
+              </p>
+            )}
+          </div>
+
+          {/* Date Selection */}
+          <div className="space-y-4">
+            {/* Start Date */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Fecha de inicio <span className="text-red-500">*</span></Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal h-11",
+                      !incFechaInicio && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {incFechaInicio ? (
+                      format(incFechaInicio, "PPP", { locale: es })
+                    ) : (
+                      <span>Selecciona fecha de inicio</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={incFechaInicio}
+                    onSelect={(date) => {
+                      setIncFechaInicio(date);
+                      if (date && (!incFechaFin || incFechaFin < date)) {
+                        setIncFechaFin(date);
+                      }
+                    }}
+                    initialFocus
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* End Date */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Fecha de fin <span className="text-red-500">*</span></Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal h-11",
+                      !incFechaFin && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {incFechaFin ? (
+                      format(incFechaFin, "PPP", { locale: es })
+                    ) : (
+                      <span>Selecciona fecha de fin</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={incFechaFin}
+                    onSelect={setIncFechaFin}
+                    disabled={(date) => incFechaInicio ? date < incFechaInicio : false}
+                    initialFocus
+                    locale={es}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Days Summary */}
+            {diasIncapacidad > 0 && (
+              <Card className="border-2 border-orange-200 bg-orange-50">
+                <CardContent className="p-4">
+                  <p className="text-sm text-gray-600">Días de incapacidad</p>
+                  <p className="text-2xl font-bold text-orange-700">{diasIncapacidad}</p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+
+          {/* Certificate Number */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Número de certificado IMSS</Label>
+            <Input
+              placeholder="Folio ST-2 o ST-3"
+              value={incNumeroCertificado}
+              onChange={(e) => setIncNumeroCertificado(e.target.value)}
+            />
+          </div>
+
+          {/* Medical Unit */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Clínica/Unidad médica</Label>
+            <Input
+              placeholder="Nombre de la clínica IMSS"
+              value={incUnidadMedica}
+              onChange={(e) => setIncUnidadMedica(e.target.value)}
+            />
+          </div>
+
+          {/* Doctor Name */}
+          <div className="space-y-2">
+            <Label className="text-sm font-medium">Nombre del médico</Label>
+            <Input
+              placeholder="Dr(a). ..."
+              value={incMedicoNombre}
+              onChange={(e) => setIncMedicoNombre(e.target.value)}
+            />
+          </div>
+
+          {/* Submit Button */}
+          <Button
+            className="w-full h-12 bg-orange-600 hover:bg-orange-700"
+            disabled={
+              !incTipo ||
+              !incFechaInicio ||
+              !incFechaFin ||
+              incapacidadMutation.isPending
+            }
+            onClick={handleSubmitIncapacidad}
+          >
+            {incapacidadMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              "Reportar incapacidad"
             )}
           </Button>
         </div>
