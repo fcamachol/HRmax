@@ -6,6 +6,7 @@ import {
   Search,
   MoreVertical,
   GraduationCap,
+  ClipboardCheck,
   Clock,
   Users,
   CheckCircle,
@@ -47,6 +48,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useCliente } from "@/contexts/ClienteContext";
 import { CursoFormDialog } from "@/components/cursos/CursoFormDialog";
+import { EvaluacionFormDialog } from "@/components/cursos/EvaluacionFormDialog";
 import type { Curso, CategoriaCurso } from "@shared/schema";
 
 export default function Cursos() {
@@ -55,7 +57,9 @@ export default function Cursos() {
   const [categoriaFilter, setCategoriaFilter] = useState<string>("all");
   const [estatusFilter, setEstatusFilter] = useState<string>("all");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isEvaluacionFormOpen, setIsEvaluacionFormOpen] = useState(false);
   const [editingCurso, setEditingCurso] = useState<Curso | null>(null);
+  const [editingEvaluacion, setEditingEvaluacion] = useState<Curso | null>(null);
   const { toast } = useToast();
 
   const { data: cursos = [], isLoading } = useQuery<Curso[]>({
@@ -195,7 +199,7 @@ export default function Cursos() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold flex items-center gap-3">
           <GraduationCap className="h-8 w-8" />
-          Cursos y Capacitaciones
+          Cursos y Evaluaciones
         </h1>
         <p className="text-muted-foreground mt-1">
           Gestiona los cursos, capacitaciones y programas de desarrollo del personal
@@ -279,6 +283,9 @@ export default function Cursos() {
         </Select>
 
         <div className="ml-auto flex gap-2">
+          <Link href={`/${clienteId}/cursos-capacitaciones/categorias`}>
+            <Button variant="outline">Categorías</Button>
+          </Link>
           <Link href={`/${clienteId}/cursos-capacitaciones/asignaciones`}>
             <Button variant="outline">Asignaciones</Button>
           </Link>
@@ -294,6 +301,10 @@ export default function Cursos() {
           <Button onClick={() => setIsFormOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Curso
+          </Button>
+          <Button className="bg-sky-500 hover:bg-sky-600 text-white" onClick={() => setIsEvaluacionFormOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nueva Evaluación
           </Button>
         </div>
       </div>
@@ -321,11 +332,31 @@ export default function Cursos() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCursos.map((curso) => (
-            <Card key={curso.id} className="flex flex-col">
-              <CardHeader className="pb-3">
+            <Card key={curso.id} className="flex flex-col overflow-hidden">
+              {curso.imagenUrl && (
+                <div className="relative w-full h-36 bg-muted">
+                  <img
+                    src={curso.imagenUrl}
+                    alt={curso.nombre}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <CardHeader className={curso.imagenUrl ? "pb-3 pt-4" : "pb-3"}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
+                      {(curso as any).tipo === 'evaluacion' ? (
+                        <Badge className="text-xs bg-sky-500 hover:bg-sky-600">
+                          <ClipboardCheck className="h-3 w-3 mr-1" />
+                          Evaluación
+                        </Badge>
+                      ) : (
+                        <Badge className="text-xs bg-violet-500 hover:bg-violet-600">
+                          <GraduationCap className="h-3 w-3 mr-1" />
+                          Curso
+                        </Badge>
+                      )}
                       <Badge
                         variant={getEstatusVariant(curso.estatus)}
                         className="text-xs"
@@ -438,6 +469,16 @@ export default function Cursos() {
         open={isFormOpen}
         onOpenChange={handleFormClose}
         curso={editingCurso}
+        categorias={categorias}
+      />
+
+      <EvaluacionFormDialog
+        open={isEvaluacionFormOpen}
+        onOpenChange={(open) => {
+          setIsEvaluacionFormOpen(open);
+          if (!open) setEditingEvaluacion(null);
+        }}
+        evaluacion={editingEvaluacion}
         categorias={categorias}
       />
     </div>

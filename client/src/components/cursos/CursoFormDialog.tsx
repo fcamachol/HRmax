@@ -1,8 +1,9 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { z } from "zod";
+import { Plus, Upload, X, ImageIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -33,12 +34,14 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { CategoriaCursoFormDialog } from "./CategoriaCursoFormDialog";
 import type { Curso, CategoriaCurso } from "@shared/schema";
 
 const cursoFormSchema = z.object({
   codigo: z.string().min(1, "El código es requerido"),
   nombre: z.string().min(1, "El nombre es requerido"),
   descripcion: z.string().optional(),
+  imagenUrl: z.string().optional(),
   categoriaId: z.string().optional(),
   dificultad: z.enum(["basico", "intermedio", "avanzado"]).optional(),
   duracionEstimadaMinutos: z.number().min(0).optional(),
@@ -67,6 +70,8 @@ export function CursoFormDialog({
 }: CursoFormDialogProps) {
   const { toast } = useToast();
   const isEditing = !!curso;
+  const [isCategoriaFormOpen, setIsCategoriaFormOpen] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const form = useForm<CursoFormValues>({
     resolver: zodResolver(cursoFormSchema),
@@ -74,6 +79,7 @@ export function CursoFormDialog({
       codigo: "",
       nombre: "",
       descripcion: "",
+      imagenUrl: undefined,
       categoriaId: undefined,
       dificultad: undefined,
       duracionEstimadaMinutos: undefined,
@@ -92,6 +98,7 @@ export function CursoFormDialog({
         codigo: curso.codigo,
         nombre: curso.nombre,
         descripcion: curso.descripcion || "",
+        imagenUrl: curso.imagenUrl || undefined,
         categoriaId: curso.categoriaId || undefined,
         dificultad: (curso.dificultad as any) || undefined,
         duracionEstimadaMinutos: curso.duracionEstimadaMinutos || undefined,
@@ -107,6 +114,7 @@ export function CursoFormDialog({
         codigo: "",
         nombre: "",
         descripcion: "",
+        imagenUrl: undefined,
         categoriaId: undefined,
         dificultad: undefined,
         duracionEstimadaMinutos: undefined,
@@ -119,6 +127,64 @@ export function CursoFormDialog({
       });
     }
   }, [curso, form]);
+
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "Imagen muy grande",
+        description: "La imagen debe ser menor a 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Archivo inválido",
+        description: "Solo se permiten imágenes",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUploadingImage(true);
+    try {
+      const response = await apiRequest("POST", "/api/objects/upload");
+      const { uploadURL } = await response.json();
+
+      const uploadResponse = await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: {
+          "Content-Type": file.type,
+        },
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("Error al subir imagen");
+      }
+
+      const imageUrl = uploadURL.split("?")[0];
+      form.setValue("imagenUrl", imageUrl);
+      toast({
+        title: "Imagen subida",
+        description: "La imagen se ha subido correctamente",
+      });
+    } catch (error) {
+      console.error("Upload error:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo subir la imagen",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploadingImage(false);
+      event.target.value = "";
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: async (data: CursoFormValues) => {
@@ -176,6 +242,7 @@ export function CursoFormDialog({
   const tipoEvaluacion = form.watch("tipoEvaluacion");
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -215,20 +282,31 @@ export function CursoFormDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Categoría</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccionar categoría" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {categorias.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.nombre}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2">
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Seleccionar categoría" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {categorias.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.nombre}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => setIsCategoriaFormOpen(true)}
+                        title="Agregar nueva categoría"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -261,6 +339,64 @@ export function CursoFormDialog({
                       rows={3}
                       {...field}
                     />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="imagenUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Imagen del Curso</FormLabel>
+                  <FormControl>
+                    <div className="space-y-3">
+                      {field.value ? (
+                        <div className="relative w-full h-32 rounded-lg overflow-hidden border bg-muted">
+                          <img
+                            src={field.value}
+                            alt="Imagen del curso"
+                            className="w-full h-full object-cover"
+                          />
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            className="absolute top-2 right-2 h-6 w-6"
+                            onClick={() => form.setValue("imagenUrl", undefined)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                            {isUploadingImage ? (
+                              <p className="text-sm text-muted-foreground">Subiendo...</p>
+                            ) : (
+                              <>
+                                <ImageIcon className="w-8 h-8 mb-2 text-muted-foreground" />
+                                <p className="text-sm text-muted-foreground">
+                                  Clic para subir imagen
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  PNG, JPG (máx. 5MB)
+                                </p>
+                              </>
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            disabled={isUploadingImage}
+                          />
+                        </label>
+                      )}
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -484,5 +620,15 @@ export function CursoFormDialog({
         </Form>
       </DialogContent>
     </Dialog>
+
+      <CategoriaCursoFormDialog
+        open={isCategoriaFormOpen}
+        onOpenChange={setIsCategoriaFormOpen}
+        categoria={null}
+        onSuccess={(newCategoria) => {
+          form.setValue("categoriaId", newCategoria.id);
+        }}
+      />
+    </>
   );
 }
