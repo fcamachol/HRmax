@@ -130,10 +130,11 @@ export function DocumentUploader({
     setUploadProgress(10);
 
     try {
-      // Step 1: Get upload URL
-      const urlRes = await fetch(`/api/employees/${empleadoId}/documentos/upload-url`, {
-        credentials: "include",
-      });
+      // Step 1: Get upload URL with categoria and filename for structured naming
+      const urlRes = await fetch(
+        `/api/employees/${empleadoId}/documentos/upload-url?categoria=${categoria}&filename=${encodeURIComponent(selectedFile.name)}`,
+        { credentials: "include" }
+      );
 
       if (!urlRes.ok) {
         throw new Error("Failed to get upload URL");

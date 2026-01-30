@@ -10839,7 +10839,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       // Normalize the path for Supabase storage
+      console.log("[Complete Upload] Raw archivoUrl from client:", archivoUrl);
       const normalizedPath = supabaseStorage.normalizeStoragePath(archivoUrl);
+      console.log("[Complete Upload] Normalized path to store:", normalizedPath);
 
       // Check if document of this type already exists
       const existingDoc = await db
@@ -10890,6 +10892,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error completing personal document upload:", error);
       res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Download personal document from portal
+  app.get("/api/portal/documentos/:id/download", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { id } = req.params;
+      const documento = await storage.getDocumentoEmpleado(id);
+
+      if (!documento) {
+        return res.status(404).json({ message: "Documento no encontrado" });
+      }
+
+      // Verify document belongs to this employee and is visible
+      if (documento.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No tienes permiso para ver este documento" });
+      }
+
+      // Parse the stored path to get bucket and file path
+      console.log("[Portal Download] Document archivoUrl:", documento.archivoUrl);
+      const { bucket, path } = supabaseStorage.parsePath(documento.archivoUrl);
+      console.log("[Portal Download] Parsed bucket:", bucket, "path:", path);
+
+      // Stream the file to response from Supabase
+      await supabaseStorage.downloadObject(bucket, path, res);
+    } catch (error: any) {
+      console.error("Error downloading portal document:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: error.message });
+      }
     }
   });
 
@@ -12712,12 +12749,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/employees/:empleadoId/documentos/upload-url", async (req, res) => {
     try {
       const { empleadoId } = req.params;
-      const filePath = `empleados/${empleadoId}/${randomUUID()}_upload`;
+      const { categoria = "otro", filename = "file" } = req.query;
+
+      // Extract extension from original filename
+      const ext = String(filename).split('.').pop() || 'bin';
+
+      // Generate timestamp: YYYYMMDDHHMMSS
+      const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+
+      // Build structured filename
+      const structuredName = `${categoria}_${empleadoId}_${timestamp}.${ext}`;
+      const filePath = `empleados/${empleadoId}/${structuredName}`;
+
+      console.log("[Upload URL] Requesting signed URL for path:", filePath);
       const { signedUrl } = await supabaseStorage.getSignedUploadUrl("documentos-empleados", filePath);
+      console.log("[Upload URL] Success, URL generated");
       res.json({ uploadURL: signedUrl, path: filePath });
     } catch (error: any) {
-      console.error("Error getting upload URL:", error);
-      res.status(500).json({ message: "Failed to get upload URL" });
+      console.error("[Upload URL] Error getting upload URL:", error.message, error.stack);
+      res.status(500).json({ message: "Failed to get upload URL", error: error.message });
     }
   });
 
