@@ -10,8 +10,9 @@ import {
 import {
   FileText,
   FileImage,
+  FileSpreadsheet,
   File,
-  MoreVertical,
+  MoreHorizontal,
   Download,
   Eye,
   Trash2,
@@ -23,7 +24,6 @@ import type { DocumentoEmpleado } from "./EmployeeDocumentManager";
 
 interface DocumentGridProps {
   documents: DocumentoEmpleado[];
-  viewMode: "grid" | "list";
   selectedDocuments: Set<string>;
   onDocumentSelect: (documentId: string, selected: boolean) => void;
   onDocumentPreview: (document: DocumentoEmpleado) => void;
@@ -33,25 +33,28 @@ interface DocumentGridProps {
 
 function getFileIcon(archivoTipo: string | null, className?: string) {
   if (!archivoTipo) {
-    return <File className={className} />;
+    return <File className={cn(className, "text-muted-foreground")} />;
   }
   if (archivoTipo.startsWith("image/")) {
-    return <FileImage className={cn(className, "text-green-500")} />;
+    return <FileImage className={cn(className, "text-green-600")} />;
   }
   if (archivoTipo === "application/pdf") {
-    return <FileText className={cn(className, "text-red-500")} />;
+    return <FileText className={cn(className, "text-red-600")} />;
   }
-  return <File className={className} />;
+  if (
+    archivoTipo.includes("spreadsheet") ||
+    archivoTipo.includes("excel") ||
+    archivoTipo === "application/vnd.ms-excel"
+  ) {
+    return <FileSpreadsheet className={cn(className, "text-emerald-600")} />;
+  }
+  if (archivoTipo.includes("word") || archivoTipo.includes("document")) {
+    return <FileText className={cn(className, "text-blue-600")} />;
+  }
+  return <File className={cn(className, "text-muted-foreground")} />;
 }
 
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function DocumentCard({
+function DocumentListRow({
   document,
   isSelected,
   onSelect,
@@ -66,40 +69,63 @@ function DocumentCard({
   onDelete?: () => void;
   empleadoId: string;
 }) {
-  const handleDownload = () => {
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
     window.open(`/api/employees/${empleadoId}/documentos/${document.id}/download`, "_blank");
   };
 
   return (
     <div
       className={cn(
-        "group relative flex flex-col items-center p-4 rounded-lg border transition-all cursor-pointer",
-        isSelected
-          ? "border-primary bg-primary/5 ring-1 ring-primary"
-          : "border-border hover:border-primary/50 hover:bg-muted/50"
+        "group flex items-center h-10 px-3 text-sm cursor-pointer transition-colors",
+        isSelected ? "bg-primary/10" : "hover:bg-muted/50"
       )}
       onClick={onPreview}
     >
-      {/* Selection checkbox */}
+      {/* Checkbox */}
       <div
-        className={cn(
-          "absolute top-2 left-2 transition-opacity",
-          isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-        )}
+        className="w-7 flex-shrink-0 flex items-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <Checkbox checked={isSelected} onCheckedChange={onSelect} />
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={onSelect}
+          className={cn(
+            "transition-opacity",
+            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          )}
+        />
       </div>
 
-      {/* Actions menu */}
+      {/* Icon + Name */}
+      <div className="flex items-center gap-2 min-w-0 flex-1">
+        {getFileIcon(document.archivoTipo, "h-4 w-4 flex-shrink-0")}
+        <span className="truncate">{document.nombre}</span>
+      </div>
+
+      {/* Date */}
+      <div className="w-24 flex-shrink-0 text-muted-foreground text-xs text-right pr-2 hidden sm:block">
+        {format(new Date(document.createdAt), "d MMM yyyy", { locale: es })}
+      </div>
+
+      {/* Actions - visible on hover */}
       <div
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="w-16 flex-shrink-0 flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}
       >
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={handleDownload}
+          title="Descargar"
+        >
+          <Download className="h-3.5 w-3.5" />
+        </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreVertical className="h-4 w-4" />
+            <Button variant="ghost" size="icon" className="h-7 w-7">
+              <MoreHorizontal className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
@@ -123,108 +149,12 @@ function DocumentCard({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-
-      {/* File icon */}
-      <div className="w-16 h-16 flex items-center justify-center mb-3">
-        {getFileIcon(document.archivoTipo, "h-12 w-12")}
-      </div>
-
-      {/* File name */}
-      <p className="text-sm font-medium text-center line-clamp-2 w-full">{document.nombre}</p>
-
-      {/* File info */}
-      <p className="text-xs text-muted-foreground mt-1">
-        {format(new Date(document.createdAt), "d MMM yyyy", { locale: es })}
-        {document.archivoTamano && ` • ${formatFileSize(document.archivoTamano)}`}
-      </p>
-    </div>
-  );
-}
-
-function DocumentRow({
-  document,
-  isSelected,
-  onSelect,
-  onPreview,
-  onDelete,
-  empleadoId,
-}: {
-  document: DocumentoEmpleado;
-  isSelected: boolean;
-  onSelect: (selected: boolean) => void;
-  onPreview: () => void;
-  onDelete?: () => void;
-  empleadoId: string;
-}) {
-  const handleDownload = () => {
-    window.open(`/api/employees/${empleadoId}/documentos/${document.id}/download`, "_blank");
-  };
-
-  return (
-    <div
-      className={cn(
-        "group flex items-center gap-3 px-3 py-2 rounded-md transition-all cursor-pointer",
-        isSelected
-          ? "bg-primary/5 ring-1 ring-primary"
-          : "hover:bg-muted/50"
-      )}
-      onClick={onPreview}
-    >
-      {/* Selection checkbox */}
-      <div onClick={(e) => e.stopPropagation()}>
-        <Checkbox checked={isSelected} onCheckedChange={onSelect} />
-      </div>
-
-      {/* File icon */}
-      {getFileIcon(document.archivoTipo, "h-5 w-5 flex-shrink-0")}
-
-      {/* File name */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{document.nombre}</p>
-        {document.descripcion && (
-          <p className="text-xs text-muted-foreground truncate">{document.descripcion}</p>
-        )}
-      </div>
-
-      {/* File size */}
-      <span className="text-xs text-muted-foreground w-20 text-right">
-        {formatFileSize(document.archivoTamano)}
-      </span>
-
-      {/* Date */}
-      <span className="text-xs text-muted-foreground w-24">
-        {format(new Date(document.createdAt), "d MMM yyyy", { locale: es })}
-      </span>
-
-      {/* Actions */}
-      <div
-        className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPreview}>
-          <Eye className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleDownload}>
-          <Download className="h-4 w-4" />
-        </Button>
-        {onDelete && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-destructive hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
     </div>
   );
 }
 
 export function DocumentGrid({
   documents,
-  viewMode,
   selectedDocuments,
   onDocumentSelect,
   onDocumentPreview,
@@ -233,38 +163,22 @@ export function DocumentGrid({
 }: DocumentGridProps) {
   if (documents.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center py-12">
-        <FolderOpen className="h-16 w-16 text-muted-foreground/50 mb-4" />
-        <h3 className="text-lg font-medium text-muted-foreground">Carpeta vacia</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          No hay documentos en esta carpeta. Sube un documento para comenzar.
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <FolderOpen className="h-12 w-12 text-muted-foreground/40 mb-3" />
+        <h3 className="text-sm font-medium text-muted-foreground">
+          Carpeta vacia
+        </h3>
+        <p className="text-xs text-muted-foreground mt-1">
+          No hay documentos aqui
         </p>
       </div>
     );
   }
 
-  if (viewMode === "list") {
-    return (
-      <div className="space-y-1">
-        {documents.map((doc) => (
-          <DocumentRow
-            key={doc.id}
-            document={doc}
-            isSelected={selectedDocuments.has(doc.id)}
-            onSelect={(selected) => onDocumentSelect(doc.id, selected)}
-            onPreview={() => onDocumentPreview(doc)}
-            onDelete={onDocumentDelete ? () => onDocumentDelete(doc.id) : undefined}
-            empleadoId={empleadoId}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+    <div>
       {documents.map((doc) => (
-        <DocumentCard
+        <DocumentListRow
           key={doc.id}
           document={doc}
           isSelected={selectedDocuments.has(doc.id)}
