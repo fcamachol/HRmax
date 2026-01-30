@@ -133,7 +133,14 @@ function getSupabaseServiceRoleKey(): string {
 const supabaseUrl = getSupabaseUrl();
 const supabaseServiceKey = getSupabaseServiceRoleKey();
 
-const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+console.log("[Supabase Storage] Initializing with URL:", supabaseUrl || "(empty)");
+console.log("[Supabase Storage] Service key configured:", supabaseServiceKey ? "yes" : "no");
+
+if (!supabaseUrl || !supabaseServiceKey) {
+  console.error("[Supabase Storage] WARNING: Missing configuration - storage operations will fail");
+}
+
+const supabase = createClient(supabaseUrl || "https://placeholder.supabase.co", supabaseServiceKey || "placeholder", {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
@@ -549,9 +556,18 @@ export class SupabaseStorageService {
     // Check if it's a Supabase storage URL
     // Format: https://PROJECT.supabase.co/storage/v1/object/public/BUCKET/PATH
     // or: https://PROJECT.supabase.co/storage/v1/object/sign/BUCKET/PATH?token=...
+    // or: https://PROJECT.supabase.co/storage/v1/object/upload/sign/BUCKET/PATH?token=...
     if (rawUrl.includes(".supabase.co/storage/v1/object/")) {
       try {
         const url = new URL(rawUrl);
+        // Handle upload/sign URLs (from createSignedUploadUrl)
+        const uploadMatch = url.pathname.match(
+          /\/storage\/v1\/object\/upload\/sign\/([^?]+)/
+        );
+        if (uploadMatch) {
+          return `/${uploadMatch[1]}`;
+        }
+        // Handle regular signed/public/authenticated URLs
         const pathMatch = url.pathname.match(
           /\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^?]+)/
         );
@@ -637,6 +653,13 @@ export class SupabaseStorageService {
    */
   getDefaultBucket(): StorageBucket {
     return this.defaultBucket;
+  }
+
+  /**
+   * Alias for parseStoragePath - for backwards compatibility
+   */
+  parsePath(normalizedPath: string): { bucket: string; path: string } {
+    return this.parseStoragePath(normalizedPath);
   }
 }
 
