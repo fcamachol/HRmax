@@ -1,11 +1,13 @@
 import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 import { storage } from "./storage";
+import { emitDenunciaUpdate, emitDenunciaCaseUpdate } from "./websocket";
 import { db } from "./db";
 import { eq, and, gte, lte, ne, inArray, desc, sql } from "drizzle-orm";
 import { VARIABLES_FORMULA } from "./seeds/conceptosLegales";
-import { generarLayoutsBancarios, getLayoutsGeneradosForNomina, getLayoutContent } from "./layoutGenerator";
+import { generarLayoutsBancarios, generarTodosLosLayouts, getLayoutsGeneradosForNomina, getLayoutContent } from "./layoutGenerator";
 import { 
   insertConfigurationChangeLogSchema, 
   insertLegalCaseSchema,
@@ -116,10 +118,14 @@ import {
   solicitudesDocumentos,
   solicitudesVacaciones,
   solicitudesPermisos,
-  incapacidades
+  incapacidades,
+  // Document Solicitations (HR requesting documents from employees)
+  solicitudesDocumentosRH,
+  insertSolicitudDocumentoRHSchema,
+  documentosEmpleado
 } from "@shared/schema";
 import { calcularFiniquito, calcularLiquidacionInjustificada, calcularLiquidacionJustificada } from "@shared/liquidaciones";
-import { ObjectStorageService } from "./objectStorage";
+import { supabaseStorage } from "./supabaseStorage";
 import { analyzeLawsuitDocument } from "./documentAnalyzer";
 import { requireSuperAdmin, requireEmployeeAuth, requireClienteAdmin, requireAuth, requireSupervisorOrAdmin, getSupervisorScope } from "./auth/middleware";
 import bcrypt from "bcrypt";
@@ -129,16 +135,19 @@ import bcrypt from "bcrypt";
 // MaxTalent users can access any client based on the request query
 function getEffectiveClienteId(req: Request): string | null {
   const user = req.user;
-  
+
   // If user is a client user, always use their assigned clienteId
   if (user?.tipoUsuario === "cliente" && user?.clienteId) {
     return user.clienteId;
   }
-  
+
   // For MaxTalent users, use the clienteId from query if provided
   const queryClienteId = req.query.clienteId as string | undefined;
   return queryClienteId || null;
 }
+
+// Alias for backwards compatibility
+const getClienteIdFromRequest = getEffectiveClienteId;
 
 // Helper function to verify access to a specific clienteId
 function canAccessCliente(req: Request, targetClienteId: string): boolean {
@@ -1087,9 +1096,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Object Storage endpoints for document upload
   app.post("/api/objects/upload", async (req, res) => {
     try {
-      const objectStorageService = new ObjectStorageService();
-      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
-      res.json({ uploadURL });
+      const { signedUrl, path } = await supabaseStorage.getSignedUploadUrl("documentos-empleados");
+      res.json({ uploadURL: signedUrl, path });
     } catch (error: any) {
       console.error("Error getting upload URL:", error);
       res.status(500).json({ message: "Failed to get upload URL" });
@@ -1100,16 +1108,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/legal/lawsuits/analyze-document", async (req, res) => {
     try {
       const { documentUrl } = req.body;
-      
+
       if (!documentUrl) {
         return res.status(400).json({ message: "documentUrl is required" });
       }
 
-      const objectStorageService = new ObjectStorageService();
-      const normalizedPath = objectStorageService.normalizeObjectEntityPath(documentUrl);
-      
+      const normalizedPath = supabaseStorage.normalizeStoragePath(documentUrl);
+
       const extractedData = await analyzeLawsuitDocument(documentUrl);
-      
+
       res.json({
         ...extractedData,
         documentUrl: normalizedPath
@@ -2109,10 +2116,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(VARIABLES_FORMULA);
   });
 
-  // Plantillas de Nómina
-  app.post("/api/plantillas-nomina", async (req, res) => {
+  // Plantillas de Nómina (Protected with auth and client filtering)
+  app.post("/api/plantillas-nomina", requireAuth, async (req, res) => {
     try {
       const validatedData = insertPlantillaNominaSchema.parse(req.body);
+      // Verify client access for the plantilla being created
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a crear plantillas para este cliente" });
+      }
       const plantilla = await storage.createPlantillaNomina(validatedData);
       res.json(plantilla);
     } catch (error: any) {
@@ -2120,29 +2131,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/plantillas-nomina", async (req, res) => {
+  app.get("/api/plantillas-nomina", requireAuth, async (req, res) => {
     try {
-      const { clienteId, empresaId } = req.query;
-      if (clienteId && empresaId) {
+      const { empresaId } = req.query;
+      const effectiveClienteId = getEffectiveClienteId(req);
+
+      // Client users MUST have a clienteId
+      if (req.user?.tipoUsuario === "cliente" && !effectiveClienteId) {
+        return res.status(403).json({ message: "No tiene cliente asignado" });
+      }
+
+      if (effectiveClienteId && empresaId) {
         const plantillas = await storage.getPlantillasNominaByEmpresa(
-          clienteId as string,
+          effectiveClienteId,
           empresaId as string
         );
-        res.json(plantillas);
-      } else {
-        const plantillas = await storage.getPlantillasNomina();
-        res.json(plantillas);
+        return res.json(plantillas);
       }
+
+      if (effectiveClienteId) {
+        const plantillas = await storage.getPlantillasNominaByCliente(effectiveClienteId);
+        return res.json(plantillas);
+      }
+
+      // Only MaxTalent users can see all
+      if (req.user?.tipoUsuario !== "maxtalent") {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
+      const plantillas = await storage.getPlantillasNomina();
+      res.json(plantillas);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.get("/api/plantillas-nomina/:id", async (req, res) => {
+  app.get("/api/plantillas-nomina/:id", requireAuth, async (req, res) => {
     try {
       const plantilla = await storage.getPlantillaNomina(req.params.id);
       if (!plantilla) {
         return res.status(404).json({ message: "Plantilla no encontrada" });
+      }
+      // Verify client access
+      if (!canAccessCliente(req, plantilla.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta plantilla" });
       }
       res.json(plantilla);
     } catch (error: any) {
@@ -2150,8 +2182,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/plantillas-nomina/:id", async (req, res) => {
+  app.patch("/api/plantillas-nomina/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing plantilla
+      const existing = await storage.getPlantillaNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Plantilla no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta plantilla" });
+      }
       const partialData = updatePlantillaNominaSchema.parse(req.body);
       const plantilla = await storage.updatePlantillaNomina(req.params.id, partialData);
       res.json(plantilla);
@@ -2160,8 +2200,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/plantillas-nomina/:id", async (req, res) => {
+  app.delete("/api/plantillas-nomina/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing plantilla
+      const existing = await storage.getPlantillaNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Plantilla no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta plantilla" });
+      }
       await storage.deletePlantillaNomina(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -2426,20 +2474,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // NÓMINA - Incidencias
+  // NÓMINA - Incidencias (Protected with auth and client filtering)
   // ============================================================================
 
-  app.get("/api/incidencias-nomina", async (req, res) => {
+  app.get("/api/incidencias-nomina", requireAuth, async (req, res) => {
     try {
       const { periodoId, empleadoId } = req.query;
+      const clienteId = getEffectiveClienteId(req);
+
       if (periodoId) {
+        // Verify access to the periodo
+        const periodo = await storage.getPeriodoNomina(periodoId as string);
+        if (periodo?.clienteId && !canAccessCliente(req, periodo.clienteId)) {
+          return res.status(403).json({ message: "No tiene acceso a este periodo" });
+        }
         const incidencias = await storage.getIncidenciasNominaByPeriodo(periodoId as string);
         return res.json(incidencias);
       }
       if (empleadoId) {
+        // Verify access to the employee
+        const empleado = await storage.getEmployee(empleadoId as string);
+        if (empleado?.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+          return res.status(403).json({ message: "No tiene acceso a este empleado" });
+        }
         const incidencias = await storage.getIncidenciasNominaByEmpleado(empleadoId as string);
         return res.json(incidencias);
       }
+
+      // For client users, filter by their clienteId
+      if (clienteId) {
+        const incidencias = await storage.getIncidenciasNominaByCliente(clienteId);
+        return res.json(incidencias);
+      }
+
+      // Only MaxTalent users can see all
+      if (req.user?.tipoUsuario !== "maxtalent") {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
       const incidencias = await storage.getIncidenciasNomina();
       res.json(incidencias);
     } catch (error: any) {
@@ -2447,11 +2519,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/incidencias-nomina/:id", async (req, res) => {
+  app.get("/api/incidencias-nomina/:id", requireAuth, async (req, res) => {
     try {
       const incidencia = await storage.getIncidenciaNomina(req.params.id);
       if (!incidencia) {
         return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+      // Verify client access
+      if (!canAccessCliente(req, incidencia.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
       }
       res.json(incidencia);
     } catch (error: any) {
@@ -2459,9 +2535,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/incidencias-nomina", async (req, res) => {
+  app.post("/api/incidencias-nomina", requireAuth, async (req, res) => {
     try {
       const validatedData = insertIncidenciaNominaSchema.parse(req.body);
+      // Verify client access for the incidencia being created
+      if (validatedData.clienteId && !canAccessCliente(req, validatedData.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a crear incidencias para este cliente" });
+      }
       const incidencia = await storage.createIncidenciaNomina(validatedData);
       res.json(incidencia);
     } catch (error: any) {
@@ -2469,8 +2549,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/incidencias-nomina/:id", async (req, res) => {
+  app.patch("/api/incidencias-nomina/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing incidencia
+      const existing = await storage.getIncidenciaNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
+      }
       const incidencia = await storage.updateIncidenciaNomina(req.params.id, req.body);
       res.json(incidencia);
     } catch (error: any) {
@@ -2478,8 +2566,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/incidencias-nomina/:id", async (req, res) => {
+  app.delete("/api/incidencias-nomina/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing incidencia
+      const existing = await storage.getIncidenciaNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Incidencia no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta incidencia" });
+      }
       await storage.deleteIncidenciaNomina(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -2488,10 +2584,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ============================================================================
-  // NÓMINA - Movimientos
+  // NÓMINA - Movimientos (Protected with auth and client filtering)
   // ============================================================================
 
-  app.get("/api/nomina-movimientos", async (req, res) => {
+  app.get("/api/nomina-movimientos", requireAuth, async (req, res) => {
     try {
       const { periodoId, empleadoId } = req.query;
       if (periodoId) {
@@ -2518,7 +2614,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const movimientos = await storage.getNominaMovimientosByCliente(clienteId);
         return res.json(movimientos);
       }
-      // MaxTalent users can see all
+      // Only MaxTalent users can see all
+      if (req.user?.tipoUsuario !== "maxtalent") {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
       const movimientos = await storage.getNominaMovimientos();
       res.json(movimientos);
     } catch (error: any) {
@@ -2526,7 +2625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/nomina-movimientos/:id", async (req, res) => {
+  app.get("/api/nomina-movimientos/:id", requireAuth, async (req, res) => {
     try {
       const movimiento = await storage.getNominaMovimiento(req.params.id);
       if (!movimiento) {
@@ -2601,14 +2700,164 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Batch endpoint para calcular desglose de múltiples empleados
+  app.post("/api/nomina/desglose-batch", async (req, res) => {
+    try {
+      const { empleadoIds, fechaInicio, fechaFin, frecuencia, diasPeriodo, usarIncidencias } = req.body;
+
+      if (!empleadoIds || !Array.isArray(empleadoIds) || empleadoIds.length === 0) {
+        return res.status(400).json({ message: "empleadoIds debe ser un array no vacío" });
+      }
+
+      // Parsear fechas o usar defaults (quincena actual)
+      const hoy = new Date();
+      const diaDelMes = hoy.getDate();
+      let inicio: Date;
+      let fin: Date;
+
+      if (fechaInicio && fechaFin) {
+        inicio = new Date(fechaInicio);
+        fin = new Date(fechaFin);
+      } else {
+        // Default: quincena actual
+        if (diaDelMes <= 15) {
+          inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+          fin = new Date(hoy.getFullYear(), hoy.getMonth(), 15);
+        } else {
+          inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+          fin = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        }
+      }
+
+      const { generarDesgloseNomina } = await import("./services/payrollBreakdownService");
+
+      // Procesar todos los empleados en paralelo
+      const resultados = await Promise.allSettled(
+        empleadoIds.map(async (empleadoId: string) => {
+          // Verificar que el empleado existe
+          const empleado = await storage.getEmployee(empleadoId);
+          if (!empleado) {
+            throw new Error(`Empleado ${empleadoId} no encontrado`);
+          }
+
+          // Verificar acceso si hay sesión
+          const user = req.user;
+          if (user && empleado.clienteId && !canAccessCliente(req, empleado.clienteId)) {
+            throw new Error(`Sin acceso al empleado ${empleadoId}`);
+          }
+
+          return generarDesgloseNomina({
+            empleadoId,
+            fechaInicio: inicio,
+            fechaFin: fin,
+            frecuencia: frecuencia || 'quincenal',
+            diasPeriodo: diasPeriodo ? parseInt(diasPeriodo) : undefined,
+            usarIncidencias: usarIncidencias !== false,
+          });
+        })
+      );
+
+      // Mapear resultados - incluir errores para debugging
+      const desgloses = resultados.map((result, index) => {
+        if (result.status === 'fulfilled') {
+          return result.value;
+        } else {
+          console.error(`[DESGLOSE BATCH] Error para empleado ${empleadoIds[index]}:`, result.reason);
+          return {
+            empleadoId: empleadoIds[index],
+            error: result.reason?.message || 'Error desconocido',
+          };
+        }
+      });
+
+      res.json({ desgloses });
+    } catch (error: any) {
+      console.error('[DESGLOSE BATCH ERROR]', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============================================================================
-  // NÓMINAS - CRUD Operations
+  // COSTOS DE NÓMINA - Aggregated payroll costs reporting
   // ============================================================================
 
-  app.get("/api/nominas", async (req, res) => {
+  app.get("/api/costos-nomina", requireAuth, async (req, res) => {
     try {
-      const { status, periodo, empresaId } = req.query;
-      
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      const { empresaId, fechaInicio, fechaFin } = req.query as {
+        empresaId?: string;
+        fechaInicio: string;
+        fechaFin: string;
+      };
+
+      if (!fechaInicio || !fechaFin) {
+        return res.status(400).json({ message: "Date range required (fechaInicio, fechaFin)" });
+      }
+
+      const { obtenerCostosNomina } = await import("./services/costosNominaService");
+      const resultado = await obtenerCostosNomina({
+        clienteId,
+        empresaId,
+        fechaInicio,
+        fechaFin,
+      });
+
+      res.json(resultado);
+    } catch (error: any) {
+      console.error("[COSTOS NOMINA ERROR]", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get ISN rates by state (for reference/display)
+  app.get("/api/isn-tasas", requireAuth, async (req, res) => {
+    try {
+      const { obtenerTodasLasTasasISN } = await import("./services/isnCalculator");
+      const tasas = await obtenerTodasLasTasasISN();
+      res.json(tasas);
+    } catch (error: any) {
+      console.error("[ISN TASAS ERROR]", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // NÓMINAS - CRUD Operations (Protected with auth and client filtering)
+  // ============================================================================
+
+  app.get("/api/nominas", requireAuth, async (req, res) => {
+    try {
+      const { status, periodo } = req.query;
+      const clienteId = getEffectiveClienteId(req);
+
+      // Client users MUST have a clienteId and can only see their own data
+      if (req.user?.tipoUsuario === "cliente" && !clienteId) {
+        return res.status(403).json({ message: "No tiene cliente asignado" });
+      }
+
+      // Filter by clienteId if available (required for cliente users, optional for maxtalent)
+      if (clienteId) {
+        if (status) {
+          const nominas = await storage.getNominasByClienteAndStatus(clienteId, status as string);
+          return res.json(nominas);
+        }
+        if (periodo) {
+          const nominas = await storage.getNominasByClienteAndPeriodo(clienteId, periodo as string);
+          return res.json(nominas);
+        }
+        const nominas = await storage.getNominasByCliente(clienteId);
+        return res.json(nominas);
+      }
+
+      // Only MaxTalent users can see all nominas (when no clienteId specified)
+      if (req.user?.tipoUsuario !== "maxtalent") {
+        return res.status(403).json({ message: "Acceso denegado" });
+      }
+
       if (status) {
         const nominas = await storage.getNominasByStatus(status as string);
         return res.json(nominas);
@@ -2617,7 +2866,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const nominas = await storage.getNominasByPeriodo(periodo as string);
         return res.json(nominas);
       }
-      
+
       const nominas = await storage.getNominas();
       res.json(nominas);
     } catch (error: any) {
@@ -2625,11 +2874,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/nominas/:id", async (req, res) => {
+  app.get("/api/nominas/:id", requireAuth, async (req, res) => {
     try {
       const nomina = await storage.getNomina(req.params.id);
       if (!nomina) {
         return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      // Verify client access
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
       }
       res.json(nomina);
     } catch (error: any) {
@@ -2637,8 +2890,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/nominas", async (req, res) => {
+  app.post("/api/nominas", requireAuth, async (req, res) => {
     try {
+      // Verify client access for the nomina being created
+      if (req.body.clienteId && !canAccessCliente(req, req.body.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a crear nóminas para este cliente" });
+      }
       const nomina = await storage.createNomina(req.body);
       res.json(nomina);
     } catch (error: any) {
@@ -2646,8 +2903,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/nominas/:id", async (req, res) => {
+  app.patch("/api/nominas/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing nomina
+      const existing = await storage.getNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
       const nomina = await storage.updateNomina(req.params.id, req.body);
       res.json(nomina);
     } catch (error: any) {
@@ -2655,8 +2920,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/nominas/:id", async (req, res) => {
+  app.delete("/api/nominas/:id", requireAuth, async (req, res) => {
     try {
+      // Verify access to existing nomina
+      const existing = await storage.getNomina(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
       await storage.deleteNomina(req.params.id);
       res.json({ success: true });
     } catch (error: any) {
@@ -2664,31 +2937,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/nominas/:id/aprobar", async (req, res) => {
+  app.post("/api/nominas/:id/aprobar", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { aprobadoPor } = req.body;
-      
+
+      // Verify access to nomina
+      const existing = await storage.getNomina(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
       const nomina = await storage.updateNominaStatus(id, "approved", aprobadoPor);
-      
-      let layouts: any[] = [];
+
+      // Generar layouts de nómina y pagos adicionales (SDE)
+      let layoutsNomina: any[] = [];
+      let layoutsPagosAdicionales: any[] = [];
       try {
-        layouts = await generarLayoutsBancarios(id, aprobadoPor);
+        const result = await generarTodosLosLayouts(id, aprobadoPor);
+        layoutsNomina = result.layoutsNomina;
+        layoutsPagosAdicionales = result.layoutsPagosAdicionales;
       } catch (layoutError: any) {
         console.warn(`[NOMINA APROBADA] No se pudieron generar layouts: ${layoutError.message}`);
       }
-      
+
+      const allLayouts = [...layoutsNomina, ...layoutsPagosAdicionales];
+
       res.json({
         success: true,
         message: "Nómina aprobada exitosamente",
         nomina,
-        layouts: layouts.map(l => ({
+        layouts: allLayouts.map(l => ({
           id: l.id,
           nombreArchivo: l.nombreArchivo,
           medioPagoId: l.medioPagoId,
+          tipoLayout: l.tipoLayout,
           totalRegistros: l.totalRegistros,
           totalMonto: l.totalMonto,
-        }))
+        })),
+        layoutsNomina: layoutsNomina.length,
+        layoutsPagosAdicionales: layoutsPagosAdicionales.length,
       });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
@@ -2696,20 +2987,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark nomina as paid
-  app.post("/api/nominas/:id/pagar", async (req, res) => {
+  app.post("/api/nominas/:id/pagar", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { pagadoPor } = req.body;
-      
+
       const nomina = await storage.getNomina(id);
       if (!nomina) {
         return res.status(404).json({ message: "Nómina no encontrada" });
       }
-      
+
+      // Verify access to nomina
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
       if (nomina.status !== "approved") {
         return res.status(400).json({ message: "La nómina debe estar aprobada antes de marcarla como pagada" });
       }
-      
+
       const nominaActualizada = await storage.updateNominaStatus(id, "paid", pagadoPor);
       
       res.json({
@@ -2723,20 +3019,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark nomina as stamped (timbrada) - sets fechaTimbrado without changing status
-  app.post("/api/nominas/:id/timbrar", async (req, res) => {
+  app.post("/api/nominas/:id/timbrar", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { timbradoPor } = req.body;
-      
+
       const nomina = await storage.getNomina(id);
       if (!nomina) {
         return res.status(404).json({ message: "Nómina no encontrada" });
       }
-      
+
+      // Verify access to nomina
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
       if (nomina.status !== "paid") {
         return res.status(400).json({ message: "La nómina debe estar pagada antes de timbrar los recibos" });
       }
-      
+
       // Update fechaTimbrado without changing status
       const nominaActualizada = await storage.updateNominaTimbrado(id, timbradoPor);
       
@@ -2750,30 +3051,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/nominas/:id/status", async (req, res) => {
+  app.patch("/api/nominas/:id/status", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { status, aprobadoPor } = req.body;
-      
+
       if (!status) {
         return res.status(400).json({ message: "El status es requerido" });
       }
-      
+
+      // Verify access to nomina
+      const existing = await storage.getNomina(id);
+      if (!existing) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, existing.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
       const nomina = await storage.updateNominaStatus(id, status, aprobadoPor);
       
       if (status === "approved") {
         try {
-          const layouts = await generarLayoutsBancarios(id, aprobadoPor);
+          const { layoutsNomina, layoutsPagosAdicionales } = await generarTodosLosLayouts(id, aprobadoPor);
+          const allLayouts = [...layoutsNomina, ...layoutsPagosAdicionales];
           return res.json({
             success: true,
             nomina,
-            layouts: layouts.map(l => ({
+            layouts: allLayouts.map(l => ({
               id: l.id,
               nombreArchivo: l.nombreArchivo,
               medioPagoId: l.medioPagoId,
+              tipoLayout: l.tipoLayout,
               totalRegistros: l.totalRegistros,
               totalMonto: l.totalMonto,
-            }))
+            })),
+            layoutsNomina: layoutsNomina.length,
+            layoutsPagosAdicionales: layoutsPagosAdicionales.length,
           });
         } catch (layoutError: any) {
           console.warn(`[NOMINA STATUS] No se pudieron generar layouts: ${layoutError.message}`);
@@ -2790,32 +3104,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // LAYOUTS BANCARIOS - Generación y descarga de layouts para dispersión
   // ============================================================================
 
-  app.post("/api/nominas/:nominaId/generar-layouts", async (req, res) => {
+  app.post("/api/nominas/:nominaId/generar-layouts", requireAuth, async (req, res) => {
     try {
       const { nominaId } = req.params;
       const { generadoPor } = req.body;
-      
-      const layouts = await generarLayoutsBancarios(nominaId, generadoPor);
-      res.json({ 
-        success: true, 
-        message: `Se generaron ${layouts.length} layout(s)`,
-        layouts: layouts.map(l => ({
+
+      // Verify access to nomina
+      const nomina = await storage.getNomina(nominaId);
+      if (!nomina) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
+      // Generar tanto layouts de nómina como pagos adicionales (SDE)
+      const { layoutsNomina, layoutsPagosAdicionales } = await generarTodosLosLayouts(nominaId, generadoPor);
+      const allLayouts = [...layoutsNomina, ...layoutsPagosAdicionales];
+
+      res.json({
+        success: true,
+        message: `Se generaron ${allLayouts.length} layout(s) (${layoutsNomina.length} nómina, ${layoutsPagosAdicionales.length} pagos adicionales)`,
+        layouts: allLayouts.map(l => ({
           id: l.id,
           nombreArchivo: l.nombreArchivo,
           medioPagoId: l.medioPagoId,
+          tipoLayout: l.tipoLayout,
           totalRegistros: l.totalRegistros,
           totalMonto: l.totalMonto,
           formato: l.formato,
-        }))
+        })),
+        layoutsNomina: layoutsNomina.length,
+        layoutsPagosAdicionales: layoutsPagosAdicionales.length,
       });
     } catch (error: any) {
       res.status(400).json({ message: error.message });
     }
   });
 
-  app.get("/api/nominas/:nominaId/layouts", async (req, res) => {
+  app.get("/api/nominas/:nominaId/layouts", requireAuth, async (req, res) => {
     try {
       const { nominaId } = req.params;
+
+      // Verify access to nomina
+      const nomina = await storage.getNomina(nominaId);
+      if (!nomina) {
+        return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
+      }
+
       const layouts = await getLayoutsGeneradosForNomina(nominaId);
       res.json(layouts);
     } catch (error: any) {
@@ -2823,15 +3162,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/layouts/:layoutId/download", async (req, res) => {
+  app.get("/api/layouts/:layoutId/download", requireAuth, async (req, res) => {
     try {
       const { layoutId } = req.params;
       const layout = await getLayoutContent(layoutId);
-      
+
       if (!layout) {
         return res.status(404).json({ message: "Layout no encontrado" });
       }
-      
+
+      // Verify access via nomina
+      if (layout.nominaId) {
+        const nomina = await storage.getNomina(layout.nominaId);
+        if (nomina && !canAccessCliente(req, nomina.clienteId)) {
+          return res.status(403).json({ message: "No tiene acceso a este layout" });
+        }
+      }
+
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename="${layout.nombreArchivo}"`);
       res.send(layout.contenido);
@@ -2840,24 +3187,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/layouts/:layoutId", async (req, res) => {
+  app.get("/api/layouts/:layoutId", requireAuth, async (req, res) => {
     try {
       const { layoutId } = req.params;
       const layout = await storage.getLayoutGenerado(layoutId);
-      
+
       if (!layout) {
         return res.status(404).json({ message: "Layout no encontrado" });
       }
-      
+
+      // Verify access via nomina
+      if (layout.nominaId) {
+        const nomina = await storage.getNomina(layout.nominaId);
+        if (nomina && !canAccessCliente(req, nomina.clienteId)) {
+          return res.status(403).json({ message: "No tiene acceso a este layout" });
+        }
+      }
+
       res.json(layout);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.delete("/api/layouts/:layoutId", async (req, res) => {
+  app.delete("/api/layouts/:layoutId", requireAuth, async (req, res) => {
     try {
       const { layoutId } = req.params;
+      const layout = await storage.getLayoutGenerado(layoutId);
+
+      if (!layout) {
+        return res.status(404).json({ message: "Layout no encontrado" });
+      }
+
+      // Verify access via nomina
+      if (layout.nominaId) {
+        const nomina = await storage.getNomina(layout.nominaId);
+        if (nomina && !canAccessCliente(req, nomina.clienteId)) {
+          return res.status(403).json({ message: "No tiene acceso a este layout" });
+        }
+      }
+
       await storage.deleteLayoutGenerado(layoutId);
       res.json({ success: true });
     } catch (error: any) {
@@ -2866,10 +3235,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Direct BBVA/Santander layout generation endpoint
-  app.get("/api/nominas/:nominaId/layout-bancario/:banco", async (req, res) => {
+  app.get("/api/nominas/:nominaId/layout-bancario/:banco", requireAuth, async (req, res) => {
     try {
       const { nominaId, banco } = req.params;
-      
+
       if (banco !== 'bbva' && banco !== 'santander') {
         return res.status(400).json({ message: "Banco no soportado. Use 'bbva' o 'santander'" });
       }
@@ -2877,6 +3246,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const nomina = await storage.getNomina(nominaId);
       if (!nomina) {
         return res.status(404).json({ message: "Nómina no encontrada" });
+      }
+
+      // Verify client access
+      if (!canAccessCliente(req, nomina.clienteId)) {
+        return res.status(403).json({ message: "No tiene acceso a esta nómina" });
       }
 
       if (nomina.status !== "approved") {
@@ -4375,6 +4749,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 });
               }
             }
+
+            // Step 8: Create kardex disfrute entry and calculate prima vacacional
+            try {
+              const { registrarDisfruteVacaciones, calcularPrimaVacacional } = await import('./services/vacacionesService');
+              const salarioDiario = parseFloat(employee.salarioDiarioReal || employee.sbc || '0');
+
+              // Register the vacation consumption in kardex
+              const resultado = await registrarDisfruteVacaciones(
+                existing.empleadoId,
+                existing.clienteId,
+                existing.empresaId,
+                existing.diasSolicitados,
+                existing.fechaInicio,
+                existing.fechaFin,
+                existing.id,
+                salarioDiario,
+                partialUpdate.aprobadoPor
+              );
+
+              // Update solicitud with prima vacacional calculated
+              if (resultado.primaVacacional) {
+                await storage.updateSolicitudVacaciones(existing.id, {
+                  primaVacacional: String(resultado.primaVacacional),
+                });
+              }
+
+              console.log(`Kardex vacaciones actualizado para empleado ${existing.empleadoId}: -${existing.diasSolicitados} días, prima vacacional: $${resultado.primaVacacional || 0}`);
+            } catch (kardexError) {
+              // Log error but don't fail - vacation was approved, kardex can be fixed manually
+              console.error("Error registrando disfrute en kardex:", kardexError);
+            }
           }
         } catch (attendanceError) {
           // Log error but don't fail the request - vacation was approved
@@ -4392,6 +4797,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       await storage.deleteSolicitudVacaciones(req.params.id);
       res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ==================== SERVICIO DE VACACIONES (Kardex, Caducidad, Saldos) ====================
+
+  /**
+   * Obtiene el detalle completo del saldo de vacaciones de un empleado
+   * Incluye desglose por año de antigüedad y fechas de caducidad
+   */
+  app.get("/api/vacaciones/saldo/:empleadoId", async (req, res) => {
+    try {
+      const { calcularSaldoVacaciones } = await import('./services/vacacionesService');
+      const detalle = await calcularSaldoVacaciones(req.params.empleadoId);
+      res.json(detalle);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Sincroniza el saldo de vacaciones del kardex al cache del empleado
+   */
+  app.post("/api/vacaciones/sincronizar-saldo/:empleadoId", async (req, res) => {
+    try {
+      const { sincronizarSaldoVacacionesEmpleado } = await import('./services/vacacionesService');
+      const nuevoSaldo = await sincronizarSaldoVacacionesEmpleado(req.params.empleadoId);
+      res.json({ success: true, nuevoSaldo });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Sincroniza saldos de vacaciones para todos los empleados
+   * Útil para corrección masiva o después de migración
+   */
+  app.post("/api/vacaciones/sincronizar-todos", async (req, res) => {
+    try {
+      const { sincronizarTodosSaldosVacaciones } = await import('./services/vacacionesService');
+      const { clienteId, empresaId } = req.body;
+      const resultado = await sincronizarTodosSaldosVacaciones(clienteId, empresaId);
+      res.json(resultado);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Registra devengo de vacaciones por aniversario laboral
+   */
+  app.post("/api/vacaciones/devengo", async (req, res) => {
+    try {
+      const { registrarDevengoVacaciones } = await import('./services/vacacionesService');
+      const { empleadoId, clienteId, empresaId, anioAntiguedad, diasVacaciones, fechaAniversario, createdBy } = req.body;
+
+      if (!empleadoId || !clienteId || !empresaId || !anioAntiguedad) {
+        return res.status(400).json({ message: "empleadoId, clienteId, empresaId y anioAntiguedad son requeridos" });
+      }
+
+      const resultado = await registrarDevengoVacaciones(
+        empleadoId,
+        clienteId,
+        empresaId,
+        anioAntiguedad,
+        diasVacaciones,
+        fechaAniversario ? new Date(fechaAniversario) : undefined,
+        createdBy
+      );
+
+      if (!resultado.success) {
+        return res.status(400).json({ message: resultado.mensaje });
+      }
+
+      res.json(resultado);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Procesa caducidad de vacaciones para un empleado específico
+   */
+  app.post("/api/vacaciones/caducidad/:empleadoId", async (req, res) => {
+    try {
+      const { procesarCaducidadEmpleado } = await import('./services/vacacionesService');
+      const { fechaCorte } = req.body;
+      const resultados = await procesarCaducidadEmpleado(
+        req.params.empleadoId,
+        fechaCorte ? new Date(fechaCorte) : undefined
+      );
+      res.json({
+        empleadoId: req.params.empleadoId,
+        diasCaducados: resultados.reduce((sum, r) => sum + r.diasCaducados, 0),
+        detalles: resultados
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Proceso batch de caducidad de vacaciones
+   * Diseñado para ejecutarse como cron job (diario o semanal)
+   * Procesa todos los empleados activos y marca días vencidos
+   */
+  app.post("/api/vacaciones/caducidad-batch", async (req, res) => {
+    try {
+      const { procesarCaducidadMasiva } = await import('./services/vacacionesService');
+      const { clienteId, empresaId, fechaCorte } = req.body;
+
+      console.log(`[CADUCIDAD BATCH] Iniciando proceso de caducidad de vacaciones`);
+      const resultado = await procesarCaducidadMasiva(
+        clienteId,
+        empresaId,
+        fechaCorte ? new Date(fechaCorte) : undefined
+      );
+
+      console.log(`[CADUCIDAD BATCH] Completado: ${resultado.procesados} empleados procesados, ${resultado.empleadosAfectados.length} con días caducados`);
+
+      res.json({
+        success: true,
+        ...resultado,
+        resumen: {
+          totalEmpleadosProcesados: resultado.procesados,
+          totalEmpleadosConCaducidad: resultado.empleadosAfectados.length,
+          totalDiasCaducados: resultado.empleadosAfectados.reduce((sum, e) => sum + e.diasCaducados, 0),
+          errores: resultado.errores.length
+        }
+      });
+    } catch (error: any) {
+      console.error(`[CADUCIDAD BATCH] Error:`, error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  /**
+   * Obtiene el saldo de vacaciones para finiquito
+   * Retorna los días pendientes desglosados por año
+   */
+  app.get("/api/vacaciones/finiquito/:empleadoId", async (req, res) => {
+    try {
+      const { obtenerSaldoParaFiniquito } = await import('./services/vacacionesService');
+      const saldo = await obtenerSaldoParaFiniquito(req.params.empleadoId);
+      res.json(saldo);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -7950,7 +8501,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           puesto: employee.puesto,
           departamento: employee.departamento,
           fechaIngreso: employee.fechaIngreso,
-          diasVacacionesDisponibles: employee.diasVacacionesDisponibles,
+          diasVacacionesDisponibles: parseFloat(employee.saldoVacacionesActual as string) || 0,
         },
         message: "Login exitoso"
       });
@@ -8039,7 +8590,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           puesto: employee.puesto,
           departamento: employee.departamento,
           fechaIngreso: employee.fechaIngreso,
-          diasVacacionesDisponibles: employee.diasVacacionesDisponibles,
+          diasVacacionesDisponibles: parseFloat(employee.saldoVacacionesActual as string) || 0,
           rfc: employee.rfc,
           curp: employee.curp,
           nss: employee.nss,
@@ -8084,8 +8635,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Empleado no encontrado" });
       }
 
-      // Get vacation balance
-      const vacacionesDisponibles = employee.diasVacacionesDisponibles || 0;
+      // Get vacation balance from kardex saldo (source of truth)
+      const vacacionesDisponibles = parseFloat(employee.saldoVacacionesActual as string) || 0;
 
       // Get pending requests count (vacaciones + permisos)
       let solicitudesPendientes = 0;
@@ -8120,11 +8671,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // TODO: Get unread announcements count
       const anunciosPendientes = 0;
 
+      // Get pending document solicitations count
+      let documentosSolicitados = 0;
+      try {
+        documentosSolicitados = await storage.countSolicitudesDocumentosRHPendientesByEmpleado(empleadoId);
+      } catch (e) {
+        documentosSolicitados = 0;
+      }
+
+      // Get missing required documents count
+      let documentosFaltantes = 0;
+      try {
+        const requiredDocTypes = ["ine", "curp", "comprobante_domicilio", "rfc", "nss"];
+        const uploadedDocs = await db
+          .select({ tipoDocumento: documentosEmpleado.tipoDocumento })
+          .from(documentosEmpleado)
+          .where(and(
+            eq(documentosEmpleado.empleadoId, empleadoId),
+            eq(documentosEmpleado.subidoPorEmpleado, true),
+            eq(documentosEmpleado.estatus, "activo")
+          ));
+        const uploadedTypes = new Set(uploadedDocs.map(d => d.tipoDocumento).filter(Boolean));
+        documentosFaltantes = requiredDocTypes.filter(type => !uploadedTypes.has(type)).length;
+      } catch (e) {
+        documentosFaltantes = 0;
+      }
+
       res.json({
         vacacionesDisponibles,
         solicitudesPendientes,
         ultimoRecibo,
         anunciosPendientes,
+        documentosSolicitados,
+        documentosFaltantes,
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -8236,7 +8815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Portal Vacaciones - Get vacation balance
+  // Portal Vacaciones - Get vacation balance (using kardex + calculated values)
   app.get("/api/portal/vacaciones/saldo", requireEmployeeAuth, async (req, res) => {
     try {
       const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
@@ -8249,10 +8828,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Empleado no encontrado" });
       }
 
+      // Calculate antigüedad from fechaIngreso
+      let aniosAntiguedad = 0;
+      if (employee.fechaIngreso) {
+        const fechaIngreso = new Date(employee.fechaIngreso);
+        const hoy = new Date();
+        aniosAntiguedad = Math.floor((hoy.getTime() - fechaIngreso.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+        if (aniosAntiguedad < 1) aniosAntiguedad = 1; // At least 1 year for calculation purposes
+      }
+
+      // Get calculated annual days from scheme + antigüedad
+      const { calcularSaldoVacaciones } = await import('./services/vacacionesService');
+      const saldoDetalle = await calcularSaldoVacaciones(empleadoId);
+      const resolution = await storage.resolveVacationDays(empleadoId, aniosAntiguedad);
+
+      // Calculate used days from kardex (sum of disfrutados across all years)
+      const diasUsados = saldoDetalle.saldoPorAnio.reduce((sum, a) => sum + a.diasDisfrutados, 0);
+
       res.json({
-        disponibles: employee.diasVacacionesDisponibles || 0,
-        usados: employee.diasVacacionesUsados || 0,
-        anuales: employee.diasVacacionesAnuales || 0,
+        disponibles: saldoDetalle.saldoTotal,
+        usados: diasUsados,
+        anuales: resolution.diasVacaciones,
+        fuente: resolution.fuente,
+        detallePorAnio: saldoDetalle.saldoPorAnio,
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -8288,8 +8886,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         estatus: "pendiente",
       });
 
-      // Check if employee has enough days
-      const diasDisponibles = employee.diasVacacionesDisponibles || 0;
+      // Check if employee has enough days (use kardex saldo as source of truth)
+      const diasDisponibles = parseFloat(employee.saldoVacacionesActual as string) || 0;
       if (validated.diasSolicitados > diasDisponibles) {
         return res.status(400).json({
           message: `Solo tienes ${diasDisponibles} días disponibles`
@@ -10152,6 +10750,452 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get employee's personal documents (INE, CURP, RFC, etc.)
+  app.get("/api/portal/documentos/personales", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Get personal documents uploaded by employee
+      const docs = await db
+        .select()
+        .from(documentosEmpleado)
+        .where(and(
+          eq(documentosEmpleado.empleadoId, empleadoId),
+          eq(documentosEmpleado.subidoPorEmpleado, true),
+          eq(documentosEmpleado.estatus, "activo")
+        ))
+        .orderBy(desc(documentosEmpleado.createdAt));
+
+      res.json(docs.map(doc => ({
+        id: doc.id,
+        tipo: doc.tipoDocumento || doc.categoria,
+        tipoLabel: doc.nombre,
+        nombre: doc.nombre,
+        fechaGeneracion: doc.createdAt,
+        estado: "generado" as const,
+        urlDescarga: doc.archivoUrl,
+        tamanio: doc.archivoTamano ? `${Math.round(doc.archivoTamano / 1024)} KB` : undefined,
+        categoria: doc.categoria,
+      })));
+    } catch (error: any) {
+      console.error("Error fetching personal documents:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get upload URL for personal document
+  app.get("/api/portal/documentos/personales/upload-url", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Get signed upload URL from Supabase
+      const filePath = `empleados/${empleadoId}/${randomUUID()}_upload`;
+      const { signedUrl } = await supabaseStorage.getSignedUploadUrl("documentos-empleados", filePath);
+
+      res.json({ uploadURL: signedUrl, path: filePath });
+    } catch (error: any) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Complete personal document upload (after client uploads to signed URL)
+  app.post("/api/portal/documentos/personales/complete-upload", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      const clienteId = req.user?.clienteId || req.session?.user?.clienteId;
+      if (!empleadoId || !clienteId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { tipoDocumento, archivoUrl, archivoNombre, archivoTipo, archivoTamano } = req.body;
+
+      if (!tipoDocumento) {
+        return res.status(400).json({ message: "Tipo de documento requerido" });
+      }
+      if (!archivoUrl || !archivoNombre) {
+        return res.status(400).json({ message: "Información del archivo incompleta" });
+      }
+
+      // Map document type to readable name and category
+      const docTypeMap: Record<string, { nombre: string; categoria: string }> = {
+        ine: { nombre: "INE / IFE", categoria: "identificacion" },
+        curp: { nombre: "CURP", categoria: "identificacion" },
+        comprobante_domicilio: { nombre: "Comprobante de Domicilio", categoria: "comprobante_domicilio" },
+        acta_nacimiento: { nombre: "Acta de Nacimiento", categoria: "identificacion" },
+        rfc: { nombre: "Constancia RFC", categoria: "identificacion" },
+        nss: { nombre: "NSS / IMSS", categoria: "identificacion" },
+      };
+
+      const docInfo = docTypeMap[tipoDocumento] || {
+        nombre: tipoDocumento.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
+        categoria: "otro"
+      };
+
+      // Normalize the path for Supabase storage
+      const normalizedPath = supabaseStorage.normalizeStoragePath(archivoUrl);
+
+      // Check if document of this type already exists
+      const existingDoc = await db
+        .select()
+        .from(documentosEmpleado)
+        .where(and(
+          eq(documentosEmpleado.empleadoId, empleadoId),
+          eq(documentosEmpleado.tipoDocumento, tipoDocumento),
+          eq(documentosEmpleado.subidoPorEmpleado, true),
+          eq(documentosEmpleado.estatus, "activo")
+        ))
+        .limit(1);
+
+      // If exists, archive the old one
+      if (existingDoc.length > 0) {
+        await db
+          .update(documentosEmpleado)
+          .set({ estatus: "archivado", updatedAt: new Date() })
+          .where(eq(documentosEmpleado.id, existingDoc[0].id));
+      }
+
+      // Create new document record
+      const [documento] = await db.insert(documentosEmpleado).values({
+        clienteId,
+        empleadoId,
+        nombre: docInfo.nombre,
+        descripcion: `Documento personal: ${docInfo.nombre}`,
+        categoria: docInfo.categoria,
+        tipoDocumento,
+        archivoUrl: normalizedPath,
+        archivoNombre,
+        archivoTipo: archivoTipo || "application/octet-stream",
+        archivoTamano: archivoTamano || 0,
+        visibleParaEmpleado: true,
+        subidoPorEmpleado: true,
+        subidoPor: empleadoId,
+        estatus: "activo",
+      }).returning();
+
+      res.json({
+        success: true,
+        documento: {
+          id: documento.id,
+          tipo: documento.tipoDocumento,
+          nombre: documento.nombre,
+        }
+      });
+    } catch (error: any) {
+      console.error("Error completing personal document upload:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get missing required documents for employee
+  app.get("/api/portal/documentos-faltantes", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      // Required document types
+      const requiredDocTypes = [
+        { tipo: "ine", nombre: "INE / IFE", descripcion: "Identificación oficial vigente" },
+        { tipo: "curp", nombre: "CURP", descripcion: "Clave Única de Registro de Población" },
+        { tipo: "comprobante_domicilio", nombre: "Comprobante de Domicilio", descripcion: "Recibo de luz, agua o teléfono (max 3 meses)" },
+        { tipo: "rfc", nombre: "Constancia RFC", descripcion: "Constancia de situación fiscal" },
+        { tipo: "nss", nombre: "NSS / IMSS", descripcion: "Número de Seguro Social" },
+      ];
+
+      // Get employee's uploaded personal documents
+      const uploadedDocs = await db
+        .select({ tipoDocumento: documentosEmpleado.tipoDocumento })
+        .from(documentosEmpleado)
+        .where(and(
+          eq(documentosEmpleado.empleadoId, empleadoId),
+          eq(documentosEmpleado.subidoPorEmpleado, true),
+          eq(documentosEmpleado.estatus, "activo")
+        ));
+
+      const uploadedTypes = new Set(uploadedDocs.map(d => d.tipoDocumento).filter(Boolean));
+
+      // Calculate missing documents
+      const missing = requiredDocTypes.filter(doc => !uploadedTypes.has(doc.tipo));
+
+      res.json({
+        documentosFaltantes: missing.map(doc => ({
+          tipo: doc.tipo,
+          nombre: doc.nombre,
+          descripcion: doc.descripcion,
+          requerido: true,
+        })),
+        total: requiredDocTypes.length,
+        completados: requiredDocTypes.length - missing.length,
+      });
+    } catch (error: any) {
+      console.error("Error fetching missing documents:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // PORTAL - DOCUMENT SOLICITATIONS (Documents requested by HR)
+  // ============================================================================
+
+  // Get pending document solicitations for current employee
+  app.get("/api/portal/solicitudes-documentos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const solicitudes = await storage.getSolicitudesDocumentosRHPendientesByEmpleado(empleadoId);
+      res.json(solicitudes);
+    } catch (error: any) {
+      console.error("Error fetching document solicitations:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get all document solicitations for current employee (all statuses)
+  app.get("/api/portal/solicitudes-documentos/todas", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const solicitudes = await storage.getSolicitudesDocumentosRHByEmpleado(empleadoId);
+      res.json(solicitudes);
+    } catch (error: any) {
+      console.error("Error fetching document solicitations:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get upload URL for document solicitation response
+  app.get("/api/portal/solicitudes-documentos/:id/upload-url", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      if (!empleadoId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { id } = req.params;
+
+      // Verify solicitation belongs to this employee
+      const solicitud = await storage.getSolicitudDocumentoRH(id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud no encontrada" });
+      }
+      if (solicitud.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No tienes permiso para esta solicitud" });
+      }
+      if (solicitud.estatus !== "pendiente") {
+        return res.status(400).json({ message: "Esta solicitud ya fue atendida" });
+      }
+
+      // Get signed upload URL from Supabase
+      const filePath = `empleados/${empleadoId}/solicitudes/${id}/${randomUUID()}_upload`;
+      const { signedUrl } = await supabaseStorage.getSignedUploadUrl("documentos-empleados", filePath);
+
+      res.json({ uploadURL: signedUrl, path: filePath });
+    } catch (error: any) {
+      console.error("Error getting upload URL for solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Complete document upload for solicitation (after client uploads to signed URL)
+  app.post("/api/portal/solicitudes-documentos/:id/complete-upload", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = req.user?.empleadoId || req.session?.user?.empleadoId;
+      const clienteId = req.user?.clienteId || req.session?.user?.clienteId;
+      if (!empleadoId || !clienteId) {
+        return res.status(400).json({ message: "No hay empleado asociado" });
+      }
+
+      const { id } = req.params;
+      const { archivoUrl, archivoNombre, archivoTipo, archivoTamano } = req.body;
+
+      if (!archivoUrl || !archivoNombre) {
+        return res.status(400).json({ message: "Información del archivo incompleta" });
+      }
+
+      // Verify solicitation belongs to this employee
+      const solicitud = await storage.getSolicitudDocumentoRH(id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud no encontrada" });
+      }
+      if (solicitud.empleadoId !== empleadoId) {
+        return res.status(403).json({ message: "No tienes permiso para esta solicitud" });
+      }
+      if (solicitud.estatus !== "pendiente") {
+        return res.status(400).json({ message: "Esta solicitud ya fue atendida" });
+      }
+
+      // Normalize the path for Supabase storage
+      const normalizedPath = supabaseStorage.normalizeStoragePath(archivoUrl);
+
+      // Create document record in documentosEmpleado
+      const [documento] = await db.insert(documentosEmpleado).values({
+        clienteId,
+        empresaId: solicitud.empresaId,
+        empleadoId,
+        nombre: solicitud.nombreDocumento,
+        descripcion: `Documento solicitado: ${solicitud.tipoDocumento}`,
+        categoria: "identificacion",
+        archivoUrl: normalizedPath,
+        archivoNombre,
+        archivoTipo: archivoTipo || "application/octet-stream",
+        archivoTamano: archivoTamano || 0,
+        visibleParaEmpleado: true,
+        subidoPorEmpleado: true,
+        subidoPor: empleadoId,
+        estatus: "activo",
+      }).returning();
+
+      // Update solicitation status
+      await storage.entregarSolicitudDocumentoRH(id, documento.id);
+
+      res.json({ success: true, documento });
+    } catch (error: any) {
+      console.error("Error completing document upload for solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // ADMIN - DOCUMENT SOLICITATIONS (HR requesting documents from employees)
+  // ============================================================================
+
+  // Get all document solicitations for a client
+  app.get("/api/solicitudes-documentos-rh", requireAuth, async (req, res) => {
+    try {
+      const clienteId = req.session?.user?.clienteId;
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente no identificado" });
+      }
+
+      const { empleadoId, estatus } = req.query;
+
+      let solicitudes = await storage.getSolicitudesDocumentosRHByCliente(clienteId);
+
+      // Filter by empleadoId if provided
+      if (empleadoId) {
+        solicitudes = solicitudes.filter(s => s.empleadoId === empleadoId);
+      }
+
+      // Filter by estatus if provided
+      if (estatus) {
+        solicitudes = solicitudes.filter(s => s.estatus === estatus);
+      }
+
+      res.json(solicitudes);
+    } catch (error: any) {
+      console.error("Error fetching document solicitations:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get a single document solicitation
+  app.get("/api/solicitudes-documentos-rh/:id", requireAuth, async (req, res) => {
+    try {
+      const solicitud = await storage.getSolicitudDocumentoRH(req.params.id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud no encontrada" });
+      }
+      res.json(solicitud);
+    } catch (error: any) {
+      console.error("Error fetching document solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create a new document solicitation (HR requesting from employee)
+  app.post("/api/solicitudes-documentos-rh", requireAuth, async (req, res) => {
+    try {
+      const solicitadoPor = req.session?.user?.id;
+      const clienteId = req.session?.user?.clienteId;
+      if (!solicitadoPor || !clienteId) {
+        return res.status(400).json({ message: "Usuario no identificado" });
+      }
+
+      const validated = insertSolicitudDocumentoRHSchema.parse({
+        ...req.body,
+        clienteId,
+        solicitadoPor,
+      });
+
+      const solicitud = await storage.createSolicitudDocumentoRH(validated);
+
+      // TODO: Create notification for employee
+      // This would be added when notification system is fully implemented
+
+      res.status(201).json(solicitud);
+    } catch (error: any) {
+      console.error("Error creating document solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update a document solicitation (approve/reject)
+  app.patch("/api/solicitudes-documentos-rh/:id", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.user?.id;
+      if (!userId) {
+        return res.status(400).json({ message: "Usuario no identificado" });
+      }
+
+      const { id } = req.params;
+      const { estatus, notasRechazo } = req.body;
+
+      const solicitud = await storage.getSolicitudDocumentoRH(id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud no encontrada" });
+      }
+
+      let updated;
+      if (estatus === "aprobado") {
+        updated = await storage.aprobarSolicitudDocumentoRH(id, userId);
+      } else if (estatus === "rechazado") {
+        updated = await storage.rechazarSolicitudDocumentoRH(id, userId, notasRechazo || "");
+      } else {
+        updated = await storage.updateSolicitudDocumentoRH(id, req.body);
+      }
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating document solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete/cancel a document solicitation
+  app.delete("/api/solicitudes-documentos-rh/:id", requireAuth, async (req, res) => {
+    try {
+      const solicitud = await storage.getSolicitudDocumentoRH(req.params.id);
+      if (!solicitud) {
+        return res.status(404).json({ message: "Solicitud no encontrada" });
+      }
+
+      // Only allow deleting pending solicitations
+      if (solicitud.estatus !== "pendiente") {
+        return res.status(400).json({ message: "Solo se pueden cancelar solicitudes pendientes" });
+      }
+
+      await storage.deleteSolicitudDocumentoRH(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting document solicitation:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   // ============================================================================
   // PORTAL - DIRECTORIO (Employee Directory)
   // ============================================================================
@@ -11107,19 +12151,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  // PUBLIC: Get organization info by IDs for the anonymous portal
-  app.get("/api/denuncia/:clienteId/:empresaId/info", async (req, res) => {
+  // PUBLIC: Get organization info by clienteId for the anonymous portal
+  app.get("/api/denuncia/:clienteId/info", async (req, res) => {
     try {
-      const { clienteId, empresaId } = req.params;
+      const { clienteId } = req.params;
 
       const cliente = await storage.getCliente(clienteId);
       if (!cliente || !cliente.activo) {
         return res.status(404).json({ message: "Organización no encontrada" });
-      }
-
-      const empresa = await storage.getEmpresa(empresaId);
-      if (!empresa || empresa.clienteId !== cliente.id) {
-        return res.status(404).json({ message: "Empresa no encontrada" });
       }
 
       // Get configuration
@@ -11131,9 +12170,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         cliente: {
           nombreComercial: cliente.nombreComercial,
-        },
-        empresa: {
-          nombreComercial: empresa.nombreComercial || empresa.razonSocial,
         },
         config: config ? {
           categoriasHabilitadas: config.categoriasHabilitadas,
@@ -11151,20 +12187,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // PUBLIC: Submit anonymous report
-  app.post("/api/denuncia/:clienteId/:empresaId/submit", async (req, res) => {
+  app.post("/api/denuncia/:clienteId/submit", async (req, res) => {
     try {
-      const { clienteId, empresaId } = req.params;
+      const { clienteId } = req.params;
       const { categoria, titulo, descripcion, emailAnonimo, notificarPorEmail, adjuntos } = req.body;
 
       // Validate organization
       const cliente = await storage.getCliente(clienteId);
       if (!cliente || !cliente.activo) {
         return res.status(404).json({ message: "Organización no encontrada" });
-      }
-
-      const empresa = await storage.getEmpresa(empresaId);
-      if (!empresa || empresa.clienteId !== cliente.id) {
-        return res.status(404).json({ message: "Empresa no encontrada" });
       }
 
       // Check if reporting is enabled
@@ -11178,10 +12209,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pin = generatePin();
       const pinHash = await bcrypt.hash(pin, 10);
 
-      // Create the report
+      // Create the report (empresaId is now optional/null)
       const denuncia = await storage.createDenuncia({
         clienteId: cliente.id,
-        empresaId: empresa.id,
+        empresaId: null,
         caseNumber,
         pinHash,
         categoria,
@@ -11234,14 +12265,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "PIN incorrecto" });
       }
 
-      // Get messages (without admin-only info)
+      // Get messages (without admin-only info, excluding internal notes)
       const mensajes = await storage.getDenunciaMensajes(denuncia.id);
-      const mensajesPublicos = mensajes.map(m => ({
-        id: m.id,
-        contenido: m.contenido,
-        esDeReportante: m.esDeReportante,
-        createdAt: m.createdAt,
-      }));
+      const mensajesPublicos = mensajes
+        .filter(m => m.tipoRemitente !== "internal_note")
+        .map(m => ({
+          id: m.id,
+          contenido: m.contenido,
+          tipoRemitente: m.tipoRemitente,
+          createdAt: m.createdAt,
+        }));
 
       res.json({
         success: true,
@@ -11286,16 +12319,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mensaje = await storage.createDenunciaMensaje({
         denunciaId: denuncia.id,
         contenido,
-        esDeReportante: true,
-        leido: false,
+        tipoRemitente: "reporter",
+        leidoPorReportero: true,
+        leidoPorInvestigador: false,
       });
+
+      // Emit WebSocket event for real-time updates (to both ID and case number rooms)
+      emitDenunciaUpdate(denuncia.id, "new-message", { denunciaId: denuncia.id });
+      emitDenunciaCaseUpdate(denuncia.caseNumber, "new-message", { caseNumber: denuncia.caseNumber });
 
       res.json({
         success: true,
         mensaje: {
           id: mensaje.id,
           contenido: mensaje.contenido,
-          esDeReportante: mensaje.esDeReportante,
+          tipoRemitente: mensaje.tipoRemitente,
           createdAt: mensaje.createdAt,
         },
       });
@@ -11322,7 +12360,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const denunciasWithCounts = await Promise.all(
         denuncias.map(async (d) => {
           const mensajes = await storage.getDenunciaMensajes(d.id);
-          const unreadCount = mensajes.filter(m => m.esDeReportante && !m.leido).length;
+          const unreadCount = mensajes.filter(m => m.tipoRemitente === "reporter" && !m.leidoPorInvestigador).length;
           return {
             ...d,
             unreadMessageCount: unreadCount,
@@ -11432,10 +12470,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const mensaje = await storage.createDenunciaMensaje({
         denunciaId: denuncia.id,
         contenido,
-        esDeReportante: false,
-        usuarioId: user?.id,
-        usuarioNombre: user?.nombre || user?.email,
-        leido: true, // Admin messages are automatically "read"
+        tipoRemitente: "investigator",
+        ...(user?.id && { investigadorId: user.id }),
       });
 
       // Log the action
@@ -11448,6 +12484,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
           detalles: { mensajeId: mensaje.id },
         });
       }
+
+      // Emit WebSocket event for real-time updates (to both ID and case number rooms)
+      emitDenunciaUpdate(denuncia.id, "new-message", { denunciaId: denuncia.id });
+      emitDenunciaCaseUpdate(denuncia.caseNumber, "new-message", { caseNumber: denuncia.caseNumber });
+
+      res.json(mensaje);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Admin adds internal note to denuncia (not visible to reporter)
+  app.post("/api/denuncias/:id/nota-interna", async (req, res) => {
+    try {
+      const clienteId = getEffectiveClienteId(req);
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      const denuncia = await storage.getDenuncia(req.params.id);
+      if (!denuncia || denuncia.clienteId !== clienteId) {
+        return res.status(404).json({ message: "Denuncia no encontrada" });
+      }
+
+      const { contenido } = req.body;
+      const user = req.session?.user;
+
+      const mensaje = await storage.createDenunciaMensaje({
+        denunciaId: denuncia.id,
+        contenido,
+        tipoRemitente: "internal_note",
+        ...(user?.id && { investigadorId: user.id }),
+      });
+
+      // Log the action
+      if (user) {
+        await storage.createDenunciaAuditLog({
+          denunciaId: denuncia.id,
+          usuarioId: user.id,
+          usuarioNombre: user.nombre || user.email,
+          accion: "Agregó nota interna",
+          detalles: { mensajeId: mensaje.id },
+        });
+      }
+
+      // Emit WebSocket event for real-time updates (internal notes only visible to admins)
+      emitDenunciaUpdate(denuncia.id, "new-message", { denunciaId: denuncia.id });
 
       res.json(mensaje);
     } catch (error: any) {
@@ -11468,13 +12551,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Denuncia no encontrada" });
       }
 
-      // Mark all reporter messages as read
+      // Mark all reporter messages as read by investigator
       const mensajes = await storage.getDenunciaMensajes(denuncia.id);
       for (const m of mensajes) {
-        if (m.esDeReportante && !m.leido) {
-          // Update message - need to add this to storage if not exists
-          // For now, we'll mark via direct DB query
-          // This is simplified - in production, add proper storage method
+        if (m.tipoRemitente === "reporter" && !m.leidoPorInvestigador) {
+          await storage.markDenunciaMensajeRead(m.id, "investigator");
         }
       }
 
@@ -11521,6 +12602,288 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(config);
     } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // Employee Document Folders (Google Drive-like structure for HR)
+  // ============================================================================
+
+  // Get all folders for an employee (as tree)
+  app.get("/api/employees/:empleadoId/carpetas", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const clienteId = getEffectiveClienteId(req);
+
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      // Initialize default folders if none exist
+      let folders = await storage.getCarpetasEmpleado(empleadoId);
+      if (folders.length === 0) {
+        folders = await storage.initializeDefaultCarpetas(clienteId, empleadoId, (req as any).user?.id);
+      }
+
+      res.json(folders);
+    } catch (error: any) {
+      console.error("Error getting employee folders:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Create a new folder
+  app.post("/api/employees/:empleadoId/carpetas", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const clienteId = getEffectiveClienteId(req);
+
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      const folder = await storage.createCarpetaEmpleado({
+        ...req.body,
+        clienteId,
+        empleadoId,
+        tipo: "custom",
+        createdBy: (req as any).user?.id,
+      });
+
+      res.json(folder);
+    } catch (error: any) {
+      console.error("Error creating folder:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update a folder
+  app.patch("/api/employees/:empleadoId/carpetas/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const folder = await storage.updateCarpetaEmpleado(id, req.body);
+      res.json(folder);
+    } catch (error: any) {
+      console.error("Error updating folder:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete a folder
+  app.delete("/api/employees/:empleadoId/carpetas/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteCarpetaEmpleado(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting folder:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // ============================================================================
+  // Employee Documents (with folder support)
+  // ============================================================================
+
+  // Get documents for an employee (optionally filtered by folder)
+  app.get("/api/employees/:empleadoId/documentos", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const { carpetaId } = req.query;
+
+      let documents;
+      if (carpetaId === "root") {
+        documents = await storage.getDocumentosEmpleadoByFolder(empleadoId, null);
+      } else if (carpetaId && typeof carpetaId === "string") {
+        documents = await storage.getDocumentosEmpleadoByFolder(empleadoId, carpetaId);
+      } else {
+        documents = await storage.getDocumentosEmpleado(empleadoId);
+      }
+
+      res.json(documents);
+    } catch (error: any) {
+      console.error("Error getting employee documents:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Get upload URL for a document
+  app.get("/api/employees/:empleadoId/documentos/upload-url", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const filePath = `empleados/${empleadoId}/${randomUUID()}_upload`;
+      const { signedUrl } = await supabaseStorage.getSignedUploadUrl("documentos-empleados", filePath);
+      res.json({ uploadURL: signedUrl, path: filePath });
+    } catch (error: any) {
+      console.error("Error getting upload URL:", error);
+      res.status(500).json({ message: "Failed to get upload URL" });
+    }
+  });
+
+  // Create document record (after upload)
+  app.post("/api/employees/:empleadoId/documentos", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const clienteId = getEffectiveClienteId(req);
+
+      if (!clienteId) {
+        return res.status(400).json({ message: "Cliente ID required" });
+      }
+
+      const { archivoUrl, ...rest } = req.body;
+
+      // Normalize the URL for Supabase storage
+      const normalizedUrl = supabaseStorage.normalizeStoragePath(archivoUrl);
+
+      const documento = await storage.createDocumentoEmpleado({
+        ...rest,
+        clienteId,
+        empleadoId,
+        archivoUrl: normalizedUrl,
+        subidoPor: (req as any).user?.id,
+      });
+
+      res.json(documento);
+    } catch (error: any) {
+      console.error("Error creating document:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Update document
+  app.patch("/api/employees/:empleadoId/documentos/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const documento = await storage.updateDocumentoEmpleado(id, req.body);
+      res.json(documento);
+    } catch (error: any) {
+      console.error("Error updating document:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Delete document
+  app.delete("/api/employees/:empleadoId/documentos/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteDocumentoEmpleado(id);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting document:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Bulk move documents to a folder
+  app.post("/api/employees/:empleadoId/documentos/bulk-move", async (req, res) => {
+    try {
+      const { documentoIds, carpetaId } = req.body;
+
+      if (!Array.isArray(documentoIds) || documentoIds.length === 0) {
+        return res.status(400).json({ message: "documentoIds array required" });
+      }
+
+      const documents = await storage.bulkMoveDocumentosToFolder(
+        documentoIds,
+        carpetaId === "root" ? null : carpetaId
+      );
+
+      res.json(documents);
+    } catch (error: any) {
+      console.error("Error bulk moving documents:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Search documents
+  app.get("/api/employees/:empleadoId/documentos/search", async (req, res) => {
+    try {
+      const { empleadoId } = req.params;
+      const { q } = req.query;
+
+      if (!q || typeof q !== "string") {
+        return res.status(400).json({ message: "Search query 'q' required" });
+      }
+
+      const documents = await storage.searchDocumentosEmpleado(empleadoId, q);
+      res.json(documents);
+    } catch (error: any) {
+      console.error("Error searching documents:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  // Download document (get signed URL for viewing/downloading)
+  app.get("/api/employees/:empleadoId/documentos/:id/download", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const documento = await storage.getDocumentoEmpleado(id);
+
+      if (!documento) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      // Parse the stored path to get bucket and file path
+      const { bucket, path } = supabaseStorage.parsePath(documento.archivoUrl);
+
+      // Stream the file to response from Supabase
+      await supabaseStorage.downloadObject(bucket, path, res);
+    } catch (error: any) {
+      console.error("Error downloading document:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ message: error.message });
+      }
+    }
+  });
+
+  // ============================================================================
+  // Portal: Employee Folder Access (visible folders only)
+  // ============================================================================
+
+  app.get("/api/portal/carpetas", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = (req as any).empleadoId;
+      const clienteId = getEffectiveClienteId(req);
+
+      if (!clienteId || !empleadoId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Initialize default folders if none exist
+      let folders = await storage.getCarpetasEmpleado(empleadoId);
+      if (folders.length === 0) {
+        folders = await storage.initializeDefaultCarpetas(clienteId, empleadoId);
+      }
+
+      // Filter to only visible folders for employees
+      const visibleFolders = folders.filter(f => f.visibleParaEmpleado);
+      res.json(visibleFolders);
+    } catch (error: any) {
+      console.error("Error getting portal folders:", error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/portal/carpetas/:carpetaId/documentos", requireEmployeeAuth, async (req, res) => {
+    try {
+      const empleadoId = (req as any).empleadoId;
+      const { carpetaId } = req.params;
+
+      if (!empleadoId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Verify folder is visible to employee
+      const folder = await storage.getCarpetaEmpleado(carpetaId);
+      if (!folder || folder.empleadoId !== empleadoId || !folder.visibleParaEmpleado) {
+        return res.status(404).json({ message: "Folder not found" });
+      }
+
+      const documents = await storage.getDocumentosEmpleadoByFolder(empleadoId, carpetaId);
+      res.json(documents);
+    } catch (error: any) {
+      console.error("Error getting folder documents:", error);
       res.status(500).json({ message: error.message });
     }
   });

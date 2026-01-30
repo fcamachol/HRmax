@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -37,6 +37,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useDenunciaCaseSocket } from "@/hooks/useSocket";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -97,7 +98,7 @@ const categoriaLabels: Record<string, string> = {
 };
 
 export default function DenunciaTrack() {
-  const params = useParams<{ clienteId: string; empresaId: string }>();
+  const params = useParams<{ clienteId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -185,11 +186,14 @@ export default function DenunciaTrack() {
     },
   });
 
-  const refreshCase = () => {
+  const refreshCase = useCallback(() => {
     if (credentials) {
       verifyMutation.mutate(credentials);
     }
-  };
+  }, [credentials, verifyMutation]);
+
+  // WebSocket for real-time message updates
+  useDenunciaCaseSocket(caseData?.caseNumber || null, refreshCase);
 
   const isClosed = caseData?.estatus === "cerrado" || caseData?.estatus === "descartado";
 
@@ -296,7 +300,7 @@ export default function DenunciaTrack() {
             </p>
             <Button
               variant="link"
-              onClick={() => navigate(`/denuncia/${params.clienteId}/${params.empresaId}`)}
+              onClick={() => navigate(`/denuncia/${params.clienteId}`)}
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
               Crear nueva denuncia

@@ -87,7 +87,7 @@ interface UploadedFile {
 }
 
 export default function DenunciaSubmit() {
-  const params = useParams<{ clienteId: string; empresaId: string }>();
+  const params = useParams<{ clienteId: string }>();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const [successData, setSuccessData] = useState<SuccessData | null>(null);
@@ -96,9 +96,9 @@ export default function DenunciaSubmit() {
   const [isUploading, setIsUploading] = useState(false);
 
   const { data: orgInfo, isLoading: loadingOrg, error: orgError } = useQuery({
-    queryKey: ["denuncia-org", params.clienteId, params.empresaId],
+    queryKey: ["denuncia-org", params.clienteId],
     queryFn: async () => {
-      const res = await fetch(`/api/denuncia/${params.clienteId}/${params.empresaId}/info`);
+      const res = await fetch(`/api/denuncia/${params.clienteId}/info`);
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.message || "Error al cargar información");
@@ -120,7 +120,7 @@ export default function DenunciaSubmit() {
 
   const submitMutation = useMutation({
     mutationFn: async (data: SubmitForm) => {
-      const res = await fetch(`/api/denuncia/${params.clienteId}/${params.empresaId}/submit`, {
+      const res = await fetch(`/api/denuncia/${params.clienteId}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -360,7 +360,7 @@ export default function DenunciaSubmit() {
 
           <div className="flex flex-col gap-3">
             <Button
-              onClick={() => navigate(`/denuncia/${params.clienteId}/${params.empresaId}/seguimiento`)}
+              onClick={() => navigate(`/denuncia/${params.clienteId}/seguimiento`)}
               className="w-full"
             >
               Ir a Seguimiento
@@ -401,7 +401,7 @@ export default function DenunciaSubmit() {
             <div>
               <h1 className="text-xl font-bold">Canal de Denuncias</h1>
               <p className="text-sm text-primary-foreground/80">
-                {orgInfo?.empresa?.nombreComercial}
+                {orgInfo?.cliente?.nombreComercial}
               </p>
             </div>
           </div>
@@ -665,7 +665,7 @@ export default function DenunciaSubmit() {
           </p>
           <Button
             variant="link"
-            onClick={() => navigate(`/denuncia/${params.clienteId}/${params.empresaId}/seguimiento`)}
+            onClick={() => navigate(`/denuncia/${params.clienteId}/seguimiento`)}
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
             Consultar estado de mi denuncia

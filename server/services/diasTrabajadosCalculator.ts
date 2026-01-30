@@ -22,8 +22,14 @@
  */
 
 import { db } from "../db";
-import { incidenciasAsistencia, incapacidades } from "@shared/schema";
-import { eq, and, gte, lte, sql, or } from "drizzle-orm";
+import { incidenciasAsistencia, incapacidades, horasExtras } from "@shared/schema";
+import { eq, and, gte, lte, sql, or, notInArray } from "drizzle-orm";
+
+// Estatus de incapacidades que NO deben considerarse en el cálculo de nómina
+const ESTATUS_INCAPACIDAD_EXCLUIDOS = ["rechazada_imss", "rechazada_documentos"];
+
+// Límite de horas dobles semanales según LFT Art. 67
+const LIMITE_HORAS_DOBLES_SEMANAL = 9;
 
 export interface PeriodoNomina {
   fechaInicio: Date;
@@ -44,6 +50,12 @@ export interface IncapacidadDetalle {
   pagoPatronPrimerosTres: boolean; // Si patrón decidió pagar primeros 3 días
 }
 
+export interface HorasExtraDetalle {
+  horasDobles: number;     // Primeras 9 horas semanales (200%)
+  horasTriples: number;    // Excedente de 9 horas semanales (300%)
+  horasTotales: number;    // Total de horas extra
+}
+
 export interface ResumenDiasTrabajados {
   empleadoId: string;
   periodo: PeriodoNomina;
@@ -62,6 +74,9 @@ export interface ResumenDiasTrabajados {
   diasDomingo: number;
   retardos: number;
   horasExtra: number;
+
+  // NUEVO: Desglose de horas extra según LFT Art. 67-68
+  horasExtraDetalle: HorasExtraDetalle;
 
   // Días calculados
   diasPagados: number;        // Para cálculo de sueldo (considera incapacidades correctamente)
@@ -91,6 +106,10 @@ export interface IncidenciasPeriodo {
   diasDomingo: number;
   retardos: number;
   horasExtra: number;
+
+  // NUEVO: Desglose de horas extra según LFT
+  horasExtraDobles: number;   // Primeras 9 horas semanales (200%)
+  horasExtraTriples: number;  // Excedente (300%)
 }
 
 /**
@@ -106,12 +125,13 @@ export async function obtenerIncidenciasPeriodo(
   const fechaFinStr = fechaFin.toISOString().split('T')[0];
 
   // Obtener resumen de incidencias básicas
+  // Nota: La tabla incidencias_asistencia solo tiene campo 'permisos' (sin distinción de tipo)
+  // Para distinguir con/sin goce, se tendría que consultar la tabla solicitudesPermisos
   const registros = await db
     .select({
       faltas: sql<number>`COALESCE(SUM(${incidenciasAsistencia.faltas}), 0)`,
       incapacidades: sql<number>`COALESCE(SUM(${incidenciasAsistencia.incapacidades}), 0)`,
-      permisosConGoce: sql<number>`COALESCE(SUM(CASE WHEN ${incidenciasAsistencia.tipoPermiso} = 'con_goce' THEN ${incidenciasAsistencia.permisos} ELSE 0 END), 0)`,
-      permisosSinGoce: sql<number>`COALESCE(SUM(CASE WHEN ${incidenciasAsistencia.tipoPermiso} = 'sin_goce' OR ${incidenciasAsistencia.tipoPermiso} IS NULL THEN ${incidenciasAsistencia.permisos} ELSE 0 END), 0)`,
+      permisos: sql<number>`COALESCE(SUM(${incidenciasAsistencia.permisos}), 0)`,
       vacaciones: sql<number>`COALESCE(SUM(${incidenciasAsistencia.vacaciones}), 0)`,
       diasFestivos: sql<number>`COALESCE(SUM(${incidenciasAsistencia.diasFestivos}), 0)`,
       diasDomingo: sql<number>`COALESCE(SUM(${incidenciasAsistencia.diasDomingo}), 0)`,
@@ -133,12 +153,20 @@ export async function obtenerIncidenciasPeriodo(
   let incapacidadesDetalle: IncapacidadDetalle[] = [];
 
   try {
+    // IMPORTANTE: Solo considerar incapacidades activas o cerradas
+    // Excluir las rechazadas (rechazada_imss, rechazada_documentos) para evitar
+    // que afecten incorrectamente el cálculo de días pagados
     const incapacidadesDB = await db
       .select()
       .from(incapacidades)
       .where(
         and(
           eq(incapacidades.empleadoId, empleadoId),
+          // Filtrar solo incapacidades válidas (no rechazadas)
+          notInArray(incapacidades.estatus, ESTATUS_INCAPACIDAD_EXCLUIDOS),
+          // Verificar que la incapacidad esté verificada (para las del portal)
+          eq(incapacidades.verificado, true),
+          // Verificar superposición de fechas con el periodo
           or(
             and(
               gte(incapacidades.fechaInicio, fechaInicioStr),
@@ -157,7 +185,7 @@ export async function obtenerIncidenciasPeriodo(
       );
 
     incapacidadesDetalle = incapacidadesDB.map(inc => {
-      const tipoIncapacidad = mapTipoIncapacidad(inc.tipoIncapacidad);
+      const tipoIncapacidad = mapTipoIncapacidad(inc.tipo);
       const diasTotales = inc.diasIncapacidad || calcularDiasIncapacidad(
         new Date(inc.fechaInicio),
         inc.fechaFin ? new Date(inc.fechaFin) : new Date(inc.fechaInicio),
@@ -195,17 +223,69 @@ export async function obtenerIncidenciasPeriodo(
     }
   }
 
+  // Obtener desglose de horas extra (dobles vs triples) de la tabla horas_extras
+  let horasExtraDobles = 0;
+  let horasExtraTriples = 0;
+
+  try {
+    const horasExtrasDB = await db
+      .select({
+        tipoHoraExtra: horasExtras.tipoHoraExtra,
+        cantidadHoras: horasExtras.cantidadHoras,
+      })
+      .from(horasExtras)
+      .where(
+        and(
+          eq(horasExtras.empleadoId, empleadoId),
+          gte(horasExtras.fecha, fechaInicioStr),
+          lte(horasExtras.fecha, fechaFinStr),
+          eq(horasExtras.estatus, 'autorizada') // Solo contar horas autorizadas
+        )
+      );
+
+    for (const he of horasExtrasDB) {
+      const horas = parseFloat(he.cantidadHoras as string) || 0;
+      if (he.tipoHoraExtra === 'triples') {
+        horasExtraTriples += horas;
+      } else {
+        horasExtraDobles += horas;
+      }
+    }
+  } catch {
+    // Error de tabla - continuamos con el fallback abajo
+  }
+
+  // Fallback: Si no hay registros en horas_extras pero sí en incidencias_asistencia,
+  // calcular el desglose basándose en horas totales de incidencias_asistencia
+  // Según LFT Art. 67: Primeras 9 horas semanales son dobles, excedente es triple
+  if (horasExtraDobles === 0 && horasExtraTriples === 0) {
+    const horasTotales = Number(resultado.horasExtra) || 0;
+    if (horasTotales > 0) {
+      const semanasEnPeriodo = Math.ceil((new Date(fechaFinStr).getTime() - new Date(fechaInicioStr).getTime()) / (7 * 24 * 60 * 60 * 1000));
+      const limiteDoblesPeriodo = LIMITE_HORAS_DOBLES_SEMANAL * semanasEnPeriodo;
+
+      horasExtraDobles = Math.min(horasTotales, limiteDoblesPeriodo);
+      horasExtraTriples = Math.max(0, horasTotales - limiteDoblesPeriodo);
+    }
+  }
+
+  // Por defecto, todos los permisos se tratan como con goce
+  // Para un cálculo más preciso, se debería consultar solicitudesPermisos
+  const totalPermisos = Number(resultado.permisos) || 0;
+
   return {
     faltas: Number(resultado.faltas) || 0,
     incapacidades: Number(resultado.incapacidades) || 0,
     incapacidadesDetalle,
-    permisosConGoce: Number(resultado.permisosConGoce) || 0,
-    permisosSinGoce: Number(resultado.permisosSinGoce) || 0,
+    permisosConGoce: totalPermisos, // Asumimos con goce por defecto
+    permisosSinGoce: 0, // Se puede mejorar consultando solicitudesPermisos
     vacaciones: Number(resultado.vacaciones) || 0,
     diasFestivos: Number(resultado.diasFestivos) || 0,
     diasDomingo: Number(resultado.diasDomingo) || 0,
     retardos: Number(resultado.retardos) || 0,
     horasExtra: Number(resultado.horasExtra) || 0,
+    horasExtraDobles,
+    horasExtraTriples,
   };
 }
 
@@ -431,11 +511,40 @@ function calcularDiasTrabajadosConIncidencias(
     },
   );
 
+  // Agregar detalles de horas extra si hay
+  if (incidencias.horasExtraDobles > 0) {
+    detalles.push({
+      conceptoDias: 'Horas extra dobles (200%)',
+      cantidad: incidencias.horasExtraDobles,
+      afectaPago: true,
+      afectaCotizacion: false,
+      observaciones: 'LFT Art. 67 - Primeras 9 hrs/semana'
+    });
+  }
+
+  if (incidencias.horasExtraTriples > 0) {
+    detalles.push({
+      conceptoDias: 'Horas extra triples (300%)',
+      cantidad: incidencias.horasExtraTriples,
+      afectaPago: true,
+      afectaCotizacion: false,
+      observaciones: 'LFT Art. 68 - Excedente de 9 hrs/semana'
+    });
+  }
+
+  // Construir el detalle de horas extra
+  const horasExtraDetalle: HorasExtraDetalle = {
+    horasDobles: incidencias.horasExtraDobles || 0,
+    horasTriples: incidencias.horasExtraTriples || 0,
+    horasTotales: (incidencias.horasExtraDobles || 0) + (incidencias.horasExtraTriples || 0),
+  };
+
   return {
     empleadoId,
     periodo,
     diasNaturales,
     ...incidencias,
+    horasExtraDetalle,
     diasPagados,
     diasPagadosPatron,
     diasPagadosIMSS: diasIncapacidadIMSS,

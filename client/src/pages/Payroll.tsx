@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Parser } from "expr-eval";
+import { usePayrollCalculations, mapDesgloseToEmployeeCalculation, type DesgloseNomina } from "@/hooks/usePayrollCalculations";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,15 +13,15 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { 
-  Calculator, 
-  Download, 
-  Send, 
-  Filter, 
-  Users, 
-  Plus, 
-  Trash2, 
-  Upload, 
+import {
+  Calculator,
+  Download,
+  Send,
+  Filter,
+  Users,
+  Plus,
+  Trash2,
+  Upload,
   FileSpreadsheet,
   FileText,
   ArrowRight,
@@ -36,7 +37,10 @@ import {
   Star,
   Sun,
   MinusCircle,
-  Loader2
+  Loader2,
+  Search,
+  DollarSign,
+  AlertTriangle
 } from "lucide-react";
 import {
   Table,
@@ -95,8 +99,12 @@ interface EmployeePayrollDetail {
   name: string;
   rfc: string;
   department: string | null;
-  salary: number;
-  baseSalary: number;
+  // Salarios separados para compliance
+  salarioDiarioReal: number;      // Total: nominal + exento (lo que realmente gana)
+  salarioDiarioNominal: number;   // Solo para IMSS/ISR (aparece en CFDI)
+  salarioDiarioExento: number;    // SDE - pago por fuera (no CFDI)
+  salary: number;                 // Alias de salarioDiarioReal para compatibilidad
+  baseSalary: number;             // Salario base del periodo (salarioDiarioReal * diasTrabajados)
   daysWorked: number;
   periodDays: number;
   absences: number;
@@ -118,6 +126,7 @@ interface EmployeePayrollDetail {
   primaVacacional: number;
   horasDescontadas: number;
   descuentoHoras: number;
+  retardos: number;
   imssTotal: number;
   imssExcedente3Umas: number;
   imssPrestacionesDinero: number;
@@ -133,8 +142,19 @@ interface EmployeePayrollDetail {
   earnings: number;
   deductions: number;
   netPay: number;
+  netoAPagarTotal: number;
   percepciones: { id: string; name: string; amount: number; integraSalarioBase?: boolean }[];
   deducciones: { id: string; name: string; amount: number }[];
+  // Backend percepciones (detailed with clave/nombre/importe)
+  backendPercepciones?: { clave: string; nombre: string; importe: number }[];
+  // Pago adicional (SDE)
+  pagoAdicional?: {
+    salarioDiarioExento: number;
+    diasPagados: number;
+    montoBase: number;
+    conceptos: { concepto: string; monto: number }[];
+    montoTotal: number;
+  };
 }
 
 interface Nomina {
@@ -148,6 +168,8 @@ interface Nomina {
   createdAt: Date;
   totalNet: number;
   totalEarnings: number;
+  totalPercepcionesNomina?: number;
+  totalPercepcionesSDE?: number;
   totalDeductions: number;
   totalSalary: number;
   employeeCount: number;
@@ -316,7 +338,8 @@ export default function Payroll() {
       return res.json();
     },
   });
-  const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [empresaFilter, setEmpresaFilter] = useState("all");
+  const [employeeSearch, setEmployeeSearch] = useState("");
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
   const [isCsvUploadOpen, setIsCsvUploadOpen] = useState(false);
   const [isAddConceptOpen, setIsAddConceptOpen] = useState(false);
@@ -331,14 +354,58 @@ export default function Payroll() {
   const [expandedConcepts, setExpandedConcepts] = useState<Set<string>>(new Set());
   
   // Transform API employees to format needed by the component
-  const allEmployees = employees.map(emp => ({
-    id: emp.id!,
-    name: `${emp.nombre} ${emp.apellidoPaterno} ${emp.apellidoMaterno || ''}`.trim(),
-    rfc: emp.rfc || '',
-    department: emp.departamento,
-    salary: parseFloat(emp.salarioBrutoMensual || '0'),
-    grupoNominaId: emp.grupoNominaId || null,
-  }));
+  const allEmployees = employees.map(emp => {
+    // Salarios diarios para SDE (pago por fuera)
+    const salarioDiarioReal = parseFloat(emp.salarioDiarioReal || '0');
+    const salarioDiarioNominal = parseFloat(emp.salarioDiarioNominal || '0');
+    const salarioDiarioExento = parseFloat(emp.salarioDiarioExento || '0');
+
+    // Si hay salarioDiarioReal, calcular mensual desde ahí; sino usar salarioBrutoMensual como fallback
+    const salaryMensual = salarioDiarioReal > 0
+      ? salarioDiarioReal * 30
+      : parseFloat(emp.salarioBrutoMensual || '0');
+
+    return {
+      id: emp.id!,
+      name: `${emp.nombre} ${emp.apellidoPaterno} ${emp.apellidoMaterno || ''}`.trim(),
+      rfc: emp.rfc || '',
+      department: emp.departamento,
+      empresaId: emp.empresaId || '',
+      // Salarios para cálculos
+      salary: salaryMensual,  // Salario real mensual (para cálculos de pago total)
+      salarioDiarioReal,      // Salario diario real (nominal + exento)
+      salarioDiarioNominal,   // Salario diario nominal (solo para IMSS/ISR)
+      salarioDiarioExento,    // SDE - pago por fuera
+      grupoNominaId: emp.grupoNominaId || null,
+    };
+  });
+
+  // Fetch backend payroll calculations for all employees
+  // This is the single source of truth for ISR, IMSS, and other calculations
+  const employeeIds = useMemo(() => allEmployees.map(e => e.id), [allEmployees]);
+
+  const { data: payrollBatchData, isLoading: isLoadingPayroll } = usePayrollCalculations({
+    empleadoIds: employeeIds,
+    fechaInicio: queryPeriodRange.start,
+    fechaFin: queryPeriodRange.end,
+    frecuencia: selectedFrequency as 'semanal' | 'quincenal' | 'mensual',
+    usarIncidencias: true,
+    enabled: employeeIds.length > 0,
+  });
+
+  // Create a lookup map for backend calculations
+  const backendCalculationsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof mapDesgloseToEmployeeCalculation>>();
+    if (payrollBatchData?.desgloses) {
+      for (const desglose of payrollBatchData.desgloses) {
+        const mapped = mapDesgloseToEmployeeCalculation(desglose as DesgloseNomina);
+        if (mapped) {
+          map.set(mapped.id, mapped);
+        }
+      }
+    }
+    return map;
+  }, [payrollBatchData]);
 
   // Fetch existing nominas from API
   const { data: nominasFromApi = [], refetch: refetchNominas } = useQuery<any[]>({
@@ -349,12 +416,22 @@ export default function Payroll() {
   const nominas: Nomina[] = useMemo(() => {
     return nominasFromApi.map((n: any) => {
       // Transform empleadosData from DB format to EmployeePayrollDetail format
-      const employeeDetails: EmployeePayrollDetail[] = (n.empleadosData || []).map((e: any) => ({
+      const employeeDetails: EmployeePayrollDetail[] = (n.empleadosData || []).map((e: any) => {
+        // Calcular salarios: si hay salarioDiarioReal usar ese, sino calcular desde salarioBase
+        const salarioDiarioReal = e.salarioDiarioReal || e.salarioBase || 0;
+        const salarioDiarioNominal = e.salarioDiarioNominal || salarioDiarioReal;
+        const salarioDiarioExento = e.salarioDiarioExento || (salarioDiarioReal - salarioDiarioNominal);
+
+        return {
         id: e.empleadoId,
         name: e.nombre || '',
         rfc: e.rfc || '',
         department: e.departamento || null,
-        salary: e.salarioBase || 0,
+        // Salarios separados para compliance
+        salarioDiarioReal,
+        salarioDiarioNominal,
+        salarioDiarioExento,
+        salary: salarioDiarioReal,  // Lo que realmente gana (para cálculos de pago total)
         baseSalary: e.salarioBase || 0,
         daysWorked: e.diasTrabajados || 0,
         periodDays: e.diasPeriodo || 15,
@@ -377,21 +454,33 @@ export default function Payroll() {
         primaVacacional: e.primaVacacional || 0,
         horasDescontadas: e.horasDescontadas || 0,
         descuentoHoras: e.descuentoHoras || 0,
+        retardos: e.retardos || 0,
+        // IMSS individual breakdowns (use saved values if available)
         imssTotal: e.imssTotal || 0,
-        imssExcedente3Umas: 0,
-        imssPrestacionesDinero: 0,
-        imssGastosMedicos: 0,
-        imssInvalidezVida: 0,
-        imssCesantiaVejez: 0,
-        isrCausado: 0,
+        imssExcedente3Umas: e.imssExcedente3Umas || 0,
+        imssPrestacionesDinero: e.imssPrestacionesDinero || 0,
+        imssGastosMedicos: e.imssGastosMedicos || 0,
+        imssInvalidezVida: e.imssInvalidezVida || 0,
+        imssCesantiaVejez: e.imssCesantiaVejez || 0,
+        // ISR details
+        isrCausado: e.isrCausado || 0,
         subsidioEmpleo: e.subsidioEmpleo || 0,
         isrRetenido: e.isrRetenido || 0,
-        isrTasa: 0,
+        isrTasa: e.isrTasa || 0,
         sbcDiario: 0,
         sdiDiario: 0,
-        earnings: (e.percepciones || []).reduce((sum: number, p: any) => sum + (p.monto || 0), 0),
-        deductions: (e.deducciones || []).reduce((sum: number, d: any) => sum + (d.monto || 0), 0) + (e.imssTotal || 0) + (e.isrRetenido || 0),
+        // Use saved totalPercepciones if available (matches Step 2 calculation), fallback to recalculate
+        earnings: e.totalPercepciones ?? (e.backendPercepciones && e.backendPercepciones.length > 0
+          ? (e.backendPercepciones || []).reduce((sum: number, p: any) => sum + (p.importe || 0), 0)
+          : (e.percepciones || []).reduce((sum: number, p: any) => sum + (p.monto || 0), 0)),
+        // Use saved totalDeducciones if available, fallback to recalculate
+        deductions: e.totalDeducciones ?? ((e.deducciones || []).reduce((sum: number, d: any) => sum + (d.monto || 0), 0) + (e.imssTotal || 0) + (e.isrRetenido || 0)),
         netPay: e.netoAPagar || 0,
+        netoAPagarTotal: e.netoAPagarTotal || e.netoAPagar || 0,
+        // Pago adicional (SDE)
+        pagoAdicional: e.pagoAdicional,
+        // Backend percepciones (detailed with clave/nombre/importe)
+        backendPercepciones: e.backendPercepciones,
         percepciones: (e.percepciones || []).map((p: any) => ({
           id: p.conceptoId || p.id || '',
           name: p.nombre || '',
@@ -402,10 +491,19 @@ export default function Payroll() {
           name: d.nombre || '',
           amount: d.monto || 0,
         })),
-      }));
+      }});
 
       // Calculate totals from employee details
-      const totalEarnings = employeeDetails.reduce((sum, e) => sum + e.earnings, 0);
+      // Split percepciones into Nómina (goes in CFDI) and SDE (exentas, paid separately)
+      const totalPercepcionesSDE = employeeDetails.reduce((sum, e) => sum + (e.pagoAdicional?.montoTotal || 0), 0);
+      // totalPercepcionesNomina = total earnings WITHOUT SDE (the CFDI amount)
+      const totalPercepcionesNomina = employeeDetails.reduce((sum, e) => {
+        // e.earnings includes SDE if saved with totalPercepciones, so subtract it
+        const sdeAmount = e.pagoAdicional?.montoTotal || 0;
+        return sum + (e.earnings - sdeAmount);
+      }, 0);
+      // Combined total for backwards compatibility
+      const totalEarnings = totalPercepcionesNomina + totalPercepcionesSDE;
       const totalDeductions = employeeDetails.reduce((sum, e) => sum + e.deductions, 0);
       const totalSalary = employeeDetails.reduce((sum, e) => sum + e.baseSalary, 0);
 
@@ -420,6 +518,8 @@ export default function Payroll() {
         createdAt: new Date(n.createdAt),
         totalNet: parseFloat(n.totalNeto) || 0,
         totalEarnings,
+        totalPercepcionesNomina,
+        totalPercepcionesSDE,
         totalDeductions,
         totalSalary,
         employeeCount: n.totalEmpleados || 0,
@@ -674,438 +774,141 @@ export default function Payroll() {
     };
   };
 
-  const calculateEmployeePayroll = (employeeId: string) => {
-    const employee = allEmployees.find(e => e.id === employeeId);
-    if (!employee) return { 
-      baseSalary: 0,
-      horasExtraPago: 0,
-      horasDoblesPago: 0,
-      horasTriplesPago: 0,
+  // Empty calculation result for when backend data is not available
+  const getEmptyCalculation = () => ({
+    baseSalary: 0,
+    horasExtraPago: 0,
+    horasDoblesPago: 0,
+    horasTriplesPago: 0,
+    horasExtraExento: 0,
+    horasExtraGravado: 0,
+    horasExtra: 0,
+    horasDobles: 0,
+    horasTriples: 0,
+    primaDominical: 0,
+    diasFestivos: 0,
+    pagoFestivos: 0,
+    vacacionesPago: 0,
+    primaVacacional: 0,
+    earnings: 0,
+    deductions: 0,
+    netPay: 0,
+    daysWorked: 0,
+    periodDays: 0,
+    absences: 0,
+    incapacities: 0,
+    diasDomingo: 0,
+    diasVacaciones: 0,
+    imssTotal: 0,
+    imssExcedente3Umas: 0,
+    imssPrestacionesDinero: 0,
+    imssGastosMedicos: 0,
+    imssInvalidezVida: 0,
+    imssCesantiaVejez: 0,
+    isrCausado: 0,
+    subsidioEmpleo: 0,
+    isrRetenido: 0,
+    sbcDiario: 0,
+    sdiDiario: 0,
+    horasDescontadas: 0,
+    descuentoHoras: 0,
+    retardos: 0,
+    isrTasa: 0,
+    // SDE (salario diario exento) fields
+    salarioDiarioReal: 0,
+    salarioDiarioNominal: 0,
+    salarioDiarioExento: 0,
+    pagoAdicional: undefined,
+    netoAPagarTotal: 0,
+    backendPercepciones: [],
+  });
+
+  // Get payroll calculation from backend (single source of truth - NO FALLBACK)
+  const getEmployeePayrollFromBackend = (employeeId: string) => {
+    const backendCalc = backendCalculationsMap.get(employeeId);
+    if (!backendCalc) {
+      return getEmptyCalculation();
+    }
+
+    return {
+      // From backend calculation (correct ISR/IMSS values)
+      baseSalary: backendCalc.baseSalary,
+      earnings: backendCalc.earnings,
+      deductions: backendCalc.deductions,
+      netPay: backendCalc.netPay,
+      daysWorked: backendCalc.daysWorked,
+      periodDays: backendCalc.periodDays,
+      absences: backendCalc.absences,
+      incapacities: backendCalc.incapacidades || 0,
+      diasVacaciones: backendCalc.vacaciones,
+      diasFestivos: backendCalc.diasFestivos,
+      horasExtra: backendCalc.horasExtra,
+      // IMSS from backend - extract individual cuotas from desgloseIMSS
+      imssTotal: backendCalc.totalIMSS,
+      imssExcedente3Umas: backendCalc.desgloseIMSS?.cuotasObrero?.find(c => c.concepto.toLowerCase().includes('excedente'))?.importe || 0,
+      imssPrestacionesDinero: backendCalc.desgloseIMSS?.cuotasObrero?.find(c => c.concepto.toLowerCase().includes('prestaciones en dinero'))?.importe || 0,
+      imssGastosMedicos: backendCalc.desgloseIMSS?.cuotasObrero?.find(c => c.concepto.toLowerCase().includes('gastos médicos') || c.concepto.toLowerCase().includes('gastos medicos'))?.importe || 0,
+      imssInvalidezVida: backendCalc.desgloseIMSS?.cuotasObrero?.find(c => c.concepto.toLowerCase().includes('invalidez'))?.importe || 0,
+      imssCesantiaVejez: backendCalc.desgloseIMSS?.cuotasObrero?.find(c => c.concepto.toLowerCase().includes('cesantía') || c.concepto.toLowerCase().includes('cesantia'))?.importe || 0,
+      // ISR from backend (correctly calculated on salarioDiarioNominal)
+      isrCausado: backendCalc.isrCausado,
+      subsidioEmpleo: backendCalc.subsidioEmpleo,
+      isrRetenido: backendCalc.isrRetenido,
+      isrTasa: backendCalc.isrTasa,
+      // Salaries from backend
+      sbcDiario: backendCalc.sbc,
+      sdiDiario: backendCalc.sdi,
+      // Daily salaries for SDE display (salario diario exento)
+      salarioDiarioReal: backendCalc.salarioDiarioReal,
+      salarioDiarioNominal: backendCalc.salarioDiarioNominal,
+      salarioDiarioExento: backendCalc.salarioDiarioExento,
+      // Pago adicional (SDE) - pago por fuera
+      pagoAdicional: backendCalc.pagoAdicional,
+      netoAPagarTotal: backendCalc.netoAPagarTotal,
+      // Backend percepciones (includes Sueldo Base)
+      backendPercepciones: backendCalc.percepciones,
+      // Additional incidencias fields from backend
+      diasDomingo: backendCalc.diasDomingo || 0,
+      horasDobles: backendCalc.horasExtraDobles || 0,
+      horasTriples: backendCalc.horasExtraTriples || 0,
+      horasDoblesPago: backendCalc.horasDoblesPago || 0,
+      horasTriplesPago: backendCalc.horasTriplesPago || 0,
+      horasExtraPago: (backendCalc.horasDoblesPago || 0) + (backendCalc.horasTriplesPago || 0),
       horasExtraExento: 0,
       horasExtraGravado: 0,
-      horasExtra: 0,
-      horasDobles: 0,
-      horasTriples: 0,
-      primaDominical: 0,
-      diasFestivos: 0,
-      pagoFestivos: 0,
-      vacacionesPago: 0,
-      primaVacacional: 0,
-      earnings: 0, 
-      deductions: 0, 
-      netPay: 0,
-      daysWorked: 0,
-      periodDays: 0,
-      absences: 0,
-      incapacities: 0,
-      diasDomingo: 0,
-      diasVacaciones: 0,
-      imssTotal: 0,
-      imssExcedente3Umas: 0,
-      imssPrestacionesDinero: 0,
-      imssGastosMedicos: 0,
-      imssInvalidezVida: 0,
-      imssCesantiaVejez: 0,
-      isrCausado: 0,
-      subsidioEmpleo: 0,
-      isrRetenido: 0,
-      sbcDiario: 0,
-      sdiDiario: 0,
+      primaDominical: backendCalc.primaDominical || 0,
+      pagoFestivos: backendCalc.pagoFestivos || 0,
+      vacacionesPago: backendCalc.vacacionesPago || 0,
+      primaVacacional: backendCalc.primaVacacional || 0,
       horasDescontadas: 0,
       descuentoHoras: 0,
-      isrTasa: 0
-    };
-
-    // Calcular días del periodo según frecuencia
-    const periodDays = selectedFrequency === "semanal" ? 7 
-                     : selectedFrequency === "quincenal" ? 15 
-                     : 30;
-
-    // Contar incidencias del empleado en el periodo (ya filtradas por la query)
-    const employeeIncidencias = incidenciasAsistencia.filter(inc => 
-      inc.employeeId === employeeId
-    );
-
-    const totalAbsences = employeeIncidencias.reduce((sum, inc) => sum + (inc.faltas || 0), 0);
-    const totalIncapacities = employeeIncidencias.reduce((sum, inc) => sum + (inc.incapacidades || 0), 0);
-    const totalDiasDomingo = employeeIncidencias.reduce((sum, inc) => sum + (inc.diasDomingo || 0), 0);
-    const totalDiasFestivos = employeeIncidencias.reduce((sum, inc) => sum + ((inc as any).diasFestivos || 0), 0);
-    const totalVacaciones = employeeIncidencias.reduce((sum, inc) => sum + (inc.vacaciones || 0), 0);
-    const totalHorasExtra = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasExtra || "0"), 0);
-    const totalHorasDescontadas = employeeIncidencias.reduce((sum, inc) => sum + parseFloat(inc.horasDescontadas || "0"), 0);
-    
-    // Calcular días trabajados (descontar faltas, incapacidades y vacaciones del salario base)
-    // Las vacaciones se pagan por separado como percepción adicional
-    const daysWorked = Math.max(0, periodDays - totalAbsences - totalIncapacities - totalVacaciones);
-    
-    // Calcular salario proporcional
-    const salarioDiario = employee.salary / 30;
-    const baseSalary = salarioDiario * daysWorked;
-    
-    // Calcular salario por hora (jornada de 8 horas)
-    const salarioPorHora = salarioDiario / 8;
-    
-    // Calcular horas extra por semana según LFT Art. 67 y 68
-    // El límite de 9 horas dobles es SEMANAL, no por período
-    // Agrupar incidencias por semana ISO (lunes a domingo) y aplicar el límite de 9 hrs por cada semana
-    const calcularHorasExtraPorSemana = () => {
-      // Agrupar horas extra por semana ISO usando date-fns
-      const horasPorSemana: Record<string, number> = {};
-      
-      employeeIncidencias.forEach(inc => {
-        const horasDelDia = parseFloat(inc.horasExtra || "0");
-        if (horasDelDia > 0 && inc.fecha) {
-          // Parsear fecha como local (evitar problemas de timezone)
-          const [year, month, day] = inc.fecha.split('-').map(Number);
-          const fecha = new Date(year, month - 1, day);
-          
-          // Obtener inicio de semana ISO (lunes) usando date-fns
-          const inicioSemana = startOfWeek(fecha, { weekStartsOn: 1 }); // 1 = lunes
-          const claveSemana = format(inicioSemana, 'yyyy-MM-dd');
-          
-          horasPorSemana[claveSemana] = (horasPorSemana[claveSemana] || 0) + horasDelDia;
-        }
-      });
-      
-      // Calcular dobles y triples por cada semana (límite 9 dobles por semana)
-      let totalDobles = 0;
-      let totalTriples = 0;
-      
-      Object.values(horasPorSemana).forEach(horasSemana => {
-        const doblesSemana = Math.min(horasSemana, 9);
-        const triplesSemana = Math.max(0, horasSemana - 9);
-        totalDobles += doblesSemana;
-        totalTriples += triplesSemana;
-      });
-      
-      return { totalDobles, totalTriples };
-    };
-    
-    const { totalDobles, totalTriples } = calcularHorasExtraPorSemana();
-    const horasDobles = totalDobles;
-    const horasTriples = totalTriples;
-    
-    // Horas dobles: salario por hora × 2 (Art. 67 LFT)
-    const horasDoblesPago = salarioPorHora * 2 * horasDobles;
-    // Horas triples: salario por hora × 3 (Art. 68 LFT)
-    const horasTriplesPago = salarioPorHora * 3 * horasTriples;
-    // Total horas extra
-    const horasExtraPago = horasDoblesPago + horasTriplesPago;
-    
-    // Cálculo ISR para horas extra según LISR Art. 93 fracción I
-    // Las horas dobles (primeras 9 semanales) están exentas de ISR
-    // El límite de exención es el MENOR de:
-    // - 50% del salario semanal
-    // - 5 UMAs semanales (UMA 2025 = $113.14 diario × 7 = $792.00 × 5 = $3,960)
-    const UMA_DIARIA_2025 = 113.14;
-    const limite5UmasSemanal = UMA_DIARIA_2025 * 7 * 5; // 5 UMAs semanales
-    const salarioSemanal = salarioDiario * 7;
-    const limite50PctSemanal = salarioSemanal * 0.5;
-    
-    // Calcular exento/gravado por semana
-    const calcularExentoGravadoPorSemana = () => {
-      const horasPorSemana: Record<string, { dobles: number; triples: number }> = {};
-      
-      employeeIncidencias.forEach(inc => {
-        const horasDelDia = parseFloat(inc.horasExtra || "0");
-        if (horasDelDia > 0 && inc.fecha) {
-          const [year, month, day] = inc.fecha.split('-').map(Number);
-          const fecha = new Date(year, month - 1, day);
-          const inicioSemana = startOfWeek(fecha, { weekStartsOn: 1 });
-          const claveSemana = format(inicioSemana, 'yyyy-MM-dd');
-          
-          if (!horasPorSemana[claveSemana]) {
-            horasPorSemana[claveSemana] = { dobles: 0, triples: 0 };
-          }
-          
-          const totalSemana = horasPorSemana[claveSemana].dobles + horasPorSemana[claveSemana].triples + horasDelDia;
-          const doblesSemana = Math.min(totalSemana, 9);
-          const triplesSemana = Math.max(0, totalSemana - 9);
-          
-          horasPorSemana[claveSemana] = { dobles: doblesSemana, triples: triplesSemana };
-        }
-      });
-      
-      let totalExento = 0;
-      let totalGravado = 0;
-      
-      Object.values(horasPorSemana).forEach(({ dobles, triples }) => {
-        const pagoDoblesSemana = salarioPorHora * 2 * dobles;
-        const pagoTriplesSemana = salarioPorHora * 3 * triples;
-        
-        // Límite exento: el menor entre 50% salario semanal y 5 UMAs
-        const limiteExentoSemana = Math.min(limite50PctSemanal, limite5UmasSemanal);
-        
-        // Solo las dobles pueden ser exentas
-        const exentoSemana = Math.min(pagoDoblesSemana, limiteExentoSemana);
-        const gravadoDoblesSemana = Math.max(0, pagoDoblesSemana - limiteExentoSemana);
-        
-        totalExento += exentoSemana;
-        totalGravado += gravadoDoblesSemana + pagoTriplesSemana;
-      });
-      
-      return { totalExento, totalGravado };
-    };
-    
-    const { totalExento, totalGravado } = calcularExentoGravadoPorSemana();
-    const horasExtraExento = totalExento;
-    const horasExtraGravado = totalGravado;
-    
-    // Calcular prima dominical (25% del salario diario por cada domingo trabajado)
-    const primaDominical = salarioDiario * 0.25 * totalDiasDomingo;
-    
-    // Calcular pago de días festivos trabajados (LFT Art. 75)
-    // Si el empleado trabaja en día festivo, se le paga salario doble adicional al ordinario
-    // Total: salario triple (1 ordinario + 2 adicionales)
-    // Como el salario ordinario ya está incluido en baseSalary, solo agregamos el doble adicional
-    const pagoFestivos = salarioDiario * 2 * totalDiasFestivos;
-    
-    // Calcular pago de vacaciones (salario diario * días de vacaciones)
-    const vacacionesPago = salarioDiario * totalVacaciones;
-    
-    // Calcular prima vacacional (25% del pago de vacaciones según LFT Art. 80)
-    const primaVacacional = vacacionesPago * 0.25;
-    
-    // Calcular descuento por horas no trabajadas (retardos, salidas tempranas, etc.)
-    // Se descuenta a salario normal (no doble ni triple)
-    const descuentoHoras = salarioPorHora * totalHorasDescontadas;
-
-    const employeeValues = conceptValues.filter(cv => cv.employeeId === employeeId);
-    
-    const bonuses = employeeValues
-      .filter(cv => {
-        const concept = concepts.find(c => c.id === cv.conceptId);
-        return concept?.type === "percepcion";
-      })
-      .reduce((sum, cv) => sum + cv.amount, 0);
-    
-    const incidents = employeeValues
-      .filter(cv => {
-        const concept = concepts.find(c => c.id === cv.conceptId);
-        return concept?.type === "deduccion";
-      })
-      .reduce((sum, cv) => sum + cv.amount, 0);
-
-    // Total de percepciones: salario base + horas extra + prima dominical + vacaciones + prima vacacional + bonos
-    const earnings = baseSalary + horasExtraPago + primaDominical + pagoFestivos + vacacionesPago + primaVacacional + bonuses;
-    
-    // ========== CÁLCULO DE DEDUCCIONES POR CONCEPTO ==========
-    // Factor de integración para SBC (Salario Base de Cotización)
-    const FACTOR_INTEGRACION = 1.0452; // Mínimo legal para SDI
-    // UMA_DIARIA_2025 ya definida arriba (113.14)
-    const LIMITE_25_UMAS = UMA_DIARIA_2025 * 25; // Tope de cotización diario
-    
-    // Calcular SDI y SBC
-    const sdiDiario = salarioDiario * FACTOR_INTEGRACION;
-    const sbcDiario = Math.min(sdiDiario, LIMITE_25_UMAS); // Aplicar tope
-    const sbcPeriodo = sbcDiario * periodDays;
-    
-    // ========== IMSS TRABAJADOR (Cuotas Obreras 2025) ==========
-    // Calculamos sobre el SBC del período
-    const limite3UmasDiario = UMA_DIARIA_2025 * 3;
-    const excedente3Umas = Math.max(0, sbcDiario - limite3UmasDiario);
-    const excedente3UmasPeriodo = excedente3Umas * periodDays;
-    
-    // Desglose IMSS Trabajador:
-    // 1. Enf. y Mat. - Excedente 3 UMAs Prestaciones en Especie: 0.40%
-    const imssExcedente3Umas = excedente3UmasPeriodo * 0.0040;
-    // 2. Enf. y Mat. - Prestaciones en Dinero: 0.25%
-    const imssPrestacionesDinero = sbcPeriodo * 0.0025;
-    // 3. Enf. y Mat. - Gastos Médicos Pensionados: 0.375%
-    const imssGastosMedicos = sbcPeriodo * 0.00375;
-    // 4. Invalidez y Vida: 0.625%
-    const imssInvalidezVida = sbcPeriodo * 0.00625;
-    // 5. Cesantía en Edad Avanzada y Vejez (CEAV): 1.125%
-    const imssCesantiaVejez = sbcPeriodo * 0.01125;
-    
-    // Total IMSS Trabajador
-    const totalIMSS = imssExcedente3Umas + imssPrestacionesDinero + imssGastosMedicos + imssInvalidezVida + imssCesantiaVejez;
-    
-    // ========== ISR (Impuesto Sobre la Renta) ==========
-    // Base gravable = Todas las percepciones gravables - descuentos - IMSS
-    // Percepciones gravables: salario, horas extra gravado, prima dominical, vacaciones, prima vacacional, bonos
-    // Descuentos: horas descontadas (retardos, ausencias parciales) reducen la base gravable
-    // Exenciones: horas extra exentas (ya consideradas)
-    const percepcionesGravables = baseSalary + horasExtraGravado + primaDominical + pagoFestivos + vacacionesPago + primaVacacional + bonuses;
-    const baseGravable = Math.max(0, percepcionesGravables - descuentoHoras - totalIMSS);
-    
-    // Tabla ISR 2025 según período (DOF Anexo 8 RMF 2025)
-    const calcularISRPeriodo = (base: number, periodo: string): { isr: number; subsidio: number; tasaMarginal: number } => {
-      // Tablas ISR 2025 por período
-      const tablasISR: Record<string, { limiteInf: number; cuotaFija: number; tasa: number }[]> = {
-        semanal: [
-          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
-          { limiteInf: 186.51, cuotaFija: 3.58, tasa: 0.0640 },
-          { limiteInf: 1583.01, cuotaFija: 92.96, tasa: 0.1088 },
-          { limiteInf: 2782.00, cuotaFija: 223.41, tasa: 0.1600 },
-          { limiteInf: 3233.95, cuotaFija: 295.72, tasa: 0.1792 },
-          { limiteInf: 3871.93, cuotaFija: 410.04, tasa: 0.2136 },
-          { limiteInf: 7809.12, cuotaFija: 1251.03, tasa: 0.2352 },
-          { limiteInf: 12308.25, cuotaFija: 2309.22, tasa: 0.3000 },
-          { limiteInf: 23498.47, cuotaFija: 5666.29, tasa: 0.3200 },
-          { limiteInf: 31331.30, cuotaFija: 8172.79, tasa: 0.3400 },
-          { limiteInf: 93993.90, cuotaFija: 29478.08, tasa: 0.3500 },
-        ],
-        quincenal: [
-          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
-          { limiteInf: 373.02, cuotaFija: 7.16, tasa: 0.0640 },
-          { limiteInf: 3166.03, cuotaFija: 185.92, tasa: 0.1088 },
-          { limiteInf: 5564.01, cuotaFija: 446.82, tasa: 0.1600 },
-          { limiteInf: 6467.91, cuotaFija: 591.44, tasa: 0.1792 },
-          { limiteInf: 7743.86, cuotaFija: 820.09, tasa: 0.2136 },
-          { limiteInf: 15618.25, cuotaFija: 2502.06, tasa: 0.2352 },
-          { limiteInf: 24616.50, cuotaFija: 4618.45, tasa: 0.3000 },
-          { limiteInf: 46996.95, cuotaFija: 11332.59, tasa: 0.3200 },
-          { limiteInf: 62662.60, cuotaFija: 16345.59, tasa: 0.3400 },
-          { limiteInf: 187987.81, cuotaFija: 58956.16, tasa: 0.3500 },
-        ],
-        mensual: [
-          { limiteInf: 0.01, cuotaFija: 0, tasa: 0.0192 },
-          { limiteInf: 746.05, cuotaFija: 14.32, tasa: 0.0640 },
-          { limiteInf: 6332.06, cuotaFija: 371.83, tasa: 0.1088 },
-          { limiteInf: 11128.02, cuotaFija: 893.63, tasa: 0.1600 },
-          { limiteInf: 12935.83, cuotaFija: 1182.88, tasa: 0.1792 },
-          { limiteInf: 15487.72, cuotaFija: 1640.18, tasa: 0.2136 },
-          { limiteInf: 31236.50, cuotaFija: 5004.12, tasa: 0.2352 },
-          { limiteInf: 49233.01, cuotaFija: 9236.89, tasa: 0.3000 },
-          { limiteInf: 93993.91, cuotaFija: 22665.17, tasa: 0.3200 },
-          { limiteInf: 125325.21, cuotaFija: 32691.18, tasa: 0.3400 },
-          { limiteInf: 375975.62, cuotaFija: 117912.32, tasa: 0.3500 },
-        ],
-      };
-      
-      // Tablas Subsidio al Empleo 2025 (DOF Anexo 8 RMF 2025)
-      const tablasSubsidio: Record<string, { limiteInf: number; limiteSup: number; subsidio: number }[]> = {
-        semanal: [
-          { limiteInf: 0.01, limiteSup: 407.33, subsidio: 93.73 },
-          { limiteInf: 407.34, limiteSup: 610.96, subsidio: 93.66 },
-          { limiteInf: 610.97, limiteSup: 799.68, subsidio: 93.66 },
-          { limiteInf: 799.69, limiteSup: 814.66, subsidio: 90.44 },
-          { limiteInf: 814.67, limiteSup: 1023.75, subsidio: 88.06 },
-          { limiteInf: 1023.76, limiteSup: 1086.19, subsidio: 81.55 },
-          { limiteInf: 1086.20, limiteSup: 1228.57, subsidio: 74.83 },
-          { limiteInf: 1228.58, limiteSup: 1433.32, subsidio: 67.83 },
-          { limiteInf: 1433.33, limiteSup: 1638.07, subsidio: 58.38 },
-          { limiteInf: 1638.08, limiteSup: 1699.09, subsidio: 50.12 },
-          { limiteInf: 1699.10, limiteSup: 2543.50, subsidio: 0 },
-        ],
-        quincenal: [
-          { limiteInf: 0.01, limiteSup: 814.66, subsidio: 187.47 },
-          { limiteInf: 814.67, limiteSup: 1221.93, subsidio: 187.32 },
-          { limiteInf: 1221.94, limiteSup: 1599.36, subsidio: 187.32 },
-          { limiteInf: 1599.37, limiteSup: 1629.32, subsidio: 180.88 },
-          { limiteInf: 1629.33, limiteSup: 2047.49, subsidio: 176.12 },
-          { limiteInf: 2047.50, limiteSup: 2172.37, subsidio: 163.09 },
-          { limiteInf: 2172.38, limiteSup: 2457.13, subsidio: 149.66 },
-          { limiteInf: 2457.14, limiteSup: 2866.63, subsidio: 135.65 },
-          { limiteInf: 2866.64, limiteSup: 3276.13, subsidio: 116.76 },
-          { limiteInf: 3276.14, limiteSup: 3398.17, subsidio: 100.24 },
-          { limiteInf: 3398.18, limiteSup: 5087.00, subsidio: 0 },
-        ],
-        mensual: [
-          { limiteInf: 0.01, limiteSup: 1768.96, subsidio: 407.02 },
-          { limiteInf: 1768.97, limiteSup: 2653.38, subsidio: 406.83 },
-          { limiteInf: 2653.39, limiteSup: 3472.84, subsidio: 406.62 },
-          { limiteInf: 3472.85, limiteSup: 3537.87, subsidio: 392.77 },
-          { limiteInf: 3537.88, limiteSup: 4446.15, subsidio: 382.46 },
-          { limiteInf: 4446.16, limiteSup: 4717.18, subsidio: 354.23 },
-          { limiteInf: 4717.19, limiteSup: 5335.42, subsidio: 324.87 },
-          { limiteInf: 5335.43, limiteSup: 6224.67, subsidio: 294.63 },
-          { limiteInf: 6224.68, limiteSup: 7113.90, subsidio: 253.54 },
-          { limiteInf: 7113.91, limiteSup: 7382.33, subsidio: 217.61 },
-          { limiteInf: 7382.34, limiteSup: 10171.00, subsidio: 0 },
-        ],
-      };
-      
-      const tablaISR = tablasISR[periodo] || tablasISR['quincenal'];
-      let tramoAplicado = tablaISR[0];
-      
-      for (const tramo of tablaISR) {
-        if (base >= tramo.limiteInf) {
-          tramoAplicado = tramo;
-        }
-      }
-      
-      const excedente = Math.max(0, base - tramoAplicado.limiteInf);
-      const isr = tramoAplicado.cuotaFija + (excedente * tramoAplicado.tasa);
-      const tasaMarginal = tramoAplicado.tasa * 100; // Porcentaje del tramo aplicado
-      
-      // Buscar subsidio al empleo en tabla
-      const tablaSubsidio = tablasSubsidio[periodo] || tablasSubsidio['quincenal'];
-      let subsidio = 0;
-      
-      for (const tramo of tablaSubsidio) {
-        if (base >= tramo.limiteInf && base <= tramo.limiteSup) {
-          subsidio = tramo.subsidio;
-          break;
-        }
-      }
-      
-      return { isr: Math.max(0, isr), subsidio, tasaMarginal };
-    };
-    
-    const periodoISR = selectedFrequency === 'semanal' ? 'semanal' : selectedFrequency === 'mensual' ? 'mensual' : 'quincenal';
-    const { isr: isrCausado, subsidio: subsidioEmpleo, tasaMarginal: isrTasa } = calcularISRPeriodo(baseGravable, periodoISR);
-    const isrRetenido = Math.max(0, isrCausado - subsidioEmpleo);
-    
-    // ========== TOTALES ==========
-    const baseDeductions = totalIMSS + isrRetenido;
-    const deductions = baseDeductions + descuentoHoras + incidents;
-    const netPay = earnings - deductions;
-
-    return { 
-      baseSalary,
-      horasExtraPago,
-      horasDoblesPago,
-      horasTriplesPago,
-      horasExtraExento,
-      horasExtraGravado,
-      horasExtra: totalHorasExtra,
-      horasDobles,
-      horasTriples,
-      primaDominical,
-      diasFestivos: totalDiasFestivos,
-      pagoFestivos,
-      vacacionesPago,
-      primaVacacional,
-      earnings, 
-      deductions, 
-      netPay,
-      daysWorked,
-      periodDays,
-      absences: totalAbsences,
-      incapacities: totalIncapacities,
-      diasDomingo: totalDiasDomingo,
-      diasVacaciones: totalVacaciones,
-      // Desglose deducciones
-      imssTotal: totalIMSS,
-      imssExcedente3Umas,
-      imssPrestacionesDinero,
-      imssGastosMedicos,
-      imssInvalidezVida,
-      imssCesantiaVejez,
-      isrCausado,
-      subsidioEmpleo,
-      isrRetenido,
-      sbcDiario,
-      sdiDiario,
-      // Horas descontadas
-      horasDescontadas: totalHorasDescontadas,
-      descuentoHoras,
-      // Tasa ISR
-      isrTasa
+      retardos: backendCalc.retardos || 0,
     };
   };
 
+  // DELETED: All frontend payroll calculation logic has been removed.
+  // Calculations now come exclusively from the backend via usePayrollCalculations hook.
+  // This ensures a single source of truth for ISR, IMSS, and all payroll values.
+
+
   const filteredEmployees = allEmployees.filter(emp => {
-    const matchesDepartment = departmentFilter === "all" || emp.department === departmentFilter;
+    const matchesEmpresa = empresaFilter === "all" || emp.empresaId === empresaFilter;
     const matchesGroup = !selectedGroup || emp.grupoNominaId === selectedGroup;
-    return matchesDepartment && matchesGroup;
+
+    // Search filter
+    if (employeeSearch) {
+      const query = employeeSearch.toLowerCase();
+      const matchesSearch = emp.name.toLowerCase().includes(query) ||
+                            emp.rfc.toLowerCase().includes(query);
+      return matchesEmpresa && matchesGroup && matchesSearch;
+    }
+
+    return matchesEmpresa && matchesGroup;
   });
 
   const employeesToShow = filteredEmployees.map(emp => ({
     ...emp,
-    ...calculateEmployeePayroll(emp.id),
+    ...getEmployeePayrollFromBackend(emp.id),
   }));
 
   // For steps 1, 2 and submission, use ALL selected employees regardless of current filters
@@ -1113,7 +916,7 @@ export default function Payroll() {
     .filter(emp => selectedEmployees.has(emp.id))
     .map(emp => ({
       ...emp,
-      ...calculateEmployeePayroll(emp.id),
+      ...getEmployeePayrollFromBackend(emp.id),
     }));
 
   const totalSalary = selectedEmployeesData.reduce((sum, emp) => sum + emp.salary, 0);
@@ -1131,9 +934,9 @@ export default function Payroll() {
     return emp.earnings;
   };
   
-  const totalEarnings = selectedEmployeesData.reduce((sum, emp) => sum + getEmployeeTotalPercepciones(emp), 0);
+  const totalEarnings = selectedEmployeesData.reduce((sum, emp) => sum + getEmployeeTotalPercepciones(emp) + (emp.pagoAdicional?.montoTotal || 0), 0);
   const totalDeductions = selectedEmployeesData.reduce((sum, emp) => sum + emp.deductions, 0);
-  const totalNetPay = selectedEmployeesData.reduce((sum, emp) => sum + (getEmployeeTotalPercepciones(emp) - emp.deductions), 0);
+  const totalNetPay = selectedEmployeesData.reduce((sum, emp) => sum + (emp.netoAPagarTotal || (getEmployeeTotalPercepciones(emp) - emp.deductions)), 0);
 
   const toggleEmployee = (id: string) => {
     const newSelected = new Set(selectedEmployees);
@@ -1160,6 +963,8 @@ export default function Payroll() {
     const group = gruposNomina.find((g: GrupoNomina) => g.id === groupId);
     if (group) {
       setSelectedGroup(groupId);
+      // Sync frequency to match the group's tipoPeriodo
+      setSelectedFrequency(group.tipoPeriodo);
       // Pre-select all employees that belong to this group
       const groupEmployees = allEmployees.filter(emp => emp.grupoNominaId === groupId);
       setSelectedEmployees(new Set(groupEmployees.map(emp => emp.id)));
@@ -1275,6 +1080,13 @@ export default function Payroll() {
     }
   };
 
+  // Auto-update period when frequency changes (only in create mode)
+  useEffect(() => {
+    if (viewMode === "create" && nominaType === "ordinaria") {
+      setSelectedPeriod(getCurrentPeriod(selectedFrequency));
+    }
+  }, [selectedFrequency, viewMode, nominaType]);
+
   // Generate period options based on frequency
   const getPeriodOptions = (frequency: string): string[] => {
     const today = new Date();
@@ -1376,12 +1188,17 @@ export default function Payroll() {
       // Build employee details for API (simplified format for storage)
       const empleadosData = selectedEmployeesData.map(emp => {
         const breakdown = getEmployeeConceptBreakdown(emp.id, emp);
+        // Calculate total percepciones using same logic as Step 2 display
+        const totalPercepciones = getEmployeeTotalPercepciones(emp) + (emp.pagoAdicional?.montoTotal || 0);
         return {
           empleadoId: emp.id,
           nombre: emp.name,
           rfc: emp.rfc,
           departamento: emp.department,
           salarioBase: emp.baseSalary,
+          // Pre-calculated totals (to ensure dialog shows same values as Step 2)
+          totalPercepciones,
+          totalDeducciones: emp.deductions,
           diasTrabajados: emp.daysWorked,
           diasPeriodo: emp.periodDays,
           // Incidencias
@@ -1404,6 +1221,15 @@ export default function Payroll() {
           primaVacacional: emp.primaVacacional,
           horasDescontadas: emp.horasDescontadas,
           descuentoHoras: emp.descuentoHoras,
+          retardos: emp.retardos,
+          // Salarios SDE
+          salarioDiarioReal: emp.salarioDiarioReal,
+          salarioDiarioNominal: emp.salarioDiarioNominal,
+          salarioDiarioExento: emp.salarioDiarioExento,
+          // Pago adicional (SDE)
+          pagoAdicional: emp.pagoAdicional,
+          // Backend percepciones (detailed with clave/nombre/importe)
+          backendPercepciones: emp.backendPercepciones,
           percepciones: breakdown.percepciones.map(p => ({
             conceptoId: p.id,
             nombre: p.name,
@@ -1414,10 +1240,20 @@ export default function Payroll() {
             nombre: d.name,
             monto: d.amount,
           })),
+          // IMSS individual breakdowns
           imssTotal: emp.imssTotal,
+          imssPrestacionesDinero: emp.imssPrestacionesDinero,
+          imssGastosMedicos: emp.imssGastosMedicos,
+          imssInvalidezVida: emp.imssInvalidezVida,
+          imssCesantiaVejez: emp.imssCesantiaVejez,
+          imssExcedente3Umas: emp.imssExcedente3Umas,
+          // ISR details
+          isrCausado: emp.isrCausado,
           isrRetenido: emp.isrRetenido,
+          isrTasa: emp.isrTasa,
           subsidioEmpleo: emp.subsidioEmpleo,
           netoAPagar: emp.netPay,
+          netoAPagarTotal: emp.netoAPagarTotal,
         };
       });
 
@@ -1693,10 +1529,18 @@ export default function Payroll() {
                     </Card>
                     <Card>
                       <CardContent className="pt-4">
-                        <div className="text-sm text-muted-foreground">Total Percepciones</div>
+                        <div className="text-sm text-muted-foreground">Percepciones Nómina</div>
                         <div className="text-2xl font-bold text-primary font-mono">
-                          {formatCurrency(selectedNominaToView.totalEarnings || 0)}
+                          {formatCurrency(selectedNominaToView.totalPercepcionesNomina || 0)}
                         </div>
+                        {(selectedNominaToView.totalPercepcionesSDE || 0) > 0 && (
+                          <>
+                            <div className="text-sm text-muted-foreground mt-2">Percepciones Exentas (SDE)</div>
+                            <div className="text-lg font-bold text-green-600 dark:text-green-400 font-mono">
+                              {formatCurrency(selectedNominaToView.totalPercepcionesSDE || 0)}
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                     <Card>
@@ -1719,29 +1563,50 @@ export default function Payroll() {
 
                   {/* Total de Incidencias */}
                   {selectedNominaToView.employeeDetails && selectedNominaToView.employeeDetails.length > 0 && (() => {
-                    const totales = selectedNominaToView.employeeDetails.reduce((acc, emp) => ({
-                      faltas: acc.faltas + (emp.absences || 0),
-                      incapacidades: acc.incapacidades + (emp.incapacities || 0),
-                      diasDomingo: acc.diasDomingo + (emp.diasDomingo || 0),
-                      diasFestivos: acc.diasFestivos + (emp.diasFestivos || 0),
-                      diasVacaciones: acc.diasVacaciones + (emp.diasVacaciones || 0),
-                      horasDobles: acc.horasDobles + (emp.horasDobles || 0),
-                      horasTriples: acc.horasTriples + (emp.horasTriples || 0),
-                      horasDescontadas: acc.horasDescontadas + (emp.horasDescontadas || 0),
-                    }), {
-                      faltas: 0,
-                      incapacidades: 0,
-                      diasDomingo: 0,
-                      diasFestivos: 0,
-                      diasVacaciones: 0,
-                      horasDobles: 0,
-                      horasTriples: 0,
-                      horasDescontadas: 0,
+                    // Helper to get SDE amount from pagoAdicional.conceptos
+                    const getPagoAdicionalMonto = (conceptos: { concepto: string; monto: number }[] | undefined, searchTerm: string) =>
+                      conceptos?.find(c => c.concepto.toLowerCase().includes(searchTerm.toLowerCase()))?.monto || 0;
+
+                    const totales = selectedNominaToView.employeeDetails.reduce((acc, emp) => {
+                      const sdeConceptos = emp.pagoAdicional?.conceptos;
+                      return {
+                        // Incidencias count
+                        faltas: acc.faltas + (emp.absences || 0),
+                        incapacidades: acc.incapacidades + (emp.incapacities || 0),
+                        diasDomingo: acc.diasDomingo + (emp.diasDomingo || 0),
+                        diasFestivos: acc.diasFestivos + (emp.diasFestivos || 0),
+                        diasVacaciones: acc.diasVacaciones + (emp.diasVacaciones || 0),
+                        horasDobles: acc.horasDobles + (emp.horasDobles || 0),
+                        horasTriples: acc.horasTriples + (emp.horasTriples || 0),
+                        horasDescontadas: acc.horasDescontadas + (emp.horasDescontadas || 0),
+                        retardos: acc.retardos + (emp.retardos || 0),
+                        // Monetary totals for premium payments (nominal)
+                        primaDominicalTotal: acc.primaDominicalTotal + (emp.primaDominical || 0),
+                        pagoFestivosTotal: acc.pagoFestivosTotal + (emp.pagoFestivos || 0),
+                        horasExtraTotal: acc.horasExtraTotal + (emp.horasDoblesPago || 0) + (emp.horasTriplesPago || 0),
+                        vacacionesPagoTotal: acc.vacacionesPagoTotal + (emp.vacacionesPago || 0),
+                        primaVacacionalTotal: acc.primaVacacionalTotal + (emp.primaVacacional || 0),
+                        // SDE (exento) totals from pagoAdicional.conceptos
+                        primaDominicalSDE: acc.primaDominicalSDE + getPagoAdicionalMonto(sdeConceptos, 'Prima Dominical'),
+                        pagoFestivosSDE: acc.pagoFestivosSDE + getPagoAdicionalMonto(sdeConceptos, 'Días Festivos'),
+                        horasDoblesSDE: acc.horasDoblesSDE + getPagoAdicionalMonto(sdeConceptos, 'Horas Extra Dobles'),
+                        horasTriplesSDE: acc.horasTriplesSDE + getPagoAdicionalMonto(sdeConceptos, 'Horas Extra Triples'),
+                        vacacionesSDE: acc.vacacionesSDE + getPagoAdicionalMonto(sdeConceptos, 'Vacaciones'),
+                        primaVacacionalSDE: acc.primaVacacionalSDE + getPagoAdicionalMonto(sdeConceptos, 'Prima Vacacional'),
+                      };
+                    }, {
+                      faltas: 0, incapacidades: 0, diasDomingo: 0, diasFestivos: 0, diasVacaciones: 0,
+                      horasDobles: 0, horasTriples: 0, horasDescontadas: 0, retardos: 0,
+                      primaDominicalTotal: 0, pagoFestivosTotal: 0, horasExtraTotal: 0,
+                      vacacionesPagoTotal: 0, primaVacacionalTotal: 0,
+                      primaDominicalSDE: 0, pagoFestivosSDE: 0, horasDoblesSDE: 0, horasTriplesSDE: 0,
+                      vacacionesSDE: 0, primaVacacionalSDE: 0,
                     });
 
-                    const hasIncidencias = totales.faltas > 0 || totales.incapacidades > 0 || 
+                    const hasIncidencias = totales.faltas > 0 || totales.incapacidades > 0 ||
                       totales.diasDomingo > 0 || totales.diasFestivos > 0 || totales.diasVacaciones > 0 ||
-                      totales.horasDobles > 0 || totales.horasTriples > 0 || totales.horasDescontadas > 0;
+                      totales.horasDobles > 0 || totales.horasTriples > 0 || totales.horasDescontadas > 0 ||
+                      totales.retardos > 0;
 
                     return (
                       <Card>
@@ -1836,6 +1701,84 @@ export default function Payroll() {
                                   </div>
                                 </div>
                               )}
+                              {totales.retardos > 0 && (
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                  <div className="p-2 rounded-full bg-amber-500/20">
+                                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                  </div>
+                                  <div>
+                                    <div className="text-xs text-muted-foreground">Retardos</div>
+                                    <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{totales.retardos}</div>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Pagos Adicionales por Incidencias (Nominal + SDE) */}
+                              {(totales.primaDominicalTotal > 0 || totales.pagoFestivosTotal > 0 ||
+                                totales.horasExtraTotal > 0 || totales.vacacionesPagoTotal > 0 ||
+                                totales.primaDominicalSDE > 0 || totales.pagoFestivosSDE > 0 ||
+                                totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                                <div className="col-span-full mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                                  <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4 text-primary" />
+                                    Pagos Adicionales por Incidencias
+                                  </div>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    {(totales.primaDominicalTotal > 0 || totales.primaDominicalSDE > 0) && (
+                                      <div>
+                                        <div className="text-muted-foreground">Prima Dominical (25%)</div>
+                                        <div className="font-mono font-semibold text-primary">
+                                          +{formatCurrency(totales.primaDominicalTotal + totales.primaDominicalSDE)}
+                                        </div>
+                                        {totales.primaDominicalSDE > 0 && (
+                                          <div className="text-xs text-muted-foreground">
+                                            Nómina: {formatCurrency(totales.primaDominicalTotal)} + SDE: {formatCurrency(totales.primaDominicalSDE)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(totales.pagoFestivosTotal > 0 || totales.pagoFestivosSDE > 0) && (
+                                      <div>
+                                        <div className="text-muted-foreground">Días Festivos (3x)</div>
+                                        <div className="font-mono font-semibold text-primary">
+                                          +{formatCurrency(totales.pagoFestivosTotal + totales.pagoFestivosSDE)}
+                                        </div>
+                                        {totales.pagoFestivosSDE > 0 && (
+                                          <div className="text-xs text-muted-foreground">
+                                            Nómina: {formatCurrency(totales.pagoFestivosTotal)} + SDE: {formatCurrency(totales.pagoFestivosSDE)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(totales.horasExtraTotal > 0 || totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                                      <div>
+                                        <div className="text-muted-foreground">Horas Extra</div>
+                                        <div className="font-mono font-semibold text-primary">
+                                          +{formatCurrency(totales.horasExtraTotal + totales.horasDoblesSDE + totales.horasTriplesSDE)}
+                                        </div>
+                                        {(totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                                          <div className="text-xs text-muted-foreground">
+                                            Nómina: {formatCurrency(totales.horasExtraTotal)} + SDE: {formatCurrency(totales.horasDoblesSDE + totales.horasTriplesSDE)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    {(totales.vacacionesPagoTotal > 0 || totales.primaVacacionalTotal > 0 ||
+                                      totales.vacacionesSDE > 0 || totales.primaVacacionalSDE > 0) && (
+                                      <div>
+                                        <div className="text-muted-foreground">Vacaciones + Prima</div>
+                                        <div className="font-mono font-semibold text-primary">
+                                          +{formatCurrency(totales.vacacionesPagoTotal + totales.primaVacacionalTotal + totales.vacacionesSDE + totales.primaVacacionalSDE)}
+                                        </div>
+                                        {(totales.vacacionesSDE > 0 || totales.primaVacacionalSDE > 0) && (
+                                          <div className="text-xs text-muted-foreground">
+                                            Nómina: {formatCurrency(totales.vacacionesPagoTotal + totales.primaVacacionalTotal)} + SDE: {formatCurrency(totales.vacacionesSDE + totales.primaVacacionalSDE)}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <div className="text-center py-4 text-muted-foreground">
@@ -1843,6 +1786,78 @@ export default function Payroll() {
                               Sin incidencias en este periodo
                             </div>
                           )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })()}
+
+                  {/* Advertencias de Cumplimiento LFT */}
+                  {selectedNominaToView.employeeDetails && selectedNominaToView.employeeDetails.length > 0 && (() => {
+                    const warnings: { type: 'warning' | 'info'; message: string; detail: string }[] = [];
+
+                    // Calculate totales for warnings
+                    const wTotales = selectedNominaToView.employeeDetails.reduce((acc, emp) => ({
+                      horasDobles: acc.horasDobles + (emp.horasDobles || 0),
+                      horasTriples: acc.horasTriples + (emp.horasTriples || 0),
+                      diasFestivos: acc.diasFestivos + (emp.diasFestivos || 0),
+                    }), { horasDobles: 0, horasTriples: 0, diasFestivos: 0 });
+
+                    // Check overtime limits (Art. 66-68 LFT: max 9 hrs/week)
+                    const employeesWithExcessiveOvertime = selectedNominaToView.employeeDetails.filter(
+                      emp => ((emp.horasDobles || 0) + (emp.horasTriples || 0)) > 9
+                    );
+                    if (employeesWithExcessiveOvertime.length > 0) {
+                      warnings.push({
+                        type: 'warning',
+                        message: `${employeesWithExcessiveOvertime.length} empleado(s) con horas extra excesivas (>9 hrs/semana)`,
+                        detail: 'Art. 66-68 LFT: Máximo 9 horas extra por semana'
+                      });
+                    }
+
+                    // Check for triple hours (indicates excessive overtime)
+                    if (wTotales.horasTriples > 0) {
+                      warnings.push({
+                        type: 'info',
+                        message: `${wTotales.horasTriples} horas triples generadas (pago al 300%)`,
+                        detail: 'Art. 68 LFT: Horas que exceden 9/semana se pagan triple'
+                      });
+                    }
+
+                    // Check for worked holidays
+                    if (wTotales.diasFestivos > 0) {
+                      warnings.push({
+                        type: 'info',
+                        message: `${wTotales.diasFestivos} día(s) festivo(s) trabajados - pago triple aplicado`,
+                        detail: 'Art. 75 LFT: Días festivos obligatorios se pagan al 300%'
+                      });
+                    }
+
+                    if (warnings.length === 0) return null;
+
+                    return (
+                      <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                            <AlertTriangle className="h-4 w-4" />
+                            Puntos de Atención ({warnings.length})
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {warnings.map((w, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-sm">
+                              {w.type === 'warning' ? (
+                                <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 dark:text-amber-400" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 mt-0.5 text-blue-500" />
+                              )}
+                              <div>
+                                <div className={w.type === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}>
+                                  {w.message}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{w.detail}</div>
+                              </div>
+                            </div>
+                          ))}
                         </CardContent>
                       </Card>
                     );
@@ -1878,7 +1893,7 @@ export default function Payroll() {
                                     </div>
                                     <div className="text-right">
                                       <div className="text-muted-foreground text-xs">Percepciones</div>
-                                      <div className="font-mono text-primary">{formatCurrency(employee.earnings)}</div>
+                                      <div className="font-mono text-primary">{formatCurrency(employee.earnings + (employee.pagoAdicional?.montoTotal || 0))}</div>
                                     </div>
                                     <div className="text-right">
                                       <div className="text-muted-foreground text-xs">Deducciones</div>
@@ -1886,17 +1901,17 @@ export default function Payroll() {
                                     </div>
                                     <div className="text-right">
                                       <div className="text-muted-foreground text-xs">Neto</div>
-                                      <div className="font-mono font-semibold text-lg">{formatCurrency(employee.netPay)}</div>
+                                      <div className="font-mono font-semibold text-lg">{formatCurrency(employee.netoAPagarTotal || employee.netPay)}</div>
                                     </div>
                                   </div>
                                 </div>
                               </AccordionTrigger>
                               <AccordionContent className="pt-4 pb-2">
                                 <div className="grid grid-cols-3 gap-4">
-                                  {/* Salario Base */}
+                                  {/* Salario Neto Real */}
                                   <Card>
                                     <CardHeader className="pb-3">
-                                      <CardTitle className="text-sm font-medium">Salario Base</CardTitle>
+                                      <CardTitle className="text-sm font-medium">Salario Neto Real</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-2 text-sm">
                                       <div className="flex justify-between">
@@ -1931,11 +1946,35 @@ export default function Payroll() {
                                           <span className="font-mono">+{employee.diasFestivos}</span>
                                         </div>
                                       )}
+                                      {employee.diasVacaciones > 0 && (
+                                        <div className="flex justify-between text-green-600 dark:text-green-400">
+                                          <span>Días de vacaciones</span>
+                                          <span className="font-mono">+{employee.diasVacaciones}</span>
+                                        </div>
+                                      )}
+                                      {(employee.horasDobles > 0 || employee.horasTriples > 0) && (
+                                        <div className="flex justify-between text-blue-600 dark:text-blue-400">
+                                          <span>Horas extra</span>
+                                          <span className="font-mono">+{employee.horasDobles + employee.horasTriples}h</span>
+                                        </div>
+                                      )}
                                       <div className="h-px bg-border my-2" />
                                       <div className="flex justify-between">
                                         <span className="text-muted-foreground">Salario diario</span>
-                                        <span className="font-mono">{formatCurrency(employee.salary / 30)}</span>
+                                        <span className="font-mono">{formatCurrency(employee.salarioDiarioReal || employee.salary / 30)}</span>
                                       </div>
+                                      {employee.salarioDiarioExento > 0 && (
+                                        <>
+                                          <div className="flex justify-between text-xs">
+                                            <span className="text-muted-foreground pl-2">- Nominal (CFDI)</span>
+                                            <span className="font-mono">{formatCurrency(employee.salarioDiarioNominal)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-xs">
+                                            <span className="text-green-600 dark:text-green-400 pl-2">- Exento (SDE)</span>
+                                            <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.salarioDiarioExento)}</span>
+                                          </div>
+                                        </>
+                                      )}
                                       <div className="flex justify-between font-semibold">
                                         <span>Salario proporcional</span>
                                         <span className="font-mono">{formatCurrency(employee.baseSalary)}</span>
@@ -1949,12 +1988,28 @@ export default function Payroll() {
                                       <CardTitle className="text-sm font-medium">Desglose de Percepciones</CardTitle>
                                     </CardHeader>
                                     <CardContent className="space-y-2 text-sm">
-                                      {employee.percepciones.map((concepto) => (
-                                        <div key={concepto.id} className="flex justify-between">
-                                          <span className="text-muted-foreground">{concepto.name}</span>
-                                          <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
-                                        </div>
-                                      ))}
+                                      {/* Backend percepciones (includes Sueldo Base) */}
+                                      {employee.backendPercepciones && employee.backendPercepciones.length > 0 ? (
+                                        employee.backendPercepciones.map((p: any, idx: number) => (
+                                          <div key={idx} className="flex justify-between gap-2">
+                                            <span className="text-muted-foreground">
+                                              {p.clave === 'P001' && employee.absences > 0
+                                                ? `${p.nombre} (${employee.daysWorked}/${employee.periodDays} días)`
+                                                : p.nombre}
+                                            </span>
+                                            <span className="font-mono text-primary">{formatCurrency(p.importe)}</span>
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <>
+                                          {employee.percepciones.map((concepto) => (
+                                            <div key={concepto.id} className="flex justify-between gap-2">
+                                              <span className="text-muted-foreground">{concepto.name}</span>
+                                              <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                            </div>
+                                          ))}
+                                        </>
+                                      )}
                                       {employee.primaDominical > 0 && (
                                         <div className="flex justify-between">
                                           <span className="text-muted-foreground">Prima Dominical (25%)</span>
@@ -1973,7 +2028,7 @@ export default function Payroll() {
                                           {employee.horasDoblesPago > 0 && (
                                             <div className="flex justify-between pl-3">
                                               <span className="text-muted-foreground">
-                                                Dobles {employee.horasDobles} (200%)
+                                                Dobles {employee.horasDobles}h (200%)
                                               </span>
                                               <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
                                             </div>
@@ -1981,21 +2036,23 @@ export default function Payroll() {
                                           {employee.horasTriplesPago > 0 && (
                                             <div className="flex justify-between pl-3">
                                               <span className="text-muted-foreground">
-                                                Triples {employee.horasTriples} (300%)
+                                                Triples {employee.horasTriples}h (300%)
                                               </span>
                                               <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
                                             </div>
                                           )}
-                                          <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-green-600 dark:text-green-400">Exento ISR</span>
-                                              <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.horasExtraExento)}</span>
+                                          {(employee.horasExtraExento > 0 || employee.horasExtraGravado > 0) && (
+                                            <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-green-600 dark:text-green-400">Exento ISR</span>
+                                                <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.horasExtraExento)}</span>
+                                              </div>
+                                              <div className="flex justify-between text-xs">
+                                                <span className="text-orange-600 dark:text-orange-400">Gravado ISR</span>
+                                                <span className="font-mono text-orange-600 dark:text-orange-400">{formatCurrency(employee.horasExtraGravado)}</span>
+                                              </div>
                                             </div>
-                                            <div className="flex justify-between text-xs">
-                                              <span className="text-orange-600 dark:text-orange-400">Gravado ISR</span>
-                                              <span className="font-mono text-orange-600 dark:text-orange-400">{formatCurrency(employee.horasExtraGravado)}</span>
-                                            </div>
-                                          </div>
+                                          )}
                                         </div>
                                       )}
                                       {employee.vacacionesPago > 0 && (
@@ -2010,15 +2067,28 @@ export default function Payroll() {
                                           <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
                                         </div>
                                       )}
-                                      {employee.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && (
+                                      {(!employee.backendPercepciones || employee.backendPercepciones.length === 0) && employee.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && !employee.pagoAdicional && (
                                         <div className="text-muted-foreground text-center py-4">
                                           Sin percepciones configuradas
                                         </div>
                                       )}
+                                      {/* Pago Adicional (SDE) - en verde */}
+                                      {employee.pagoAdicional && employee.pagoAdicional.montoTotal > 0 && (
+                                        <>
+                                          <div className="h-px bg-green-200 dark:bg-green-800 my-2" />
+                                          <div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Pago Adicional (SDE):</div>
+                                          {employee.pagoAdicional.conceptos.map((concepto: any, idx: number) => (
+                                            <div key={idx} className="flex justify-between gap-2">
+                                              <span className="text-green-600 dark:text-green-400">{concepto.concepto}</span>
+                                              <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(concepto.monto)}</span>
+                                            </div>
+                                          ))}
+                                        </>
+                                      )}
                                       <div className="h-px bg-border my-2" />
                                       <div className="flex justify-between font-semibold">
                                         <span>Total Percepciones</span>
-                                        <span className="font-mono text-primary">{formatCurrency(employee.earnings)}</span>
+                                        <span className="font-mono text-primary">{formatCurrency(employee.earnings + (employee.pagoAdicional?.montoTotal || 0))}</span>
                                       </div>
                                     </CardContent>
                                   </Card>
@@ -2064,15 +2134,18 @@ export default function Payroll() {
                                           <div className="font-medium text-foreground">Descuentos por Tiempo:</div>
                                           <div className="flex justify-between pl-3">
                                             <span className="text-muted-foreground">
-                                              Horas descontadas ({employee.horasDescontadas} hrs)
+                                              Horas descontadas ({employee.horasDescontadas} hrs × salario normal)
                                             </span>
                                             <span className="font-mono text-destructive">{formatCurrency(employee.descuentoHoras)}</span>
                                           </div>
+                                          <div className="flex justify-between pl-3 text-xs text-muted-foreground italic">
+                                            <span>* Reduce la base gravable del ISR</span>
+                                          </div>
                                         </div>
                                       )}
-                                      
+
                                       <div className="space-y-1 pt-2">
-                                        <div className="font-medium text-foreground">ISR - Tasa {(employee.isrTasa ?? 0).toFixed(2)}%:</div>
+                                        <div className="font-medium text-foreground">ISR (Impuesto Sobre la Renta) - Tasa {(employee.isrTasa ?? 0).toFixed(2)}%:</div>
                                         <div className="flex justify-between pl-3">
                                           <span className="text-muted-foreground">ISR Causado</span>
                                           <span className="font-mono text-destructive">{formatCurrency(employee.isrCausado)}</span>
@@ -2504,18 +2577,18 @@ export default function Payroll() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="department">Filtrar por Depto.</Label>
-                  <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                    <SelectTrigger id="department" data-testid="select-department-filter">
+                  <Label htmlFor="empresa">Filtrar por Empresa</Label>
+                  <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
+                    <SelectTrigger id="empresa" data-testid="select-empresa-filter">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="Ventas">Ventas</SelectItem>
-                      <SelectItem value="IT">IT</SelectItem>
-                      <SelectItem value="RRHH">RRHH</SelectItem>
-                      <SelectItem value="Finanzas">Finanzas</SelectItem>
-                      <SelectItem value="Operaciones">Operaciones</SelectItem>
+                      <SelectItem value="all">Todas las empresas</SelectItem>
+                      {empresas.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.nombreComercial || emp.razonSocial}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -2554,23 +2627,32 @@ export default function Payroll() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <div className="relative flex-1 max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre o RFC..."
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-payroll-employees"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={selectAll}
                   data-testid="button-select-all"
                 >
                   Seleccionar Todos
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={deselectAll}
                   data-testid="button-deselect-all"
                 >
                   Deseleccionar Todos
                 </Button>
-                <div className="flex-1" />
                 <Badge variant="secondary" data-testid="badge-selected-count">
                   {selectedEmployees.size} de {allEmployees.length} seleccionados
                 </Badge>
@@ -2595,7 +2677,7 @@ export default function Payroll() {
                     <TableHead>Empleado</TableHead>
                     <TableHead>RFC</TableHead>
                     <TableHead>Departamento</TableHead>
-                    <TableHead className="text-right">Salario Base</TableHead>
+                    <TableHead className="text-right">Salario Neto Real</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2759,6 +2841,13 @@ export default function Payroll() {
 
           {currentStep === 2 && (
             <div className="space-y-6">
+              {isLoadingPayroll ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-muted-foreground">Calculando nómina...</p>
+                </div>
+              ) : (
+              <>
               <div>
                 <h3 className="text-lg font-semibold">Resumen de Nómina</h3>
                 <p className="text-sm text-muted-foreground">
@@ -2836,6 +2925,294 @@ export default function Payroll() {
                 </Card>
               </div>
 
+              {/* Total de Incidencias del Periodo - Step 2 */}
+              {selectedEmployeesData.length > 0 && (() => {
+                // Helper to get SDE amount from pagoAdicional.conceptos
+                const getPagoAdicionalMonto = (conceptos: { concepto: string; monto: number }[] | undefined, searchTerm: string) =>
+                  conceptos?.find(c => c.concepto.toLowerCase().includes(searchTerm.toLowerCase()))?.monto || 0;
+
+                const totales = selectedEmployeesData.reduce((acc, emp) => {
+                  const sdeConceptos = emp.pagoAdicional?.conceptos;
+                  return {
+                    // Incidencias count
+                    faltas: acc.faltas + (emp.absences || 0),
+                    incapacidades: acc.incapacidades + (emp.incapacities || 0),
+                    diasDomingo: acc.diasDomingo + (emp.diasDomingo || 0),
+                    diasFestivos: acc.diasFestivos + (emp.diasFestivos || 0),
+                    diasVacaciones: acc.diasVacaciones + (emp.diasVacaciones || 0),
+                    horasDobles: acc.horasDobles + (emp.horasDobles || 0),
+                    horasTriples: acc.horasTriples + (emp.horasTriples || 0),
+                    horasDescontadas: acc.horasDescontadas + (emp.horasDescontadas || 0),
+                    retardos: acc.retardos + (emp.retardos || 0),
+                    // Monetary totals for premium payments (nominal)
+                    primaDominicalTotal: acc.primaDominicalTotal + (emp.primaDominical || 0),
+                    pagoFestivosTotal: acc.pagoFestivosTotal + (emp.pagoFestivos || 0),
+                    horasExtraTotal: acc.horasExtraTotal + (emp.horasDoblesPago || 0) + (emp.horasTriplesPago || 0),
+                    vacacionesPagoTotal: acc.vacacionesPagoTotal + (emp.vacacionesPago || 0),
+                    primaVacacionalTotal: acc.primaVacacionalTotal + (emp.primaVacacional || 0),
+                    // SDE (exento) totals from pagoAdicional.conceptos
+                    primaDominicalSDE: acc.primaDominicalSDE + getPagoAdicionalMonto(sdeConceptos, 'Prima Dominical'),
+                    pagoFestivosSDE: acc.pagoFestivosSDE + getPagoAdicionalMonto(sdeConceptos, 'Días Festivos'),
+                    horasDoblesSDE: acc.horasDoblesSDE + getPagoAdicionalMonto(sdeConceptos, 'Horas Extra Dobles'),
+                    horasTriplesSDE: acc.horasTriplesSDE + getPagoAdicionalMonto(sdeConceptos, 'Horas Extra Triples'),
+                    vacacionesSDE: acc.vacacionesSDE + getPagoAdicionalMonto(sdeConceptos, 'Vacaciones'),
+                    primaVacacionalSDE: acc.primaVacacionalSDE + getPagoAdicionalMonto(sdeConceptos, 'Prima Vacacional'),
+                  };
+                }, {
+                  faltas: 0, incapacidades: 0, diasDomingo: 0, diasFestivos: 0, diasVacaciones: 0,
+                  horasDobles: 0, horasTriples: 0, horasDescontadas: 0, retardos: 0,
+                  primaDominicalTotal: 0, pagoFestivosTotal: 0, horasExtraTotal: 0,
+                  vacacionesPagoTotal: 0, primaVacacionalTotal: 0,
+                  primaDominicalSDE: 0, pagoFestivosSDE: 0, horasDoblesSDE: 0, horasTriplesSDE: 0,
+                  vacacionesSDE: 0, primaVacacionalSDE: 0,
+                });
+
+                const hasIncidencias = totales.faltas > 0 || totales.incapacidades > 0 ||
+                  totales.diasDomingo > 0 || totales.diasFestivos > 0 || totales.diasVacaciones > 0 ||
+                  totales.horasDobles > 0 || totales.horasTriples > 0 || totales.horasDescontadas > 0 ||
+                  totales.retardos > 0;
+
+                // Compliance warnings
+                const warnings: { type: 'warning' | 'info'; message: string; detail: string }[] = [];
+                const employeesWithExcessiveOvertime = selectedEmployeesData.filter(
+                  emp => ((emp.horasDobles || 0) + (emp.horasTriples || 0)) > 9
+                );
+                if (employeesWithExcessiveOvertime.length > 0) {
+                  warnings.push({
+                    type: 'warning',
+                    message: `${employeesWithExcessiveOvertime.length} empleado(s) con horas extra excesivas (>9 hrs/semana)`,
+                    detail: 'Art. 66-68 LFT: Máximo 9 horas extra por semana'
+                  });
+                }
+                if (totales.horasTriples > 0) {
+                  warnings.push({
+                    type: 'info',
+                    message: `${totales.horasTriples} horas triples generadas (pago al 300%)`,
+                    detail: 'Art. 68 LFT: Horas que exceden 9/semana se pagan triple'
+                  });
+                }
+                if (totales.diasFestivos > 0) {
+                  warnings.push({
+                    type: 'info',
+                    message: `${totales.diasFestivos} día(s) festivo(s) trabajados - pago triple aplicado`,
+                    detail: 'Art. 75 LFT: Días festivos obligatorios se pagan al 300%'
+                  });
+                }
+
+                return (
+                  <>
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4" />
+                          Total de Incidencias del Periodo
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {hasIncidencias ? (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {totales.faltas > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                                <div className="p-2 rounded-full bg-destructive/20">
+                                  <XCircle className="h-4 w-4 text-destructive" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Faltas</div>
+                                  <div className="text-lg font-bold text-destructive">{totales.faltas} días</div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.incapacidades > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                                <div className="p-2 rounded-full bg-orange-500/20">
+                                  <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Incapacidades</div>
+                                  <div className="text-lg font-bold text-orange-600 dark:text-orange-400">{totales.incapacidades} días</div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.diasDomingo > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-primary/10 border border-primary/20">
+                                <div className="p-2 rounded-full bg-primary/20">
+                                  <Calendar className="h-4 w-4 text-primary" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Domingos Trabajados</div>
+                                  <div className="text-lg font-bold text-primary">{totales.diasDomingo} días</div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.diasFestivos > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                                <div className="p-2 rounded-full bg-purple-500/20">
+                                  <Star className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Días Festivos</div>
+                                  <div className="text-lg font-bold text-purple-600 dark:text-purple-400">{totales.diasFestivos} días</div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.diasVacaciones > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
+                                <div className="p-2 rounded-full bg-green-500/20">
+                                  <Sun className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Días de Vacaciones</div>
+                                  <div className="text-lg font-bold text-green-600 dark:text-green-400">{totales.diasVacaciones} días</div>
+                                </div>
+                              </div>
+                            )}
+                            {(totales.horasDobles > 0 || totales.horasTriples > 0) && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                <div className="p-2 rounded-full bg-blue-500/20">
+                                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Horas Extra</div>
+                                  <div className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                                    {totales.horasDobles + totales.horasTriples}h
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    ({totales.horasDobles}h dobles, {totales.horasTriples}h triples)
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.horasDescontadas > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+                                <div className="p-2 rounded-full bg-red-500/20">
+                                  <MinusCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Horas Descontadas</div>
+                                  <div className="text-lg font-bold text-red-600 dark:text-red-400">{totales.horasDescontadas}h</div>
+                                </div>
+                              </div>
+                            )}
+                            {totales.retardos > 0 && (
+                              <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                <div className="p-2 rounded-full bg-amber-500/20">
+                                  <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-muted-foreground">Retardos</div>
+                                  <div className="text-lg font-bold text-amber-600 dark:text-amber-400">{totales.retardos}</div>
+                                </div>
+                              </div>
+                            )}
+                            {/* Pagos Adicionales por Incidencias (Nominal + SDE) */}
+                            {(totales.primaDominicalTotal > 0 || totales.pagoFestivosTotal > 0 ||
+                              totales.horasExtraTotal > 0 || totales.vacacionesPagoTotal > 0 ||
+                              totales.primaDominicalSDE > 0 || totales.pagoFestivosSDE > 0 ||
+                              totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                              <div className="col-span-full mt-4 p-4 rounded-lg bg-primary/5 border border-primary/20">
+                                <div className="text-sm font-medium mb-3 flex items-center gap-2">
+                                  <DollarSign className="h-4 w-4 text-primary" />
+                                  Pagos Adicionales por Incidencias
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                  {(totales.primaDominicalTotal > 0 || totales.primaDominicalSDE > 0) && (
+                                    <div>
+                                      <div className="text-muted-foreground">Prima Dominical (25%)</div>
+                                      <div className="font-mono font-semibold text-primary">
+                                        +{formatCurrency(totales.primaDominicalTotal + totales.primaDominicalSDE)}
+                                      </div>
+                                      {totales.primaDominicalSDE > 0 && (
+                                        <div className="text-xs text-muted-foreground">
+                                          Nómina: {formatCurrency(totales.primaDominicalTotal)} + SDE: {formatCurrency(totales.primaDominicalSDE)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {(totales.pagoFestivosTotal > 0 || totales.pagoFestivosSDE > 0) && (
+                                    <div>
+                                      <div className="text-muted-foreground">Días Festivos (3x)</div>
+                                      <div className="font-mono font-semibold text-primary">
+                                        +{formatCurrency(totales.pagoFestivosTotal + totales.pagoFestivosSDE)}
+                                      </div>
+                                      {totales.pagoFestivosSDE > 0 && (
+                                        <div className="text-xs text-muted-foreground">
+                                          Nómina: {formatCurrency(totales.pagoFestivosTotal)} + SDE: {formatCurrency(totales.pagoFestivosSDE)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {(totales.horasExtraTotal > 0 || totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                                    <div>
+                                      <div className="text-muted-foreground">Horas Extra</div>
+                                      <div className="font-mono font-semibold text-primary">
+                                        +{formatCurrency(totales.horasExtraTotal + totales.horasDoblesSDE + totales.horasTriplesSDE)}
+                                      </div>
+                                      {(totales.horasDoblesSDE > 0 || totales.horasTriplesSDE > 0) && (
+                                        <div className="text-xs text-muted-foreground">
+                                          Nómina: {formatCurrency(totales.horasExtraTotal)} + SDE: {formatCurrency(totales.horasDoblesSDE + totales.horasTriplesSDE)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                  {(totales.vacacionesPagoTotal > 0 || totales.primaVacacionalTotal > 0 ||
+                                    totales.vacacionesSDE > 0 || totales.primaVacacionalSDE > 0) && (
+                                    <div>
+                                      <div className="text-muted-foreground">Vacaciones + Prima</div>
+                                      <div className="font-mono font-semibold text-primary">
+                                        +{formatCurrency(totales.vacacionesPagoTotal + totales.primaVacacionalTotal + totales.vacacionesSDE + totales.primaVacacionalSDE)}
+                                      </div>
+                                      {(totales.vacacionesSDE > 0 || totales.primaVacacionalSDE > 0) && (
+                                        <div className="text-xs text-muted-foreground">
+                                          Nómina: {formatCurrency(totales.vacacionesPagoTotal + totales.primaVacacionalTotal)} + SDE: {formatCurrency(totales.vacacionesSDE + totales.primaVacacionalSDE)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-muted-foreground">
+                            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-600 dark:text-green-400" />
+                            Sin incidencias en este periodo
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Advertencias de Cumplimiento LFT */}
+                    {warnings.length > 0 && (
+                      <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm font-medium flex items-center gap-2 text-amber-700 dark:text-amber-400">
+                            <AlertTriangle className="h-4 w-4" />
+                            Puntos de Atención ({warnings.length})
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {warnings.map((w, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-sm">
+                              {w.type === 'warning' ? (
+                                <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-600 dark:text-amber-400" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 mt-0.5 text-blue-500" />
+                              )}
+                              <div>
+                                <div className={w.type === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}>
+                                  {w.message}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{w.detail}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                );
+              })()}
+
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Detalle por Empleado</CardTitle>
@@ -2872,7 +3249,7 @@ export default function Payroll() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Percepciones</div>
-                                  <div className="font-mono text-primary">{formatCurrency(totalPercepciones)}</div>
+                                  <div className="font-mono text-primary">{formatCurrency(totalPercepciones + (employee.pagoAdicional?.montoTotal || 0))}</div>
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Deducciones</div>
@@ -2880,98 +3257,194 @@ export default function Payroll() {
                                 </div>
                                 <div className="text-right">
                                   <div className="text-muted-foreground text-xs">Neto</div>
-                                  <div className="font-mono font-semibold text-lg">{formatCurrency(totalPercepciones - employee.deductions)}</div>
+                                  <div className="font-mono font-semibold text-lg">{formatCurrency(employee.netoAPagarTotal || (totalPercepciones - employee.deductions))}</div>
                                 </div>
                               </div>
                             </div>
                           </AccordionTrigger>
                           <AccordionContent className="pt-4 pb-2">
-                            {/* Metadatos contextuales */}
-                            <div className="flex flex-wrap gap-4 mb-4 text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-                              <div className="flex items-center gap-2">
-                                <span>Periodo:</span>
-                                <span className="font-mono font-medium text-foreground">{employee.periodDays} días</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span>Trabajados:</span>
-                                <span className="font-mono font-medium text-foreground">{employee.daysWorked} días</span>
-                              </div>
-                              {employee.absences > 0 && (
-                                <div className="flex items-center gap-2">
-                                  <span>Faltas:</span>
-                                  <span className="font-mono font-medium text-destructive">{employee.absences}</span>
-                                </div>
-                              )}
-                              {employee.incapacities > 0 && (
-                                <div className="flex items-center gap-2">
-                                  <span>Incapacidades:</span>
-                                  <span className="font-mono font-medium text-orange-600">{employee.incapacities}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-2">
-                                <span>Salario diario:</span>
-                                <span className="font-mono font-medium text-foreground">{formatCurrency(salarioDiario)}</span>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                              {/* Percepciones - Lista única estilo NOI */}
+                            <div className="grid grid-cols-3 gap-4">
+                              {/* Salario Neto Real */}
                               <Card>
                                 <CardHeader className="pb-3">
-                                  <CardTitle className="text-sm font-medium">Percepciones</CardTitle>
+                                  <CardTitle className="text-sm font-medium">Salario Neto Real</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-2 text-sm">
-                                  {breakdown.percepciones.map((concepto) => (
-                                    <div key={concepto.id} className="flex justify-between gap-2">
-                                      <span className="text-muted-foreground">{concepto.name}</span>
-                                      <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Días del periodo</span>
+                                    <span className="font-mono">{employee.periodDays}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Días trabajados</span>
+                                    <span className="font-mono">{employee.daysWorked}</span>
+                                  </div>
+                                  {employee.absences > 0 && (
+                                    <div className="flex justify-between text-destructive">
+                                      <span>Faltas</span>
+                                      <span className="font-mono">-{employee.absences}</span>
                                     </div>
-                                  ))}
+                                  )}
+                                  {employee.incapacities > 0 && (
+                                    <div className="flex justify-between text-orange-600">
+                                      <span>Incapacidades</span>
+                                      <span className="font-mono">-{employee.incapacities}</span>
+                                    </div>
+                                  )}
+                                  {employee.diasDomingo > 0 && (
+                                    <div className="flex justify-between text-primary">
+                                      <span>Domingos trabajados</span>
+                                      <span className="font-mono">+{employee.diasDomingo}</span>
+                                    </div>
+                                  )}
+                                  {employee.diasFestivos > 0 && (
+                                    <div className="flex justify-between text-purple-600 dark:text-purple-400">
+                                      <span>Días festivos trabajados</span>
+                                      <span className="font-mono">+{employee.diasFestivos}</span>
+                                    </div>
+                                  )}
+                                  {employee.diasVacaciones > 0 && (
+                                    <div className="flex justify-between text-green-600 dark:text-green-400">
+                                      <span>Días de vacaciones</span>
+                                      <span className="font-mono">+{employee.diasVacaciones}</span>
+                                    </div>
+                                  )}
+                                  {(employee.horasDobles > 0 || employee.horasTriples > 0) && (
+                                    <div className="flex justify-between text-blue-600 dark:text-blue-400">
+                                      <span>Horas extra</span>
+                                      <span className="font-mono">+{employee.horasDobles + employee.horasTriples}h</span>
+                                    </div>
+                                  )}
+                                  <div className="h-px bg-border my-2" />
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Salario diario</span>
+                                    <span className="font-mono">{formatCurrency(salarioDiario)}</span>
+                                  </div>
+                                  {employee.salarioDiarioExento > 0 && (
+                                    <>
+                                      <div className="flex justify-between text-xs">
+                                        <span className="text-muted-foreground pl-2">- Nominal (CFDI)</span>
+                                        <span className="font-mono">{formatCurrency(employee.salarioDiarioNominal)}</span>
+                                      </div>
+                                      <div className="flex justify-between text-xs">
+                                        <span className="text-green-600 dark:text-green-400 pl-2">- Exento (SDE)</span>
+                                        <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.salarioDiarioExento)}</span>
+                                      </div>
+                                    </>
+                                  )}
+                                  <div className="flex justify-between font-semibold">
+                                    <span>Salario proporcional</span>
+                                    <span className="font-mono">{formatCurrency(employee.baseSalary)}</span>
+                                  </div>
+                                </CardContent>
+                              </Card>
+
+                              {/* Desglose de Percepciones */}
+                              <Card>
+                                <CardHeader className="pb-3">
+                                  <CardTitle className="text-sm font-medium">Desglose de Percepciones</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-2 text-sm">
+                                  {/* Backend percepciones (includes Sueldo Base) */}
+                                  {employee.backendPercepciones && employee.backendPercepciones.length > 0 ? (
+                                    employee.backendPercepciones.map((p, idx) => (
+                                      <div key={idx} className="flex justify-between gap-2">
+                                        <span className="text-muted-foreground">
+                                          {p.clave === 'P001' && employee.absences > 0
+                                            ? `${p.nombre} (${employee.daysWorked}/${employee.periodDays} días)`
+                                            : p.nombre}
+                                        </span>
+                                        <span className="font-mono text-primary">{formatCurrency(p.importe)}</span>
+                                      </div>
+                                    ))
+                                  ) : (
+                                    <>
+                                      {breakdown.percepciones.map((concepto) => (
+                                        <div key={concepto.id} className="flex justify-between gap-2">
+                                          <span className="text-muted-foreground">{concepto.name}</span>
+                                          <span className="font-mono text-primary">{formatCurrency(concepto.amount)}</span>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
                                   {employee.primaDominical > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                      <span className="text-muted-foreground">Prima Dominical ({employee.diasDomingo}d × 25%)</span>
+                                    <div className="flex justify-between">
+                                      <span className="text-muted-foreground">Prima Dominical (25%)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaDominical)}</span>
                                     </div>
                                   )}
                                   {employee.pagoFestivos > 0 && (
-                                    <div className="flex justify-between gap-2">
+                                    <div className="flex justify-between">
                                       <span className="text-muted-foreground">Días Festivos ({employee.diasFestivos}d × 200%)</span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.pagoFestivos)}</span>
+                                      <span className="font-mono text-purple-600 dark:text-purple-400">{formatCurrency(employee.pagoFestivos)}</span>
                                     </div>
                                   )}
-                                  {employee.horasDoblesPago > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                      <span className="text-muted-foreground">Horas Dobles ({employee.horasDobles}h × 200%)</span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
-                                    </div>
-                                  )}
-                                  {employee.horasTriplesPago > 0 && (
-                                    <div className="flex justify-between gap-2">
-                                      <span className="text-muted-foreground">Horas Triples ({employee.horasTriples}h × 300%)</span>
-                                      <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
+                                  {(employee.horasDoblesPago > 0 || employee.horasTriplesPago > 0) && (
+                                    <div className="space-y-1">
+                                      <div className="font-medium text-foreground">Horas Extra:</div>
+                                      {employee.horasDoblesPago > 0 && (
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">
+                                            Dobles {employee.horasDobles}h (200%)
+                                          </span>
+                                          <span className="font-mono text-primary">{formatCurrency(employee.horasDoblesPago)}</span>
+                                        </div>
+                                      )}
+                                      {employee.horasTriplesPago > 0 && (
+                                        <div className="flex justify-between pl-3">
+                                          <span className="text-muted-foreground">
+                                            Triples {employee.horasTriples}h (300%)
+                                          </span>
+                                          <span className="font-mono text-primary">{formatCurrency(employee.horasTriplesPago)}</span>
+                                        </div>
+                                      )}
+                                      {(employee.horasExtraExento > 0 || employee.horasExtraGravado > 0) && (
+                                        <div className="pl-3 pt-1 border-t border-dashed border-muted mt-1">
+                                          <div className="flex justify-between text-xs">
+                                            <span className="text-green-600 dark:text-green-400">Exento ISR</span>
+                                            <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(employee.horasExtraExento)}</span>
+                                          </div>
+                                          <div className="flex justify-between text-xs">
+                                            <span className="text-orange-600 dark:text-orange-400">Gravado ISR</span>
+                                            <span className="font-mono text-orange-600 dark:text-orange-400">{formatCurrency(employee.horasExtraGravado)}</span>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   {employee.vacacionesPago > 0 && (
-                                    <div className="flex justify-between gap-2">
+                                    <div className="flex justify-between">
                                       <span className="text-muted-foreground">Vacaciones ({employee.diasVacaciones} días)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.vacacionesPago)}</span>
                                     </div>
                                   )}
                                   {employee.primaVacacional > 0 && (
-                                    <div className="flex justify-between gap-2">
+                                    <div className="flex justify-between">
                                       <span className="text-muted-foreground">Prima Vacacional (25%)</span>
                                       <span className="font-mono text-primary">{formatCurrency(employee.primaVacacional)}</span>
                                     </div>
                                   )}
-                                  {breakdown.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && (
+                                  {(!employee.backendPercepciones || employee.backendPercepciones.length === 0) && breakdown.percepciones.length === 0 && employee.primaDominical === 0 && employee.pagoFestivos === 0 && employee.horasDoblesPago === 0 && employee.horasTriplesPago === 0 && employee.vacacionesPago === 0 && employee.primaVacacional === 0 && !employee.pagoAdicional && (
                                     <div className="text-muted-foreground text-center py-4">
                                       Sin percepciones configuradas
                                     </div>
                                   )}
+                                  {/* Pago Adicional (SDE) - en verde */}
+                                  {employee.pagoAdicional && employee.pagoAdicional.montoTotal > 0 && (
+                                    <>
+                                      <div className="h-px bg-green-200 dark:bg-green-800 my-2" />
+                                      <div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Pago Adicional (SDE):</div>
+                                      {employee.pagoAdicional.conceptos.map((concepto, idx) => (
+                                        <div key={idx} className="flex justify-between gap-2">
+                                          <span className="text-green-600 dark:text-green-400">{concepto.concepto}</span>
+                                          <span className="font-mono text-green-600 dark:text-green-400">{formatCurrency(concepto.monto)}</span>
+                                        </div>
+                                      ))}
+                                    </>
+                                  )}
                                   <div className="h-px bg-border my-2" />
                                   <div className="flex justify-between font-semibold">
                                     <span>Total Percepciones</span>
-                                    <span className="font-mono text-primary">{formatCurrency(totalPercepciones)}</span>
+                                    <span className="font-mono text-primary">{formatCurrency(totalPercepciones + (employee.pagoAdicional?.montoTotal || 0))}</span>
                                   </div>
                                 </CardContent>
                               </Card>
@@ -3012,7 +3485,7 @@ export default function Payroll() {
                                       <span className="font-mono text-destructive font-medium">{formatCurrency(employee.imssTotal)}</span>
                                     </div>
                                   </div>
-                                  
+
                                   {/* Descuento por horas (retardos/ausencias parciales) - antes de ISR porque afecta la base gravable */}
                                   {employee.descuentoHoras > 0 && (
                                     <div className="space-y-1 pt-2">
@@ -3076,6 +3549,8 @@ export default function Payroll() {
                   </Accordion>
                 </CardContent>
               </Card>
+              </>
+              )}
             </div>
           )}
         </CardContent>

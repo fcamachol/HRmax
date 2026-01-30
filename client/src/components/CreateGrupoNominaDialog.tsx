@@ -51,6 +51,13 @@ type Employee = {
   apellidoMaterno?: string;
   numeroEmpleado: string;
   grupoNominaId?: string;
+  empresaId?: string;
+};
+
+type Empresa = {
+  id: string;
+  nombreComercial?: string;
+  razonSocial: string;
 };
 
 interface CreateGrupoNominaDialogProps {
@@ -81,6 +88,7 @@ export function CreateGrupoNominaDialog({
   const [newGroupDescripcion, setNewGroupDescripcion] = useState("");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [empresaFilter, setEmpresaFilter] = useState("all");
 
   // Cargar empleados y grupos de nómina
   const { data: employees = [] } = useQuery<Employee[]>({
@@ -90,6 +98,11 @@ export function CreateGrupoNominaDialog({
 
   const { data: gruposNomina = [] } = useQuery<GrupoNomina[]>({
     queryKey: ["/api/grupos-nomina"],
+    enabled: open,
+  });
+
+  const { data: empresas = [] } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas"],
     enabled: open,
   });
 
@@ -104,11 +117,15 @@ export function CreateGrupoNominaDialog({
     setNewGroupDescripcion("");
     setSelectedEmployeeIds([]);
     setSearchTerm("");
+    setEmpresaFilter("all");
   };
 
   // Filtrar y ordenar empleados
   const filteredAndSortedEmployees = employees
     .filter(emp => {
+      // Filter by empresa
+      if (empresaFilter !== "all" && emp.empresaId !== empresaFilter) return false;
+      // Filter by search term
       if (!searchTerm) return true;
       const fullName = `${emp.apellidoPaterno} ${emp.apellidoMaterno || ""} ${emp.nombre}`.toLowerCase();
       return fullName.includes(searchTerm.toLowerCase());
@@ -405,7 +422,22 @@ export function CreateGrupoNominaDialog({
 
           <div className="space-y-3">
             <Label>Empleados del Grupo</Label>
-            
+
+            {/* Filtro por Empresa */}
+            <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
+              <SelectTrigger data-testid="select-empresa-filter-grupo">
+                <SelectValue placeholder="Filtrar por empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las empresas</SelectItem>
+                {empresas.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.nombreComercial || emp.razonSocial}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             {/* Buscador */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import {
   FileText,
   Download,
@@ -27,6 +28,8 @@ import {
   FileImage,
   Trash2,
   Eye,
+  AlertCircle,
+  FileWarning,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,6 +79,26 @@ interface PersonalDocType {
   descripcion: string;
   requerido: boolean;
   icon: React.ComponentType<{ className?: string }>;
+}
+
+interface SolicitudDocumentoRH {
+  id: string;
+  tipoDocumento: string;
+  nombreDocumento: string;
+  descripcion?: string | null;
+  estatus: string;
+  prioridad: string | null;
+  fechaSolicitud: string;
+  fechaLimite?: string | null;
+}
+
+// Database folder from carpetas_empleado
+interface CarpetaEmpleadoDB {
+  id: string;
+  nombre: string;
+  icono: string | null;
+  visibleParaEmpleado: boolean;
+  orden: number;
 }
 
 // Personal document types that employees can upload
@@ -128,6 +151,7 @@ export default function PortalDocumentos() {
   const { clienteId } = usePortalAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [location] = useLocation();
   const [showRequestSheet, setShowRequestSheet] = useState(false);
   const [selectedDocType, setSelectedDocType] = useState<string>("");
   const [showPersonalesFolder, setShowPersonalesFolder] = useState(false);
@@ -137,6 +161,24 @@ export default function PortalDocumentos() {
   const [selectedPersonalDocType, setSelectedPersonalDocType] = useState<string>("");
   const [uploadingFile, setUploadingFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Solicitations state
+  const [showSolicitadosFolder, setShowSolicitadosFolder] = useState(false);
+  const [selectedSolicitud, setSelectedSolicitud] = useState<SolicitudDocumentoRH | null>(null);
+  const [showSolicitudUploadSheet, setShowSolicitudUploadSheet] = useState(false);
+  const [solicitudUploadingFile, setSolicitudUploadingFile] = useState<File | null>(null);
+  const solicitudFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check URL params for tab navigation
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const tab = searchParams.get("tab");
+    if (tab === "solicitados") {
+      setShowSolicitadosFolder(true);
+    } else if (tab === "personales") {
+      setShowPersonalesFolder(true);
+    }
+  }, [location]);
 
   // Fetch documents
   const { data: documents, isLoading, refetch } = useQuery({
@@ -201,23 +243,73 @@ export default function PortalDocumentos() {
     },
   });
 
+  // Fetch pending document solicitations from HR
+  const { data: solicitudesRH = [], refetch: refetchSolicitudes } = useQuery({
+    queryKey: ["/api/portal/solicitudes-documentos"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/solicitudes-documentos", {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json() as Promise<SolicitudDocumentoRH[]>;
+    },
+  });
+
+  // Fetch visible folders from database (carpetas_empleado)
+  const { data: dbFolders = [], refetch: refetchFolders } = useQuery({
+    queryKey: ["/api/portal/carpetas"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/carpetas", {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json() as Promise<CarpetaEmpleadoDB[]>;
+    },
+  });
+
   // Upload personal document mutation
   const uploadMutation = useMutation({
     mutationFn: async ({ tipoDocumento, file }: { tipoDocumento: string; file: File }) => {
-      const formData = new FormData();
-      formData.append("tipoDocumento", tipoDocumento);
-      formData.append("archivo", file);
-
-      const res = await fetch("/api/portal/documentos/personales/upload", {
-        method: "POST",
+      // Step 1: Get upload URL
+      const urlRes = await fetch("/api/portal/documentos/personales/upload-url", {
         credentials: "include",
-        body: formData,
       });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Error al subir documento");
+      if (!urlRes.ok) {
+        const error = await urlRes.json();
+        throw new Error(error.message || "Error al obtener URL de subida");
       }
-      return res.json();
+      const { uploadURL } = await urlRes.json();
+
+      // Step 2: Upload file to signed URL
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        throw new Error("Error al subir archivo");
+      }
+
+      // Step 3: Complete the upload
+      const completeRes = await fetch("/api/portal/documentos/personales/complete-upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          tipoDocumento,
+          archivoUrl: uploadURL.split("?")[0], // Remove query params for stored URL
+          archivoNombre: file.name,
+          archivoTipo: file.type,
+          archivoTamano: file.size,
+        }),
+      });
+      if (!completeRes.ok) {
+        const error = await completeRes.json();
+        throw new Error(error.message || "Error al completar subida");
+      }
+      return completeRes.json();
     },
     onSuccess: () => {
       toast({
@@ -226,6 +318,8 @@ export default function PortalDocumentos() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/portal/documentos/personales"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portal/documentos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/documentos-faltantes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
       setShowUploadSheet(false);
       setSelectedPersonalDocType("");
       setUploadingFile(null);
@@ -272,8 +366,71 @@ export default function PortalDocumentos() {
     },
   });
 
+  // Upload document for HR solicitation mutation
+  const uploadSolicitudMutation = useMutation({
+    mutationFn: async ({ solicitudId, file }: { solicitudId: string; file: File }) => {
+      // Step 1: Get upload URL
+      const urlRes = await fetch(`/api/portal/solicitudes-documentos/${solicitudId}/upload-url`, {
+        credentials: "include",
+      });
+      if (!urlRes.ok) {
+        const error = await urlRes.json();
+        throw new Error(error.message || "Error al obtener URL de subida");
+      }
+      const { uploadURL } = await urlRes.json();
+
+      // Step 2: Upload file to signed URL
+      const uploadRes = await fetch(uploadURL, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        throw new Error("Error al subir archivo");
+      }
+
+      // Step 3: Complete the upload
+      const completeRes = await fetch(`/api/portal/solicitudes-documentos/${solicitudId}/complete-upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          archivoUrl: uploadURL.split("?")[0], // Remove query params for stored URL
+          archivoNombre: file.name,
+          archivoTipo: file.type,
+          archivoTamano: file.size,
+        }),
+      });
+      if (!completeRes.ok) {
+        const error = await completeRes.json();
+        throw new Error(error.message || "Error al completar subida");
+      }
+      return completeRes.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Documento enviado",
+        description: "Tu documento ha sido enviado correctamente",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/solicitudes-documentos"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/dashboard"] });
+      setShowSolicitudUploadSheet(false);
+      setSelectedSolicitud(null);
+      setSolicitudUploadingFile(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleRefresh = async () => {
-    await Promise.all([refetch(), refetchPersonalDocs()]);
+    await Promise.all([refetch(), refetchPersonalDocs(), refetchSolicitudes(), refetchFolders()]);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -301,12 +458,39 @@ export default function PortalDocumentos() {
     }
   };
 
+  // Solicitation file handlers
+  const handleSolicitudFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: "Archivo muy grande",
+          description: "El archivo debe ser menor a 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      setSolicitudUploadingFile(file);
+    }
+  };
+
+  const handleSolicitudUploadSubmit = () => {
+    if (selectedSolicitud && solicitudUploadingFile) {
+      uploadSolicitudMutation.mutate({
+        solicitudId: selectedSolicitud.id,
+        file: solicitudUploadingFile,
+      });
+    }
+  };
+
   const getPersonalDocStatus = (docTypeId: string) => {
     return personalDocs?.find((d) => d.tipo === docTypeId);
   };
 
   const handleFolderClick = (folderId: string) => {
-    if (folderId === "personales") {
+    if (folderId === "solicitados") {
+      setShowSolicitadosFolder(true);
+    } else if (folderId === "personales" || folderId.startsWith("db_") && folderCategories.find(f => f.id === folderId)?.nombre === "Documentos Personales") {
       setShowPersonalesFolder(true);
     } else {
       setSelectedFolder(folderId);
@@ -333,17 +517,56 @@ export default function PortalDocumentos() {
     }
   };
 
-  // Calculate folder counts
+  // Icon mapping for database folder icons
+  const iconMapping: Record<string, React.ComponentType<{ className?: string }>> = {
+    "briefcase": Folder,
+    "user": Users,
+    "file-text": FileText,
+    "receipt": Receipt,
+    "graduation-cap": ScrollText,
+    "clipboard-check": FileCheck,
+    "alert-triangle": Shield,
+  };
+
+  // Color mapping for database folders
+  const colorMapping: Record<string, { bgColor: string; iconColor: string }> = {
+    "Documentos Personales": { bgColor: "bg-purple-50", iconColor: "text-purple-600" },
+    "Contratos": { bgColor: "bg-blue-50", iconColor: "text-[#135bec]" },
+    "Nomina": { bgColor: "bg-green-50", iconColor: "text-green-600" },
+    "Capacitacion": { bgColor: "bg-orange-50", iconColor: "text-orange-600" },
+  };
+
+  // Calculate folder counts - use database folders when available
   const folderCategories: FolderCategory[] = [
-    {
-      id: "contratos",
-      nombre: "Contratos",
-      icon: Folder,
-      bgColor: "bg-blue-50",
-      iconColor: "text-[#135bec]",
-      count: documents?.filter((d) => d.categoria === "contratos").length || 0,
-    },
-    {
+    // Show "Solicitados" first if there are pending requests
+    ...(solicitudesRH.length > 0 ? [{
+      id: "solicitados",
+      nombre: "Solicitados",
+      icon: FileWarning,
+      bgColor: "bg-red-50",
+      iconColor: "text-red-600",
+      count: solicitudesRH.length,
+      editable: true,
+    } as FolderCategory] : []),
+    // Map database folders (visibleParaEmpleado = true)
+    ...dbFolders
+      .filter(f => f.visibleParaEmpleado)
+      .sort((a, b) => a.orden - b.orden)
+      .map((folder): FolderCategory => {
+        const colors = colorMapping[folder.nombre] || { bgColor: "bg-gray-50", iconColor: "text-gray-600" };
+        const Icon = folder.icono ? iconMapping[folder.icono] || Folder : Folder;
+        return {
+          id: `db_${folder.id}`,
+          nombre: folder.nombre,
+          icon: Icon,
+          bgColor: colors.bgColor,
+          iconColor: colors.iconColor,
+          count: 0, // Count will be fetched when folder is opened
+          editable: folder.nombre === "Documentos Personales",
+        };
+      }),
+    // Keep legacy "personales" folder for backwards compatibility if no DB folders
+    ...(dbFolders.length === 0 ? [{
       id: "personales",
       nombre: "Personales",
       icon: Users,
@@ -351,23 +574,7 @@ export default function PortalDocumentos() {
       iconColor: "text-purple-600",
       count: personalDocs?.length || 0,
       editable: true,
-    },
-    {
-      id: "politicas",
-      nombre: "Políticas",
-      icon: Shield,
-      bgColor: "bg-orange-50",
-      iconColor: "text-orange-600",
-      count: documents?.filter((d) => d.categoria === "politicas").length || 0,
-    },
-    {
-      id: "otros",
-      nombre: "Otros",
-      icon: FolderOpen,
-      bgColor: "bg-gray-50",
-      iconColor: "text-gray-500",
-      count: documents?.filter((d) => !d.categoria || d.categoria === "otros").length || 0,
-    },
+    } as FolderCategory] : []),
   ];
 
   // Get recent documents (last 5)
@@ -920,6 +1127,192 @@ export default function PortalDocumentos() {
               </div>
             );
           })()}
+        </div>
+      </BottomSheet>
+
+      {/* Solicitados Folder View (HR Document Requests) */}
+      <BottomSheet
+        isOpen={showSolicitadosFolder}
+        onClose={() => setShowSolicitadosFolder(false)}
+        title="Documentos Solicitados"
+        height="full"
+      >
+        <div className="flex flex-col h-full pb-6">
+          {/* Header alert */}
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">Acción requerida</p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  RH ha solicitado que subas los siguientes documentos. Por favor, atiéndelos lo antes posible.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {solicitudesRH.length === 0 ? (
+            <div className="flex flex-col items-center justify-center flex-1 py-12 px-4 text-center">
+              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle className="h-10 w-10 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Todo en orden</h3>
+              <p className="text-sm text-gray-500 mt-2">
+                No tienes documentos pendientes por subir.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3 overflow-y-auto">
+              {solicitudesRH.map((solicitud) => (
+                <div
+                  key={solicitud.id}
+                  className="flex items-center gap-3 p-4 bg-white rounded-xl border border-gray-100 shadow-sm"
+                >
+                  <div className={cn(
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl",
+                    solicitud.prioridad === "urgente" ? "bg-red-100" :
+                    solicitud.prioridad === "alta" ? "bg-orange-100" : "bg-amber-100"
+                  )}>
+                    <FileWarning className={cn(
+                      "h-6 w-6",
+                      solicitud.prioridad === "urgente" ? "text-red-600" :
+                      solicitud.prioridad === "alta" ? "text-orange-600" : "text-amber-600"
+                    )} />
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {solicitud.nombreDocumento}
+                    </p>
+                    {solicitud.descripcion && (
+                      <p className="text-xs text-gray-500 line-clamp-1">
+                        {solicitud.descripcion}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {solicitud.prioridad === "urgente" && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-100 text-red-700">
+                          Urgente
+                        </span>
+                      )}
+                      {solicitud.prioridad === "alta" && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-700">
+                          Alta prioridad
+                        </span>
+                      )}
+                      {solicitud.fechaLimite && (
+                        <span className="text-[10px] text-gray-400">
+                          Fecha límite: {format(new Date(solicitud.fechaLimite), "d MMM", { locale: es })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="shrink-0 bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => {
+                      setSelectedSolicitud(solicitud);
+                      setShowSolicitudUploadSheet(true);
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-1" />
+                    Subir
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </BottomSheet>
+
+      {/* Upload Document for Solicitation Bottom Sheet */}
+      <BottomSheet
+        isOpen={showSolicitudUploadSheet}
+        onClose={() => {
+          setShowSolicitudUploadSheet(false);
+          setSelectedSolicitud(null);
+          setSolicitudUploadingFile(null);
+        }}
+        title={`Subir ${selectedSolicitud?.nombreDocumento || "Documento"}`}
+        height="auto"
+      >
+        <div className="space-y-4">
+          <input
+            ref={solicitudFileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            onChange={handleSolicitudFileSelect}
+            className="hidden"
+          />
+
+          {/* Request details */}
+          {selectedSolicitud?.descripcion && (
+            <div className="bg-gray-50 rounded-xl p-3">
+              <p className="text-xs font-medium text-gray-500 mb-1">Instrucciones de RH:</p>
+              <p className="text-sm text-gray-700">{selectedSolicitud.descripcion}</p>
+            </div>
+          )}
+
+          {/* Upload area */}
+          {!solicitudUploadingFile ? (
+            <div
+              onClick={() => solicitudFileInputRef.current?.click()}
+              className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center cursor-pointer hover:border-red-300 hover:bg-red-50/50 transition-all"
+            >
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Upload className="h-8 w-8 text-red-600" />
+              </div>
+              <p className="font-semibold text-gray-900 mb-1">
+                Toca para seleccionar archivo
+              </p>
+              <p className="text-sm text-gray-500">
+                PDF o imagen, máximo 5MB
+              </p>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center shrink-0">
+                  {solicitudUploadingFile.type.startsWith("image/") ? (
+                    <Image className="h-6 w-6 text-red-600" />
+                  ) : (
+                    <FileText className="h-6 w-6 text-red-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm text-gray-900 truncate">
+                    {solicitudUploadingFile.name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {(solicitudUploadingFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSolicitudUploadingFile(null)}
+                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          <Button
+            className="w-full h-12 bg-red-600 hover:bg-red-700 text-white"
+            disabled={!solicitudUploadingFile || uploadSolicitudMutation.isPending}
+            onClick={handleSolicitudUploadSubmit}
+          >
+            {uploadSolicitudMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4 mr-2" />
+                Enviar documento
+              </>
+            )}
+          </Button>
         </div>
       </BottomSheet>
     </PortalMobileLayout>

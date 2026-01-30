@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { objectStorageClient } from "./objectStorage";
+import { supabaseStorage } from "./supabaseStorage";
 import { Buffer } from "node:buffer";
 import { pdfToImg } from "pdftoimg-js";
 
@@ -27,30 +27,19 @@ interface LawsuitDocumentData {
 
 export async function analyzeLawsuitDocument(documentUrl: string): Promise<LawsuitDocumentData> {
   try {
-    // Extract bucket and object name from the GCS URL
-    const url = new URL(documentUrl);
-    const pathParts = url.pathname.split('/').filter(p => p);
-    
-    if (pathParts.length < 2) {
-      throw new Error('Invalid document URL');
-    }
+    // Normalize and parse the Supabase storage path
+    const normalizedPath = supabaseStorage.normalizeStoragePath(documentUrl);
+    const { bucket, path } = supabaseStorage.parsePath(normalizedPath);
 
-    const bucketName = pathParts[0];
-    const objectName = pathParts.slice(1).join('/');
-    
-    // Download the document from object storage
-    const bucket = objectStorageClient.bucket(bucketName);
-    const file = bucket.file(objectName);
-    
-    const [fileContents] = await file.download();
-    const [metadata] = await file.getMetadata();
-    
-    const mimeType = metadata.contentType || 'application/pdf';
+    // Download the document from Supabase storage
+    const { buffer: fileContents, contentType } = await supabaseStorage.downloadFile(bucket, path);
+
+    const mimeType = contentType || 'application/pdf';
     let base64Document: string;
     let finalMimeType: string;
     
     // If it's a PDF, convert the first page to an image
-    if (mimeType === 'application/pdf' || objectName.toLowerCase().endsWith('.pdf')) {
+    if (mimeType === 'application/pdf' || path.toLowerCase().endsWith('.pdf')) {
       console.log('Converting PDF to image for analysis...');
       
       // pdfToImg expects a file path or buffer

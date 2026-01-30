@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PortalMobileLayout } from "@/components/portal/layout/PortalMobileLayout";
 import { PullToRefresh } from "@/components/portal/layout/PullToRefresh";
+import { DocumentSolicitationBanner } from "@/components/portal/DocumentSolicitationBanner";
+import { MissingDocumentsBanner } from "@/components/portal/MissingDocumentsBanner";
 import { usePortalAuth } from "@/contexts/PortalAuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -72,6 +74,7 @@ export default function PortalHome() {
         credentials: "include",
       });
       if (!res.ok) {
+        // Fallback: diasVacacionesDisponibles on employee now contains saldoVacacionesActual from kardex
         return {
           vacacionesDisponibles: employee?.diasVacacionesDisponibles || 0,
           solicitudesPendientes: 0,
@@ -105,6 +108,30 @@ export default function PortalHome() {
         } as TodayStatus;
       }
       return res.json() as Promise<TodayStatus>;
+    },
+  });
+
+  // Fetch pending document solicitations
+  const { data: solicitudesPendientes = [], refetch: refetchSolicitudes } = useQuery({
+    queryKey: ["/api/portal/solicitudes-documentos"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/solicitudes-documentos", {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  // Fetch missing required documents
+  const { data: docsFaltantes } = useQuery({
+    queryKey: ["/api/portal/documentos-faltantes"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/documentos-faltantes", {
+        credentials: "include",
+      });
+      if (!res.ok) return { documentosFaltantes: [], total: 5, completados: 0 };
+      return res.json();
     },
   });
 
@@ -255,7 +282,7 @@ export default function PortalHome() {
   });
 
   const handleRefresh = async () => {
-    await Promise.all([refetch(), refetchTodayStatus()]);
+    await Promise.all([refetch(), refetchTodayStatus(), refetchSolicitudes()]);
   };
 
   const getFirstName = () => {
@@ -341,13 +368,26 @@ export default function PortalHome() {
     {
       id: "documentos",
       title: "Documentos",
-      subtitle: dashboardData?.documentosNuevos
-        ? `${dashboardData.documentosNuevos} nuevos`
-        : "Ver documentos",
-      showDot: (dashboardData?.documentosNuevos || 0) > 0,
+      subtitle: (() => {
+        const solicited = dashboardData?.documentosSolicitados || 0;
+        const missing = docsFaltantes?.documentosFaltantes?.length || 0;
+        const total = solicited + missing;
+        if (total > 0) {
+          const parts = [];
+          if (solicited > 0) parts.push(`${solicited} solicitado${solicited > 1 ? 's' : ''}`);
+          if (missing > 0) parts.push(`${missing} faltante${missing > 1 ? 's' : ''}`);
+          return parts.join(', ');
+        }
+        if (dashboardData?.documentosNuevos) return `${dashboardData.documentosNuevos} nuevos`;
+        return "Ver documentos";
+      })(),
+      subtitleColor: ((dashboardData?.documentosSolicitados || 0) + (docsFaltantes?.documentosFaltantes?.length || 0)) > 0
+        ? "text-rose-600 font-semibold"
+        : "text-gray-500",
+      showDot: ((dashboardData?.documentosSolicitados || 0) + (docsFaltantes?.documentosFaltantes?.length || 0)) > 0 || (dashboardData?.documentosNuevos || 0) > 0,
       icon: FolderOpen,
-      iconBg: "bg-orange-50",
-      iconColor: "text-orange-600",
+      iconBg: ((dashboardData?.documentosSolicitados || 0) + (docsFaltantes?.documentosFaltantes?.length || 0)) > 0 ? "bg-rose-50" : "bg-orange-50",
+      iconColor: ((dashboardData?.documentosSolicitados || 0) + (docsFaltantes?.documentosFaltantes?.length || 0)) > 0 ? "text-rose-600" : "text-orange-600",
       path: `/portal/${clienteId}/documentos`,
     },
     {
@@ -444,6 +484,18 @@ export default function PortalHome() {
               </Button>
             </div>
           </div>
+
+          {/* Document Solicitation Banner */}
+          <DocumentSolicitationBanner
+            solicitudes={solicitudesPendientes}
+            onNavigate={() => navigate(`/portal/${clienteId}/documentos?tab=solicitados`)}
+          />
+
+          {/* Missing Documents Banner */}
+          <MissingDocumentsBanner
+            documentosFaltantes={docsFaltantes?.documentosFaltantes || []}
+            onNavigate={() => navigate(`/portal/${clienteId}/documentos?tab=personales`)}
+          />
 
           {/* Section: Anuncios Importantes */}
           {anuncios.length > 0 && (

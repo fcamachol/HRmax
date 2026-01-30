@@ -37,6 +37,7 @@ import {
   ListChecks,
   History,
   MessageSquareWarning,
+  Link2,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
@@ -109,6 +110,11 @@ const payrollSubItems = [
     title: "Grupos de Nómina",
     url: "/payroll/grupos",
     icon: Users,
+  },
+  {
+    title: "Costos de Nómina",
+    url: "/costos",
+    icon: DollarSign,
   },
 ];
 
@@ -266,6 +272,11 @@ const mainMenuItems = [
     title: "Canal de Denuncias",
     url: "/denuncias",
     icon: MessageSquareWarning,
+  },
+  {
+    title: "Portales",
+    url: "/portales",
+    icon: Link2,
   },
   {
     title: "REPSE",

@@ -9,7 +9,9 @@ import { migrateBajaTypes } from "./migrations/migrate-baja-types";
 import { seedModulos } from "./seeds/modulos";
 import { seedConceptosLegales } from "./seeds/conceptosLegales";
 import { seedCatalogosBase } from "./seeds/catalogosBase";
+import { seedPayrollCatalogs } from "./seeds/payrollCatalogs";
 import { sessionAuthMiddleware } from "./auth/middleware";
+import { initializeWebSocket } from "./websocket";
 
 const app = express();
 const MemoryStoreSession = MemoryStore(session);
@@ -119,6 +121,9 @@ async function runBackgroundInitialization() {
     // Seed catálogos base (bancos, UMA/SMG)
     await seedCatalogosBase();
 
+    // Seed payroll catalogs (IMSS cuotas, ISR tables, etc.)
+    await seedPayrollCatalogs();
+
     log("Background initialization completed successfully");
   } catch (error) {
     console.error("Error during background initialization:", error);
@@ -127,6 +132,9 @@ async function runBackgroundInitialization() {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // Initialize WebSocket for real-time updates
+  initializeWebSocket(server);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

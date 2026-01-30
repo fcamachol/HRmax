@@ -286,6 +286,26 @@ export const TABLAS_ISR_2026: Record<TipoPeriodo, TablaISR> = {
   },
 };
 
+// TABLA ISR ANUAL 2026 - Para cálculo anual y ajustes (mensual × 12)
+// Art. 152 LISR - Cálculo anual del impuesto
+export const TABLA_ISR_ANUAL_2026: TablaISR = {
+  periodo: 'mensual', // Usamos 'mensual' como tipo base pero los valores son anuales
+  anio: 2026,
+  tramos: [
+    { limiteInferiorBp: pesosToBp(0.01), limiteSuperiorBp: pesosToBp(10134.96), cuotaFijaBp: pesosToBp(0), tasaExcedenteBp: porcentajeToBp(1.92) },
+    { limiteInferiorBp: pesosToBp(10134.97), limiteSuperiorBp: pesosToBp(86021.40), cuotaFijaBp: pesosToBp(194.52), tasaExcedenteBp: porcentajeToBp(6.40) },
+    { limiteInferiorBp: pesosToBp(86021.41), limiteSuperiorBp: pesosToBp(151186.20), cuotaFijaBp: pesosToBp(5051.28), tasaExcedenteBp: porcentajeToBp(10.88) },
+    { limiteInferiorBp: pesosToBp(151186.21), limiteSuperiorBp: pesosToBp(175740.84), cuotaFijaBp: pesosToBp(12138.12), tasaExcedenteBp: porcentajeToBp(16.00) },
+    { limiteInferiorBp: pesosToBp(175740.85), limiteSuperiorBp: pesosToBp(210413.76), cuotaFijaBp: pesosToBp(16066.80), tasaExcedenteBp: porcentajeToBp(17.92) },
+    { limiteInferiorBp: pesosToBp(210413.77), limiteSuperiorBp: pesosToBp(424414.68), cuotaFijaBp: pesosToBp(22279.32), tasaExcedenteBp: porcentajeToBp(21.36) },
+    { limiteInferiorBp: pesosToBp(424414.69), limiteSuperiorBp: pesosToBp(668921.40), cuotaFijaBp: pesosToBp(67973.40), tasaExcedenteBp: porcentajeToBp(23.52) },
+    { limiteInferiorBp: pesosToBp(668921.41), limiteSuperiorBp: pesosToBp(1276856.40), cuotaFijaBp: pesosToBp(125481.00), tasaExcedenteBp: porcentajeToBp(30.00) },
+    { limiteInferiorBp: pesosToBp(1276856.41), limiteSuperiorBp: pesosToBp(1702497.84), cuotaFijaBp: pesosToBp(307855.44), tasaExcedenteBp: porcentajeToBp(32.00) },
+    { limiteInferiorBp: pesosToBp(1702497.85), limiteSuperiorBp: pesosToBp(5107493.40), cuotaFijaBp: pesosToBp(444060.12), tasaExcedenteBp: porcentajeToBp(34.00) },
+    { limiteInferiorBp: pesosToBp(5107493.41), limiteSuperiorBp: null, cuotaFijaBp: pesosToBp(1601758.68), tasaExcedenteBp: porcentajeToBp(35.00) },
+  ],
+};
+
 // Alias para compatibilidad (usar TABLAS_ISR_2026 internamente)
 export const TABLAS_ISR_2025 = TABLAS_ISR_2026;
 
@@ -471,9 +491,10 @@ export interface TasaCesantiaVejez {
 }
 
 // Tasas Cesantía y Vejez 2026 - Cuarto incremento reforma 2020
+// NOTA: Los rangos se comparan contra UMA (Art. Décimo Transitorio, DOF 16/12/2020)
 export const TASAS_CESANTIA_VEJEZ_2026: TasaCesantiaVejez[] = [
-  { rangoDescripcion: '1.00 SM', limiteInferiorUMA: 0, limiteSuperiorUMA: 1.00, patronTasaBp: porcentajeToBp(3.150), trabajadorTasaBp: porcentajeToBp(1.125) },
-  { rangoDescripcion: '1.01 SM - 1.50 UMA', limiteInferiorUMA: 1.01, limiteSuperiorUMA: 1.50, patronTasaBp: porcentajeToBp(3.680), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: 'Hasta 1.00 UMA', limiteInferiorUMA: 0, limiteSuperiorUMA: 1.00, patronTasaBp: porcentajeToBp(3.150), trabajadorTasaBp: porcentajeToBp(1.125) },
+  { rangoDescripcion: '1.01 - 1.50 UMA', limiteInferiorUMA: 1.01, limiteSuperiorUMA: 1.50, patronTasaBp: porcentajeToBp(3.680), trabajadorTasaBp: porcentajeToBp(1.125) },
   { rangoDescripcion: '1.51 - 2.00 UMA', limiteInferiorUMA: 1.51, limiteSuperiorUMA: 2.00, patronTasaBp: porcentajeToBp(4.850), trabajadorTasaBp: porcentajeToBp(1.125) },
   { rangoDescripcion: '2.01 - 2.50 UMA', limiteInferiorUMA: 2.01, limiteSuperiorUMA: 2.50, patronTasaBp: porcentajeToBp(5.560), trabajadorTasaBp: porcentajeToBp(1.125) },
   { rangoDescripcion: '2.51 - 3.00 UMA', limiteInferiorUMA: 2.51, limiteSuperiorUMA: 3.00, patronTasaBp: porcentajeToBp(6.030), trabajadorTasaBp: porcentajeToBp(1.125) },
@@ -483,7 +504,11 @@ export const TASAS_CESANTIA_VEJEZ_2026: TasaCesantiaVejez[] = [
 ];
 
 // Cuota obrera FIJA de Cesantía y Vejez (Art. 168 LSS)
-export const CESANTIA_VEJEZ_OBRERO_TASA_BP = porcentajeToBp(1.125);
+// NOTA: 1.125% = 112.5 basis points (decimal, no entero)
+// Para cálculos exactos usar: (monto * 1125) / 100000
+// El valor 112.5 se usa para display, el cálculo real debe ser con la fórmula de arriba
+export const CESANTIA_VEJEZ_OBRERO_TASA_BP = 112.5; // 1.125% exacto
+export const CESANTIA_VEJEZ_OBRERO_TASA_PORCENTAJE = 1.125;
 
 /**
  * Obtiene la tasa patronal de Cesantía y Vejez según el SBC del trabajador
@@ -931,6 +956,7 @@ export function calcularFiniquitoLiquidacion(
       });
     }
   } else if (tipoSeparacion === 'renuncia' && aniosCompletos >= 15) {
+    // Renuncia voluntaria con 15+ años: Prima de Antigüedad aplica (Art. 162 LFT)
     const salarioBasePrimaAntiguedad = minBp(salarioDiarioBp, multiplicarBpPorTasa(pesosToBp(CONFIG_FISCAL_2025.salarioMinimo.general), 20000));
     const primaAntiguedadBp = multiplicarBpPorTasa(salarioBasePrimaAntiguedad, aniosCompletos * 120000);
     conceptos.push({
@@ -940,8 +966,30 @@ export function calcularFiniquitoLiquidacion(
       exentoBp: primaAntiguedadBp,
       gravadoBp: BigInt(0),
     });
+  } else if (tipoSeparacion === 'muerte' && aniosCompletos > 0) {
+    // Muerte del trabajador: Prima de Antigüedad aplica sin importar antigüedad (Art. 162 fracc. III LFT)
+    const salarioBasePrimaAntiguedad = minBp(salarioDiarioBp, multiplicarBpPorTasa(pesosToBp(CONFIG_FISCAL_2025.salarioMinimo.general), 20000));
+    const primaAntiguedadBp = multiplicarBpPorTasa(salarioBasePrimaAntiguedad, aniosCompletos * 120000);
+    conceptos.push({
+      concepto: `Prima de Antigüedad por Defunción (12 días × ${aniosCompletos} años)`,
+      dias: 12 * aniosCompletos,
+      montoBp: primaAntiguedadBp,
+      exentoBp: primaAntiguedadBp, // Exento por ser pago por muerte (Art. 93 fracc. XIII LISR)
+      gravadoBp: BigInt(0),
+    });
+  } else if (tipoSeparacion === 'incapacidad_permanente' && aniosCompletos > 0) {
+    // Incapacidad permanente: Prima de Antigüedad aplica sin importar antigüedad (Art. 162 fracc. III LFT)
+    const salarioBasePrimaAntiguedad = minBp(salarioDiarioBp, multiplicarBpPorTasa(pesosToBp(CONFIG_FISCAL_2025.salarioMinimo.general), 20000));
+    const primaAntiguedadBp = multiplicarBpPorTasa(salarioBasePrimaAntiguedad, aniosCompletos * 120000);
+    conceptos.push({
+      concepto: `Prima de Antigüedad por Incapacidad Permanente (12 días × ${aniosCompletos} años)`,
+      dias: 12 * aniosCompletos,
+      montoBp: primaAntiguedadBp,
+      exentoBp: primaAntiguedadBp, // Exento por incapacidad permanente (Art. 93 fracc. IV LISR)
+      gravadoBp: BigInt(0),
+    });
   }
-  
+
   let totalBp = BigInt(0);
   let totalExentoBp = BigInt(0);
   let totalGravadoBp = BigInt(0);
@@ -953,6 +1001,251 @@ export function calcularFiniquitoLiquidacion(
   }
   
   return { conceptos, totalBp, totalExentoBp, totalGravadoBp };
+}
+
+// ===================== CÁLCULO ANUAL DE ISR (Art. 97 LISR) =====================
+
+export interface ResultadoAjusteAnualISR {
+  ingresoGravableAnual: number;
+  isrAnualCalculado: number;
+  isrRetenidoTotal: number;
+  subsidioAplicadoAnual: number;
+  diferencia: number;
+  tipoAjuste: 'a_favor' | 'a_cargo' | 'sin_ajuste';
+  subsidioNoAplicado: number;
+  desglose: {
+    tramoAplicado: number;
+    baseExcedente: number;
+    isrExcedente: number;
+    cuotaFija: number;
+  };
+}
+
+/**
+ * Calcula el ajuste anual de ISR según Art. 97 LISR
+ *
+ * NOI Methodology:
+ * 1. Suma todos los ingresos gravables del año
+ * 2. Calcula ISR usando tabla anual
+ * 3. Compara con ISR retenido durante el año
+ * 4. Genera ajuste (a favor = devolución, a cargo = retención adicional)
+ *
+ * @param ingresoGravableAnual Total de ingresos gravables del año
+ * @param isrRetenidoAnual Total de ISR retenido durante el año
+ * @param subsidioAplicadoAnual Total de subsidio aplicado durante el año
+ * @returns Resultado del ajuste anual
+ */
+export function calcularAjusteAnualISR(
+  ingresoGravableAnual: number,
+  isrRetenidoAnual: number,
+  subsidioAplicadoAnual: number
+): ResultadoAjusteAnualISR {
+  const ingresoGravableBp = pesosToBp(ingresoGravableAnual);
+
+  // Calcular ISR anual usando tabla anual
+  let tramoAplicado = 0;
+  let isrAnualBp = BigInt(0);
+  let baseExcedenteBp = BigInt(0);
+  let isrExcedenteBp = BigInt(0);
+  let cuotaFijaBp = BigInt(0);
+
+  for (let i = 0; i < TABLA_ISR_ANUAL_2026.tramos.length; i++) {
+    const tramo = TABLA_ISR_ANUAL_2026.tramos[i];
+    const enTramo = compararBp(ingresoGravableBp, tramo.limiteInferiorBp) >= 0 &&
+      (tramo.limiteSuperiorBp === null || compararBp(ingresoGravableBp, tramo.limiteSuperiorBp) <= 0);
+
+    if (enTramo) {
+      tramoAplicado = i + 1;
+      baseExcedenteBp = restarBp(ingresoGravableBp, tramo.limiteInferiorBp);
+      isrExcedenteBp = multiplicarBpPorTasa(baseExcedenteBp, tramo.tasaExcedenteBp);
+      cuotaFijaBp = tramo.cuotaFijaBp;
+      isrAnualBp = sumarBp(isrExcedenteBp, tramo.cuotaFijaBp);
+      break;
+    }
+  }
+
+  const isrAnualCalculado = bpToPesos(isrAnualBp);
+
+  // Calcular subsidio anual aplicable (límite mensual × 12)
+  // NOTA 2025+: El subsidio máximo anual es $6,434.64 (536.22 × 12)
+  const subsidioAnualMaximo = CONFIG_SUBSIDIO_2026.subsidioMensual * 12;
+  const subsidioAplicable = Math.min(subsidioAplicadoAnual, subsidioAnualMaximo);
+
+  // El ISR neto anual es ISR calculado - subsidio aplicado (no puede ser negativo post-2025)
+  const isrNetoAnual = Math.max(0, isrAnualCalculado - subsidioAplicable);
+
+  // Diferencia = ISR que debió retener - ISR que retuvo
+  const diferencia = isrNetoAnual - isrRetenidoAnual;
+
+  // Subsidio no aplicado (cuando subsidio > ISR)
+  const subsidioNoAplicado = subsidioAplicable > isrAnualCalculado
+    ? subsidioAplicable - isrAnualCalculado
+    : 0;
+
+  // Determinar tipo de ajuste
+  let tipoAjuste: 'a_favor' | 'a_cargo' | 'sin_ajuste';
+  if (Math.abs(diferencia) < 1) { // Tolerancia de $1
+    tipoAjuste = 'sin_ajuste';
+  } else if (diferencia > 0) {
+    tipoAjuste = 'a_cargo'; // Trabajador debe al patrón
+  } else {
+    tipoAjuste = 'a_favor'; // Patrón debe al trabajador
+  }
+
+  return {
+    ingresoGravableAnual,
+    isrAnualCalculado,
+    isrRetenidoTotal: isrRetenidoAnual,
+    subsidioAplicadoAnual: subsidioAplicable,
+    diferencia: Math.round(diferencia * 100) / 100,
+    tipoAjuste,
+    subsidioNoAplicado: Math.round(subsidioNoAplicado * 100) / 100,
+    desglose: {
+      tramoAplicado,
+      baseExcedente: bpToPesos(baseExcedenteBp),
+      isrExcedente: bpToPesos(isrExcedenteBp),
+      cuotaFija: bpToPesos(cuotaFijaBp),
+    },
+  };
+}
+
+// ===================== ISR PARA PAGOS EXTRAORDINARIOS (Art. 96 LISR) =====================
+
+export interface ResultadoISRExtraordinario {
+  pagoExtraordinario: number;
+  promedioMensualOrdinario: number;
+  isrExtraordinarioBp: bigint;
+  isrExtraordinario: number;
+  tasaEfectiva: number;
+  metodologia: string;
+  desglose: {
+    ingresoMensualConExtra: number;
+    isrMensualConExtra: number;
+    isrMensualSinExtra: number;
+    diferenciaIsrMensual: number;
+    factorMultiplicador: number;
+  };
+}
+
+/**
+ * Calcula ISR para pagos extraordinarios usando método de promedio (Art. 96 LISR)
+ *
+ * NOI usa este método para: Aguinaldo, PTU, Prima Vacacional, Bonos
+ *
+ * Método:
+ * 1. Calcula promedio mensual de ingresos ordinarios (últimos 12 meses o YTD)
+ * 2. Suma 1/12 del pago extraordinario al promedio mensual
+ * 3. Calcula ISR mensual sobre el monto combinado
+ * 4. Resta ISR mensual sobre el promedio solo
+ * 5. Multiplica la diferencia por 12 para obtener ISR anual sobre el extraordinario
+ *
+ * @param pagoExtraordinario Monto del pago extraordinario
+ * @param promedioMensualOrdinario Promedio mensual de ingresos ordinarios
+ * @returns Resultado del cálculo de ISR extraordinario
+ */
+export function calcularISRExtraordinario(
+  pagoExtraordinario: number,
+  promedioMensualOrdinario: number
+): ResultadoISRExtraordinario {
+  const pagoExtraordinarioBp = pesosToBp(pagoExtraordinario);
+  const promedioOrdinarioBp = pesosToBp(promedioMensualOrdinario);
+
+  // Paso 1: Dividir el pago extraordinario entre 12 para obtener el incremento mensual
+  const incrementoMensualBp = dividirBp(pagoExtraordinarioBp, 12);
+
+  // Paso 2: Sumar el incremento al promedio mensual ordinario
+  const ingresoMensualConExtraBp = sumarBp(promedioOrdinarioBp, incrementoMensualBp);
+
+  // Paso 3: Calcular ISR sobre ingreso mensual CON el extraordinario
+  const isrConExtra = calcularISR(ingresoMensualConExtraBp, 'mensual');
+
+  // Paso 4: Calcular ISR sobre ingreso mensual SIN el extraordinario
+  const isrSinExtra = calcularISR(promedioOrdinarioBp, 'mensual');
+
+  // Paso 5: La diferencia de ISR mensual representa el ISR marginal por el extraordinario
+  const diferenciaIsrMensualBp = restarBp(isrConExtra.isrBp, isrSinExtra.isrBp);
+
+  // Paso 6: Multiplicar por 12 para obtener el ISR total sobre el extraordinario
+  // NOTA: Usamos el resultado antes del subsidio porque el subsidio se aplica globalmente
+  const isrExtraordinarioBp = multiplicarBpPorTasa(diferenciaIsrMensualBp, 120000); // × 12
+
+  // Calcular tasa efectiva
+  const isrExtraordinario = bpToPesos(isrExtraordinarioBp);
+  const tasaEfectiva = pagoExtraordinario > 0
+    ? (isrExtraordinario / pagoExtraordinario) * 100
+    : 0;
+
+  return {
+    pagoExtraordinario,
+    promedioMensualOrdinario,
+    isrExtraordinarioBp,
+    isrExtraordinario: Math.round(isrExtraordinario * 100) / 100,
+    tasaEfectiva: Math.round(tasaEfectiva * 100) / 100,
+    metodologia: 'Art. 96 LISR - Método de promedio (NOI compatible)',
+    desglose: {
+      ingresoMensualConExtra: bpToPesos(ingresoMensualConExtraBp),
+      isrMensualConExtra: bpToPesos(isrConExtra.isrBp),
+      isrMensualSinExtra: bpToPesos(isrSinExtra.isrBp),
+      diferenciaIsrMensual: bpToPesos(diferenciaIsrMensualBp),
+      factorMultiplicador: 12,
+    },
+  };
+}
+
+/**
+ * Calcula ISR para aguinaldo usando el método de Art. 96 LISR
+ *
+ * @param aguinaldoGravado Parte gravada del aguinaldo (después de exención 30 UMAs)
+ * @param promedioMensualOrdinario Promedio mensual de ingresos ordinarios del año
+ * @returns ISR a retener sobre el aguinaldo
+ */
+export function calcularISRAguinaldo(
+  aguinaldoGravado: number,
+  promedioMensualOrdinario: number
+): { isrAguinaldo: number; tasaEfectiva: number; metodologia: string } {
+  if (aguinaldoGravado <= 0) {
+    return {
+      isrAguinaldo: 0,
+      tasaEfectiva: 0,
+      metodologia: 'Aguinaldo 100% exento (≤ 30 UMAs)',
+    };
+  }
+
+  const resultado = calcularISRExtraordinario(aguinaldoGravado, promedioMensualOrdinario);
+
+  return {
+    isrAguinaldo: resultado.isrExtraordinario,
+    tasaEfectiva: resultado.tasaEfectiva,
+    metodologia: resultado.metodologia,
+  };
+}
+
+/**
+ * Calcula ISR para PTU usando el método de Art. 96 LISR
+ *
+ * @param ptuGravado Parte gravada del PTU (después de exención 15 UMAs)
+ * @param promedioMensualOrdinario Promedio mensual de ingresos ordinarios
+ * @returns ISR a retener sobre el PTU
+ */
+export function calcularISRPtu(
+  ptuGravado: number,
+  promedioMensualOrdinario: number
+): { isrPtu: number; tasaEfectiva: number; metodologia: string } {
+  if (ptuGravado <= 0) {
+    return {
+      isrPtu: 0,
+      tasaEfectiva: 0,
+      metodologia: 'PTU 100% exento (≤ 15 UMAs)',
+    };
+  }
+
+  const resultado = calcularISRExtraordinario(ptuGravado, promedioMensualOrdinario);
+
+  return {
+    isrPtu: resultado.isrExtraordinario,
+    tasaEfectiva: resultado.tasaEfectiva,
+    metodologia: resultado.metodologia,
+  };
 }
 
 // ===================== CLAVES SAT CFDI 4.0 =====================

@@ -332,10 +332,22 @@ import {
   denunciaAuditLog,
   type DenunciaConfiguracion,
   type InsertDenunciaConfiguracion,
-  denunciaConfiguracion
+  denunciaConfiguracion,
+  // Document Solicitations (HR requesting documents from employees)
+  type SolicitudDocumentoRH,
+  type InsertSolicitudDocumentoRH,
+  solicitudesDocumentosRH,
+  documentosEmpleado,
+  // Employee Folders (Google Drive-like document management)
+  type CarpetaEmpleado,
+  type InsertCarpetaEmpleado,
+  carpetasEmpleado,
+  defaultEmployeeFolders,
+  type DocumentoEmpleado,
+  type InsertDocumentoEmpleado,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, gte, lte, not, inArray, isNull } from "drizzle-orm";
+import { eq, desc, and, gte, lte, not, inArray, isNull, ilike, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 export interface IStorage {
@@ -1074,6 +1086,7 @@ export interface IStorage {
   // Denuncia Messages
   createDenunciaMensaje(mensaje: InsertDenunciaMensaje): Promise<DenunciaMensaje>;
   getDenunciaMensajes(denunciaId: string): Promise<DenunciaMensaje[]>;
+  markDenunciaMensajeRead(mensajeId: string, reader: "reporter" | "investigator"): Promise<void>;
 
   // Denuncia Attachments
   createDenunciaAdjunto(adjunto: InsertDenunciaAdjunto): Promise<DenunciaAdjunto>;
@@ -1086,6 +1099,26 @@ export interface IStorage {
   // Denuncia Configuration
   getDenunciaConfiguracion(clienteId: string): Promise<DenunciaConfiguracion | undefined>;
   upsertDenunciaConfiguracion(config: InsertDenunciaConfiguracion): Promise<DenunciaConfiguracion>;
+
+  // Employee Folders (Carpetas de Empleado)
+  createCarpetaEmpleado(carpeta: InsertCarpetaEmpleado): Promise<CarpetaEmpleado>;
+  getCarpetasEmpleado(empleadoId: string, parentId?: string | null): Promise<CarpetaEmpleado[]>;
+  getCarpetaEmpleado(id: string): Promise<CarpetaEmpleado | undefined>;
+  updateCarpetaEmpleado(id: string, updates: Partial<InsertCarpetaEmpleado>): Promise<CarpetaEmpleado>;
+  deleteCarpetaEmpleado(id: string): Promise<void>;
+  initializeDefaultCarpetas(clienteId: string, empleadoId: string, createdBy?: string): Promise<CarpetaEmpleado[]>;
+  getCarpetaByNombre(empleadoId: string, nombre: string): Promise<CarpetaEmpleado | undefined>;
+
+  // Employee Documents (extended with folder support)
+  createDocumentoEmpleado(documento: InsertDocumentoEmpleado): Promise<DocumentoEmpleado>;
+  getDocumentosEmpleado(empleadoId: string): Promise<DocumentoEmpleado[]>;
+  getDocumentosEmpleadoByFolder(empleadoId: string, carpetaId?: string | null): Promise<DocumentoEmpleado[]>;
+  getDocumentoEmpleado(id: string): Promise<DocumentoEmpleado | undefined>;
+  updateDocumentoEmpleado(id: string, updates: Partial<InsertDocumentoEmpleado>): Promise<DocumentoEmpleado>;
+  deleteDocumentoEmpleado(id: string): Promise<void>;
+  moveDocumentoToFolder(documentoId: string, carpetaId: string | null): Promise<DocumentoEmpleado>;
+  bulkMoveDocumentosToFolder(documentoIds: string[], carpetaId: string | null): Promise<DocumentoEmpleado[]>;
+  searchDocumentosEmpleado(empleadoId: string, query: string): Promise<DocumentoEmpleado[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1122,44 +1155,20 @@ export class DatabaseStorage implements IStorage {
     return newEmployee;
   }
   
-  // Helper function to calculate Salario Diario Exento
-  private calculateSalarioDiarioExento<T extends Partial<InsertEmployee>>(data: T): T {
-    const salarioDiarioReal = data.salarioDiarioReal ? parseFloat(String(data.salarioDiarioReal)) : null;
-    const salarioDiarioNominal = data.salarioDiarioNominal ? parseFloat(String(data.salarioDiarioNominal)) : null;
-    
-    // Formula: Exento = Real - Nominal. If Nominal doesn't exist, Exento = 0
-    let salarioDiarioExento: string | null = null;
-    
-    if (salarioDiarioReal !== null) {
-      if (salarioDiarioNominal !== null && salarioDiarioNominal > 0) {
-        const exento = Math.max(0, salarioDiarioReal - salarioDiarioNominal);
-        salarioDiarioExento = exento.toFixed(4);
-      } else {
-        // If Nominal doesn't exist, Exento = 0
-        salarioDiarioExento = "0";
-      }
-    }
-    
-    return {
-      ...data,
-      salarioDiarioExento,
-    };
-  }
-
   async createBulkEmployees(employeeList: InsertEmployee[]): Promise<Employee[]> {
     if (employeeList.length === 0) {
       return [];
     }
 
-    // Calculate salarioDiarioExento and generate nanoid for all employees
-    const employeesWithExento = employeeList.map(emp => ({
-      ...this.calculateSalarioDiarioExento(emp),
+    // Generate nanoid for all employees (salarioDiarioExento is auto-calculated by DB)
+    const employeesWithIds = employeeList.map(emp => ({
+      ...emp,
       id: nanoid(10),
     }));
 
     const newEmployees = await db
       .insert(employees)
-      .values(employeesWithExento)
+      .values(employeesWithIds)
       .returning();
     return newEmployees;
   }
@@ -1255,22 +1264,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateEmployee(id: string, updates: Partial<InsertEmployee>): Promise<Employee> {
     const existingEmployee = await this.getEmployee(id);
-    
-    // Recalculate salarioDiarioExento if salary fields are being updated
-    let updatesWithExento = updates;
-    if ('salarioDiarioReal' in updates || 'salarioDiarioNominal' in updates) {
-      // Merge existing values with updates to calculate correctly
-      const mergedData = {
-        salarioDiarioReal: updates.salarioDiarioReal ?? existingEmployee?.salarioDiarioReal,
-        salarioDiarioNominal: updates.salarioDiarioNominal ?? existingEmployee?.salarioDiarioNominal,
-      };
-      const calculated = this.calculateSalarioDiarioExento(mergedData);
-      updatesWithExento = { ...updates, salarioDiarioExento: calculated.salarioDiarioExento };
-    }
-    
+
+    // Note: salarioDiarioExento is auto-calculated by the database as a generated column
     const [updated] = await db
       .update(employees)
-      .set(updatesWithExento)
+      .set(updates)
       .where(eq(employees.id, id))
       .returning();
     
@@ -2691,6 +2689,14 @@ export class DatabaseStorage implements IStorage {
           eq(plantillasNomina.empresaId, empresaId)
         )
       )
+      .orderBy(plantillasNomina.nombre);
+  }
+
+  async getPlantillasNominaByCliente(clienteId: string): Promise<PlantillaNomina[]> {
+    return await db
+      .select()
+      .from(plantillasNomina)
+      .where(eq(plantillasNomina.clienteId, clienteId))
       .orderBy(plantillasNomina.nombre);
   }
 
@@ -4556,15 +4562,33 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(nominas).orderBy(desc(nominas.createdAt));
   }
 
+  async getNominasByCliente(clienteId: string): Promise<Nomina[]> {
+    return db.select().from(nominas)
+      .where(eq(nominas.clienteId, clienteId))
+      .orderBy(desc(nominas.createdAt));
+  }
+
   async getNominasByStatus(status: string): Promise<Nomina[]> {
     return db.select().from(nominas)
       .where(eq(nominas.status, status))
       .orderBy(desc(nominas.createdAt));
   }
 
+  async getNominasByClienteAndStatus(clienteId: string, status: string): Promise<Nomina[]> {
+    return db.select().from(nominas)
+      .where(and(eq(nominas.clienteId, clienteId), eq(nominas.status, status)))
+      .orderBy(desc(nominas.createdAt));
+  }
+
   async getNominasByPeriodo(periodo: string): Promise<Nomina[]> {
     return db.select().from(nominas)
       .where(eq(nominas.periodo, periodo))
+      .orderBy(desc(nominas.fechaPago));
+  }
+
+  async getNominasByClienteAndPeriodo(clienteId: string, periodo: string): Promise<Nomina[]> {
+    return db.select().from(nominas)
+      .where(and(eq(nominas.clienteId, clienteId), eq(nominas.periodo, periodo)))
       .orderBy(desc(nominas.fechaPago));
   }
 
@@ -4728,6 +4752,12 @@ export class DatabaseStorage implements IStorage {
   async getIncidenciasNominaByEmpleado(empleadoId: string): Promise<IncidenciaNomina[]> {
     return db.select().from(incidenciasNomina)
       .where(eq(incidenciasNomina.empleadoId, empleadoId))
+      .orderBy(desc(incidenciasNomina.createdAt));
+  }
+
+  async getIncidenciasNominaByCliente(clienteId: string): Promise<IncidenciaNomina[]> {
+    return db.select().from(incidenciasNomina)
+      .where(eq(incidenciasNomina.clienteId, clienteId))
       .orderBy(desc(incidenciasNomina.createdAt));
   }
 
@@ -7389,6 +7419,16 @@ export class DatabaseStorage implements IStorage {
       .orderBy(denunciaMensajes.createdAt);
   }
 
+  async markDenunciaMensajeRead(mensajeId: string, reader: "reporter" | "investigator"): Promise<void> {
+    const updates = reader === "reporter"
+      ? { leidoPorReportero: true, fechaLecturaReportero: new Date() }
+      : { leidoPorInvestigador: true, fechaLecturaInvestigador: new Date() };
+
+    await db.update(denunciaMensajes)
+      .set(updates)
+      .where(eq(denunciaMensajes.id, mensajeId));
+  }
+
   // Denuncia Attachments
   async createDenunciaAdjunto(adjunto: InsertDenunciaAdjunto): Promise<DenunciaAdjunto> {
     const [result] = await db.insert(denunciaAdjuntos)
@@ -7442,6 +7482,302 @@ export class DatabaseStorage implements IStorage {
       .values(config)
       .returning();
     return result;
+  }
+
+  // ============================================================================
+  // Document Solicitations (HR requesting documents from employees)
+  // ============================================================================
+
+  async createSolicitudDocumentoRH(solicitud: InsertSolicitudDocumentoRH): Promise<SolicitudDocumentoRH> {
+    const [result] = await db.insert(solicitudesDocumentosRH)
+      .values(solicitud)
+      .returning();
+    return result;
+  }
+
+  async getSolicitudDocumentoRH(id: string): Promise<SolicitudDocumentoRH | undefined> {
+    const [result] = await db.select()
+      .from(solicitudesDocumentosRH)
+      .where(eq(solicitudesDocumentosRH.id, id));
+    return result || undefined;
+  }
+
+  async getSolicitudesDocumentosRHByCliente(clienteId: string): Promise<SolicitudDocumentoRH[]> {
+    return db.select()
+      .from(solicitudesDocumentosRH)
+      .where(eq(solicitudesDocumentosRH.clienteId, clienteId))
+      .orderBy(desc(solicitudesDocumentosRH.fechaSolicitud));
+  }
+
+  async getSolicitudesDocumentosRHByEmpleado(empleadoId: string): Promise<SolicitudDocumentoRH[]> {
+    return db.select()
+      .from(solicitudesDocumentosRH)
+      .where(eq(solicitudesDocumentosRH.empleadoId, empleadoId))
+      .orderBy(desc(solicitudesDocumentosRH.fechaSolicitud));
+  }
+
+  async getSolicitudesDocumentosRHPendientesByEmpleado(empleadoId: string): Promise<SolicitudDocumentoRH[]> {
+    return db.select()
+      .from(solicitudesDocumentosRH)
+      .where(and(
+        eq(solicitudesDocumentosRH.empleadoId, empleadoId),
+        eq(solicitudesDocumentosRH.estatus, "pendiente")
+      ))
+      .orderBy(desc(solicitudesDocumentosRH.fechaSolicitud));
+  }
+
+  async countSolicitudesDocumentosRHPendientesByEmpleado(empleadoId: string): Promise<number> {
+    const result = await db.select()
+      .from(solicitudesDocumentosRH)
+      .where(and(
+        eq(solicitudesDocumentosRH.empleadoId, empleadoId),
+        eq(solicitudesDocumentosRH.estatus, "pendiente")
+      ));
+    return result.length;
+  }
+
+  async updateSolicitudDocumentoRH(id: string, updates: Partial<InsertSolicitudDocumentoRH>): Promise<SolicitudDocumentoRH> {
+    const [result] = await db.update(solicitudesDocumentosRH)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(solicitudesDocumentosRH.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteSolicitudDocumentoRH(id: string): Promise<void> {
+    await db.delete(solicitudesDocumentosRH)
+      .where(eq(solicitudesDocumentosRH.id, id));
+  }
+
+  // Mark a solicitation as delivered (when employee uploads)
+  async entregarSolicitudDocumentoRH(id: string, documentoEntregadoId: string): Promise<SolicitudDocumentoRH> {
+    const [result] = await db.update(solicitudesDocumentosRH)
+      .set({
+        estatus: "entregado",
+        documentoEntregadoId,
+        fechaEntrega: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(solicitudesDocumentosRH.id, id))
+      .returning();
+    return result;
+  }
+
+  // HR approves the delivered document
+  async aprobarSolicitudDocumentoRH(id: string, revisadoPor: string): Promise<SolicitudDocumentoRH> {
+    const [result] = await db.update(solicitudesDocumentosRH)
+      .set({
+        estatus: "aprobado",
+        revisadoPor,
+        fechaRevision: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(solicitudesDocumentosRH.id, id))
+      .returning();
+    return result;
+  }
+
+  // HR rejects the delivered document
+  async rechazarSolicitudDocumentoRH(id: string, revisadoPor: string, notasRechazo: string): Promise<SolicitudDocumentoRH> {
+    const [result] = await db.update(solicitudesDocumentosRH)
+      .set({
+        estatus: "rechazado",
+        revisadoPor,
+        notasRechazo,
+        fechaRevision: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(solicitudesDocumentosRH.id, id))
+      .returning();
+    return result;
+  }
+
+  // ============================================================================
+  // Employee Folders (Carpetas de Empleado) - Google Drive-like structure
+  // ============================================================================
+
+  async createCarpetaEmpleado(carpeta: InsertCarpetaEmpleado): Promise<CarpetaEmpleado> {
+    const [result] = await db.insert(carpetasEmpleado)
+      .values(carpeta)
+      .returning();
+    return result;
+  }
+
+  async getCarpetasEmpleado(empleadoId: string, parentId?: string | null): Promise<CarpetaEmpleado[]> {
+    if (parentId === null) {
+      // Get root-level folders (no parent)
+      return db.select()
+        .from(carpetasEmpleado)
+        .where(and(
+          eq(carpetasEmpleado.empleadoId, empleadoId),
+          isNull(carpetasEmpleado.parentId)
+        ))
+        .orderBy(carpetasEmpleado.orden);
+    } else if (parentId !== undefined) {
+      // Get children of specific parent
+      return db.select()
+        .from(carpetasEmpleado)
+        .where(and(
+          eq(carpetasEmpleado.empleadoId, empleadoId),
+          eq(carpetasEmpleado.parentId, parentId)
+        ))
+        .orderBy(carpetasEmpleado.orden);
+    }
+    // Get all folders for employee
+    return db.select()
+      .from(carpetasEmpleado)
+      .where(eq(carpetasEmpleado.empleadoId, empleadoId))
+      .orderBy(carpetasEmpleado.orden);
+  }
+
+  async getCarpetaEmpleado(id: string): Promise<CarpetaEmpleado | undefined> {
+    const [result] = await db.select()
+      .from(carpetasEmpleado)
+      .where(eq(carpetasEmpleado.id, id));
+    return result || undefined;
+  }
+
+  async getCarpetaByNombre(empleadoId: string, nombre: string): Promise<CarpetaEmpleado | undefined> {
+    const [result] = await db.select()
+      .from(carpetasEmpleado)
+      .where(and(
+        eq(carpetasEmpleado.empleadoId, empleadoId),
+        eq(carpetasEmpleado.nombre, nombre)
+      ));
+    return result || undefined;
+  }
+
+  async updateCarpetaEmpleado(id: string, updates: Partial<InsertCarpetaEmpleado>): Promise<CarpetaEmpleado> {
+    const [result] = await db.update(carpetasEmpleado)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(carpetasEmpleado.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteCarpetaEmpleado(id: string): Promise<void> {
+    await db.delete(carpetasEmpleado)
+      .where(eq(carpetasEmpleado.id, id));
+  }
+
+  async initializeDefaultCarpetas(clienteId: string, empleadoId: string, createdBy?: string): Promise<CarpetaEmpleado[]> {
+    // Check if folders already exist for this employee
+    const existingFolders = await this.getCarpetasEmpleado(empleadoId);
+    if (existingFolders.length > 0) {
+      return existingFolders;
+    }
+
+    // Create default folders
+    const folders: CarpetaEmpleado[] = [];
+    for (const folder of defaultEmployeeFolders) {
+      const [created] = await db.insert(carpetasEmpleado)
+        .values({
+          clienteId,
+          empleadoId,
+          nombre: folder.nombre,
+          icono: folder.icono,
+          visibleParaEmpleado: folder.visibleParaEmpleado,
+          orden: folder.orden,
+          tipo: "system",
+          createdBy,
+        })
+        .returning();
+      folders.push(created);
+    }
+    return folders;
+  }
+
+  // ============================================================================
+  // Employee Documents (with folder support)
+  // ============================================================================
+
+  async createDocumentoEmpleado(documento: InsertDocumentoEmpleado): Promise<DocumentoEmpleado> {
+    const [result] = await db.insert(documentosEmpleado)
+      .values(documento)
+      .returning();
+    return result;
+  }
+
+  async getDocumentosEmpleado(empleadoId: string): Promise<DocumentoEmpleado[]> {
+    return db.select()
+      .from(documentosEmpleado)
+      .where(eq(documentosEmpleado.empleadoId, empleadoId))
+      .orderBy(desc(documentosEmpleado.createdAt));
+  }
+
+  async getDocumentosEmpleadoByFolder(empleadoId: string, carpetaId?: string | null): Promise<DocumentoEmpleado[]> {
+    if (carpetaId === null) {
+      // Get documents in root (no folder assigned)
+      return db.select()
+        .from(documentosEmpleado)
+        .where(and(
+          eq(documentosEmpleado.empleadoId, empleadoId),
+          isNull(documentosEmpleado.carpetaId)
+        ))
+        .orderBy(desc(documentosEmpleado.createdAt));
+    } else if (carpetaId !== undefined) {
+      // Get documents in specific folder
+      return db.select()
+        .from(documentosEmpleado)
+        .where(and(
+          eq(documentosEmpleado.empleadoId, empleadoId),
+          eq(documentosEmpleado.carpetaId, carpetaId)
+        ))
+        .orderBy(desc(documentosEmpleado.createdAt));
+    }
+    // Get all documents
+    return this.getDocumentosEmpleado(empleadoId);
+  }
+
+  async getDocumentoEmpleado(id: string): Promise<DocumentoEmpleado | undefined> {
+    const [result] = await db.select()
+      .from(documentosEmpleado)
+      .where(eq(documentosEmpleado.id, id));
+    return result || undefined;
+  }
+
+  async updateDocumentoEmpleado(id: string, updates: Partial<InsertDocumentoEmpleado>): Promise<DocumentoEmpleado> {
+    const [result] = await db.update(documentosEmpleado)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(documentosEmpleado.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteDocumentoEmpleado(id: string): Promise<void> {
+    await db.delete(documentosEmpleado)
+      .where(eq(documentosEmpleado.id, id));
+  }
+
+  async moveDocumentoToFolder(documentoId: string, carpetaId: string | null): Promise<DocumentoEmpleado> {
+    const [result] = await db.update(documentosEmpleado)
+      .set({ carpetaId, updatedAt: new Date() })
+      .where(eq(documentosEmpleado.id, documentoId))
+      .returning();
+    return result;
+  }
+
+  async bulkMoveDocumentosToFolder(documentoIds: string[], carpetaId: string | null): Promise<DocumentoEmpleado[]> {
+    const results = await db.update(documentosEmpleado)
+      .set({ carpetaId, updatedAt: new Date() })
+      .where(inArray(documentosEmpleado.id, documentoIds))
+      .returning();
+    return results;
+  }
+
+  async searchDocumentosEmpleado(empleadoId: string, query: string): Promise<DocumentoEmpleado[]> {
+    // Search by name or description using case-insensitive search
+    const searchPattern = `%${query}%`;
+    return db.select()
+      .from(documentosEmpleado)
+      .where(and(
+        eq(documentosEmpleado.empleadoId, empleadoId),
+        or(
+          ilike(documentosEmpleado.nombre, searchPattern),
+          ilike(documentosEmpleado.archivoNombre, searchPattern)
+        )
+      ))
+      .orderBy(desc(documentosEmpleado.createdAt));
   }
 }
 

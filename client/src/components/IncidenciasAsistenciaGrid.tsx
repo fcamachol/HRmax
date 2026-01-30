@@ -257,6 +257,11 @@ export function IncidenciasAsistenciaGrid({
         queryKey: ["/api/incidencias-asistencia"],
       });
 
+      // Also invalidate payroll calculations so they refetch with new incidencias (horas extra, etc.)
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/nomina/desglose-batch"],
+      });
+
       setEmployeeData((prev) => {
         const newData = new Map(prev);
         newData.forEach((empData, empId) => {

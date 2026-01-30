@@ -108,14 +108,10 @@ interface CSVRow {
   sbc?: string;
   sdi?: string;
   tablaImss?: string;
-  
-  // Vacaciones y aguinaldo
-  diasVacacionesAnuales?: string;
-  diasVacacionesDisponibles?: string;
-  diasVacacionesUsados?: string;
+
+  // Aguinaldo (vacation days are calculated from scheme + antigüedad, not imported)
   diasAguinaldoAdicionales?: string;
-  diasVacacionesAdicionales?: string;
-  
+
   // Créditos
   creditoInfonavit?: string;
   numeroFonacot?: string;
@@ -360,22 +356,10 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
           'tabla_imss': 'tablaImss',
           'tabla imss': 'tablaImss',
           
-          // Vacaciones
-          'dias_vacaciones_anuales': 'diasVacacionesAnuales',
-          'días vacaciones anuales': 'diasVacacionesAnuales',
-          'dias vacaciones anuales': 'diasVacacionesAnuales',
-          'dias_vacaciones_disponibles': 'diasVacacionesDisponibles',
-          'días vacaciones disponibles': 'diasVacacionesDisponibles',
-          'dias vacaciones disponibles': 'diasVacacionesDisponibles',
-          'dias_vacaciones_usados': 'diasVacacionesUsados',
-          'días vacaciones usados': 'diasVacacionesUsados',
-          'dias vacaciones usados': 'diasVacacionesUsados',
+          // Aguinaldo (vacation days are calculated from scheme + antigüedad, not imported)
           'dias_aguinaldo_adicionales': 'diasAguinaldoAdicionales',
           'días aguinaldo adicionales': 'diasAguinaldoAdicionales',
           'dias aguinaldo adicionales': 'diasAguinaldoAdicionales',
-          'dias_vacaciones_adicionales': 'diasVacacionesAdicionales',
-          'días vacaciones adicionales': 'diasVacacionesAdicionales',
-          'dias vacaciones adicionales': 'diasVacacionesAdicionales',
           
           // Créditos
           'credito_infonavit': 'creditoInfonavit',
@@ -571,12 +555,8 @@ export function CSVEmployeeUploader({ open, onOpenChange }: CSVEmployeeUploaderP
         if (emp.sdi) employeeData.sdi = emp.sdi.trim();
         if (emp.tablaImss) employeeData.tablaImss = emp.tablaImss.trim();
         
-        // Vacaciones
-        if (emp.diasVacacionesAnuales) employeeData.diasVacacionesAnuales = parseInt(emp.diasVacacionesAnuales);
-        if (emp.diasVacacionesDisponibles) employeeData.diasVacacionesDisponibles = parseInt(emp.diasVacacionesDisponibles);
-        if (emp.diasVacacionesUsados) employeeData.diasVacacionesUsados = parseInt(emp.diasVacacionesUsados);
+        // Aguinaldo (vacation days are calculated from scheme + antigüedad, not imported)
         if (emp.diasAguinaldoAdicionales) employeeData.diasAguinaldoAdicionales = parseInt(emp.diasAguinaldoAdicionales);
-        if (emp.diasVacacionesAdicionales) employeeData.diasVacacionesAdicionales = parseInt(emp.diasVacacionesAdicionales);
         
         // Créditos
         if (emp.creditoInfonavit) employeeData.creditoInfonavit = emp.creditoInfonavit.trim();

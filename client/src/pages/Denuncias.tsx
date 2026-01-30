@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Shield,
@@ -54,6 +54,8 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useCliente } from "@/contexts/ClienteContext";
+import { useDenunciaSocket } from "@/hooks/useSocket";
+import type { Empresa } from "@shared/schema";
 
 const estatusLabels: Record<string, string> = {
   nuevo: "Nuevo",
@@ -113,9 +115,9 @@ interface Denuncia {
 interface Mensaje {
   id: string;
   contenido: string;
-  esDeReportante: boolean;
-  usuarioNombre: string | null;
-  leido: boolean;
+  tipoRemitente: "reporter" | "investigator" | "internal_note";
+  investigadorId?: string | null;
+  leidoPorInvestigador?: boolean;
   createdAt: string;
 }
 
@@ -126,9 +128,21 @@ interface DenunciaDetail extends Denuncia {
 }
 
 export default function Denuncias() {
-  const { clienteId, cliente, empresas } = useCliente();
+  const { clienteId } = useCliente();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Fetch empresas for portal URLs
+  const { data: empresas = [] } = useQuery<Empresa[]>({
+    queryKey: ["/api/empresas", { clienteId }],
+    queryFn: async () => {
+      if (!clienteId) return [];
+      const res = await fetch(`/api/empresas?clienteId=${clienteId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch empresas");
+      return res.json();
+    },
+    enabled: !!clienteId,
+  });
 
   const [selectedDenuncia, setSelectedDenuncia] = useState<string | null>(null);
   const [filterEstatus, setFilterEstatus] = useState<string>("all");
@@ -136,6 +150,10 @@ export default function Denuncias() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showConfig, setShowConfig] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [messageType, setMessageType] = useState<"message" | "internal_note">("message");
+
+  // Local state for editable text fields (to avoid API calls on every keystroke)
+  const [localResolucionDescripcion, setLocalResolucionDescripcion] = useState("");
 
   // Fetch denuncias
   const { data: denuncias = [], isLoading } = useQuery<Denuncia[]>({
@@ -148,6 +166,21 @@ export default function Denuncias() {
     queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`],
     enabled: !!selectedDenuncia && !!clienteId,
   });
+
+  // WebSocket for real-time message updates
+  const handleNewMessage = useCallback(() => {
+    if (selectedDenuncia && clienteId) {
+      queryClient.invalidateQueries({
+        queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`],
+      });
+      // Also refresh the list to update unread counts
+      queryClient.invalidateQueries({
+        queryKey: [`/api/denuncias?clienteId=${clienteId}`],
+      });
+    }
+  }, [selectedDenuncia, clienteId, queryClient]);
+
+  useDenunciaSocket(selectedDenuncia, handleNewMessage);
 
   // Update denuncia
   const updateMutation = useMutation({
@@ -171,7 +204,7 @@ export default function Denuncias() {
     },
   });
 
-  // Send message
+  // Send message to reporter
   const messageMutation = useMutation({
     mutationFn: async ({ id, contenido }: { id: string; contenido: string }) => {
       const res = await fetch(`/api/denuncias/${id}/mensaje?clienteId=${clienteId}`, {
@@ -192,6 +225,35 @@ export default function Denuncias() {
       toast({ variant: "destructive", title: "Error", description: "No se pudo enviar" });
     },
   });
+
+  // Add internal note
+  const notaMutation = useMutation({
+    mutationFn: async ({ id, contenido }: { id: string; contenido: string }) => {
+      const res = await fetch(`/api/denuncias/${id}/nota-interna?clienteId=${clienteId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contenido }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Error al agregar nota");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/denuncias/${selectedDenuncia}?clienteId=${clienteId}`] });
+      setNewMessage("");
+      toast({ title: "Nota agregada", description: "Nota interna guardada" });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Error", description: "No se pudo agregar la nota" });
+    },
+  });
+
+  // Sync local state when denunciaDetail changes
+  useEffect(() => {
+    if (denunciaDetail) {
+      setLocalResolucionDescripcion(denunciaDetail.resolucionDescripcion || "");
+    }
+  }, [denunciaDetail?.id]);
 
   // Filter denuncias
   const filteredDenuncias = denuncias.filter((d) => {
@@ -216,12 +278,10 @@ export default function Denuncias() {
     sinLeer: denuncias.reduce((acc, d) => acc + d.unreadMessageCount, 0),
   };
 
-  // Get portal URL
+  // Get portal URL for the anonymous denuncia portal
   const getPortalUrl = () => {
-    if (!cliente?.slug || !empresas?.length) return null;
-    const empresa = empresas[0];
-    if (!empresa?.slug) return null;
-    return `${window.location.origin}/denuncia/${cliente.slug}/${empresa.slug}`;
+    if (!clienteId) return null;
+    return `${window.location.origin}/denuncia/${clienteId}`;
   };
 
   const portalUrl = getPortalUrl();
@@ -462,67 +522,66 @@ export default function Denuncias() {
                   </CardContent>
                 </Card>
 
-                {/* Internal Notes */}
-                <div>
-                  <label className="text-sm font-medium mb-2 block">
-                    Notas internas (no visibles para el reportante)
-                  </label>
-                  <Textarea
-                    value={denunciaDetail.notasInternas || ""}
-                    onChange={(e) =>
-                      updateMutation.mutate({
-                        id: denunciaDetail.id,
-                        updates: { notasInternas: e.target.value },
-                      })
-                    }
-                    placeholder="Agregar notas internas..."
-                    className="min-h-[80px]"
-                  />
-                </div>
-
                 {/* Resolution */}
                 {["resuelto", "cerrado"].includes(denunciaDetail.estatus) && (
                   <div>
                     <label className="text-sm font-medium mb-2 block">
                       Descripción de resolución (visible para el reportante)
                     </label>
-                    <Textarea
-                      value={denunciaDetail.resolucionDescripcion || ""}
-                      onChange={(e) =>
-                        updateMutation.mutate({
-                          id: denunciaDetail.id,
-                          updates: { resolucionDescripcion: e.target.value },
-                        })
-                      }
-                      placeholder="Describir cómo se resolvió el caso..."
-                      className="min-h-[80px]"
-                    />
+                    <div className="flex gap-2">
+                      <Textarea
+                        value={localResolucionDescripcion}
+                        onChange={(e) => setLocalResolucionDescripcion(e.target.value)}
+                        placeholder="Describir cómo se resolvió el caso..."
+                        className="min-h-[80px] flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          updateMutation.mutate({
+                            id: denunciaDetail.id,
+                            updates: { resolucionDescripcion: localResolucionDescripcion },
+                          });
+                        }}
+                        disabled={localResolucionDescripcion === (denunciaDetail.resolucionDescripcion || "")}
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 )}
 
-                {/* Messages */}
+                {/* Activity Timeline - Messages and Internal Notes */}
                 <div>
                   <h3 className="text-sm font-medium mb-4 flex items-center gap-2">
                     <MessageSquare className="h-4 w-4" />
-                    Comunicación con el reportante
+                    Actividad
                   </h3>
-                  <div className="space-y-3 mb-4 max-h-[300px] overflow-y-auto">
+                  <div className="space-y-3 mb-4 max-h-[400px] overflow-y-auto">
                     {denunciaDetail.mensajes.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        Sin mensajes
+                        Sin actividad
                       </p>
                     ) : (
                       denunciaDetail.mensajes.map((m) => (
                         <div
                           key={m.id}
                           className={`p-3 rounded-lg ${
-                            m.esDeReportante ? "bg-blue-50 mr-8" : "bg-muted ml-8"
+                            m.tipoRemitente === "reporter"
+                              ? "bg-blue-50 mr-8"
+                              : m.tipoRemitente === "internal_note"
+                              ? "bg-amber-50 border-l-4 border-amber-400 ml-8"
+                              : "bg-muted ml-8"
                           }`}
                         >
                           <p className="text-sm">{m.contenido}</p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            {m.esDeReportante ? "Reportante" : m.usuarioNombre || "Admin"} •{" "}
-                            {format(new Date(m.createdAt), "d MMM, HH:mm", { locale: es })}
+                            {m.tipoRemitente === "reporter"
+                              ? "Reportante"
+                              : m.tipoRemitente === "internal_note"
+                              ? "Nota Interna"
+                              : "Admin"}{" "}
+                            • {format(new Date(m.createdAt), "d MMM, HH:mm", { locale: es })}
                           </p>
                         </div>
                       ))
@@ -530,32 +589,64 @@ export default function Denuncias() {
                   </div>
 
                   {!["cerrado", "descartado"].includes(denunciaDetail.estatus) && (
-                    <div className="flex gap-2">
-                      <Input
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Escribir mensaje al reportante..."
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && !e.shiftKey && newMessage.trim()) {
-                            e.preventDefault();
-                            messageMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Button
+                          variant={messageType === "message" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setMessageType("message")}
+                        >
+                          Mensaje
+                        </Button>
+                        <Button
+                          variant={messageType === "internal_note" ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setMessageType("internal_note")}
+                          className={messageType === "internal_note" ? "bg-amber-500 hover:bg-amber-600" : ""}
+                        >
+                          Nota Interna
+                        </Button>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          placeholder={
+                            messageType === "message"
+                              ? "Escribir mensaje al reportante..."
+                              : "Escribir nota interna (solo visible para admins)..."
                           }
-                        }}
-                      />
-                      <Button
-                        onClick={() => {
-                          if (newMessage.trim()) {
-                            messageMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
-                          }
-                        }}
-                        disabled={messageMutation.isPending || !newMessage.trim()}
-                      >
-                        {messageMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Send className="h-4 w-4" />
-                        )}
-                      </Button>
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey && newMessage.trim()) {
+                              e.preventDefault();
+                              if (messageType === "message") {
+                                messageMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
+                              } else {
+                                notaMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          onClick={() => {
+                            if (newMessage.trim()) {
+                              if (messageType === "message") {
+                                messageMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
+                              } else {
+                                notaMutation.mutate({ id: denunciaDetail.id, contenido: newMessage });
+                              }
+                            }
+                          }}
+                          disabled={(messageMutation.isPending || notaMutation.isPending) || !newMessage.trim()}
+                          className={messageType === "internal_note" ? "bg-amber-500 hover:bg-amber-600" : ""}
+                        >
+                          {(messageMutation.isPending || notaMutation.isPending) ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Send className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -597,24 +688,33 @@ export default function Denuncias() {
               La configuración avanzada estará disponible próximamente.
             </p>
             {portalUrl && (
-              <div className="mt-4 p-4 bg-muted rounded-lg">
-                <label className="text-sm font-medium block mb-2">URL del portal público</label>
-                <div className="flex gap-2">
-                  <Input value={portalUrl} readOnly className="font-mono text-xs" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      navigator.clipboard.writeText(portalUrl);
-                      toast({ title: "Copiado" });
-                    }}
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
+              <div className="mt-4 space-y-4">
+                <label className="text-sm font-medium block">URL del portal público</label>
+                <p className="text-xs text-muted-foreground">
                   Comparte esta URL con tus empleados para que puedan hacer denuncias anónimas
                 </p>
+                <div className="p-4 bg-muted rounded-lg">
+                  <div className="flex gap-2">
+                    <Input value={portalUrl} readOnly className="font-mono text-xs" />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        navigator.clipboard.writeText(portalUrl);
+                        toast({ title: "Copiado", description: "URL del portal copiada" });
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => window.open(portalUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

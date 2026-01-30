@@ -372,15 +372,18 @@ export async function calcularCuotasIMSS(
 
   // Obrero Cesantía y Vejez (tasa FIJA 1.125% - Art. 168 LSS)
   // IMPORTANTE: La tasa obrero NO es progresiva, siempre es 1.125%
-  const CESANTIA_VEJEZ_OBRERO_TASA_BP = 113; // 1.125% = 112.5 bp, redondeado a 113
-  const cesantiaObreroMontoBp = multiplicarBpPorTasa(sbcTopadoPeriodoBp, CESANTIA_VEJEZ_OBRERO_TASA_BP);
+  // Usamos 1125 / 10 para mantener precisión exacta (1.125% = 112.5 bp)
+  // Cálculo: (sbcTopadoPeriodoBp * 1125) / 100000 = sbcTopadoPeriodoBp * 1.125%
+  const cesantiaObreroMontoBp = (sbcTopadoPeriodoBp * BigInt(1125)) / BigInt(100000);
+  // C&V Obrero rate: exactly 1.125% (Art. 168 LSS)
+  const CESANTIA_VEJEZ_OBRERO_TASA_PORCENTAJE = 1.125;
   cuotasObrero.push({
     ramo: 'cesantia_vejez',
     concepto: 'Cesantía y Vejez - Trabajador',
     base: bpToPesos(sbcTopadoPeriodoBp),
     baseBp: sbcTopadoPeriodoBp,
-    tasaBp: CESANTIA_VEJEZ_OBRERO_TASA_BP,
-    tasaPorcentaje: CESANTIA_VEJEZ_OBRERO_TASA_BP / 100,
+    tasaBp: 112.5, // 1.125% in basis points (for display)
+    tasaPorcentaje: CESANTIA_VEJEZ_OBRERO_TASA_PORCENTAJE,
     montoBp: cesantiaObreroMontoBp,
     monto: bpToPesos(cesantiaObreroMontoBp),
   });

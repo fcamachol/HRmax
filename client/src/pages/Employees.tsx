@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { EmployeeTable } from "@/components/EmployeeTable";
 import { EmployeeQuickView } from "@/components/EmployeeQuickView";
 import { EmployeeDetailView } from "@/components/EmployeeDetailView";
-import { Plus, Search, Upload, Download, ChevronDown } from "lucide-react";
+import { EmployeeDocumentsBrowser } from "@/components/documents/EmployeeDocumentsBrowser";
+import { Plus, Search, Upload, Download, ChevronDown, Users, FolderOpen } from "lucide-react";
 import Papa from "papaparse";
 import {
   Dialog,
@@ -26,6 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmployeeForm } from "@/components/EmployeeForm";
 import { CSVEmployeeUploader } from "@/components/CSVEmployeeUploader";
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +35,7 @@ import { useCliente } from "@/contexts/ClienteContext";
 import type { Employee, Empresa } from "@shared/schema";
 
 type ViewMode = "list" | "quick" | "detail";
+type SubTab = "lista" | "documentos";
 
 // Mapeo de campos a encabezados en español para exportación CSV
 const CSV_COLUMN_HEADERS: Record<string, string> = {
@@ -94,13 +97,9 @@ const CSV_COLUMN_HEADERS: Record<string, string> = {
   sdi: "SDI",
   horasSemanales: "Horas Semanales",
   tablaImss: "Tabla IMSS",
-  diasVacacionesAnuales: "Días Vacaciones Anuales",
-  diasVacacionesDisponibles: "Días Vacaciones Disponibles",
-  diasVacacionesUsados: "Días Vacaciones Usados",
   diasAguinaldoAdicionales: "Días Aguinaldo Adicionales",
-  diasVacacionesAdicionales: "Días Vacaciones Adicionales",
   esquemaPrestacionesId: "Esquema Prestaciones ID",
-  saldoVacacionesActual: "Saldo Vacaciones Actual",
+  saldoVacacionesActual: "Saldo Vacaciones (Kardex)",
   creditoInfonavit: "Crédito Infonavit",
   numeroFonacot: "Número Fonacot",
   estatus: "Estatus",
@@ -128,6 +127,7 @@ const CSV_COLUMN_HEADERS: Record<string, string> = {
 
 export default function Employees() {
   const { clienteId } = useCliente();
+  const [activeSubTab, setActiveSubTab] = useState<SubTab>("lista");
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCSVDialogOpen, setIsCSVDialogOpen] = useState(false);
@@ -277,147 +277,166 @@ export default function Employees() {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre o RFC..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-employees"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" data-testid="button-export-csv">
-                <Download className="h-4 w-4 mr-2" />
-                Descargar
-                <ChevronDown className="h-4 w-4 ml-2" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onClick={() => handleExportCSV(false)}
-                disabled={filteredEmployees.length === 0}
-              >
-                Exportar filtrados ({filteredEmployees.length} empleados)
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => handleExportCSV(true)}
-                disabled={employees.length === 0}
-              >
-                Exportar todos ({employees.length} empleados)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button
-            variant="outline"
-            onClick={() => setIsCSVDialogOpen(true)}
-            data-testid="button-import-csv"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar CSV
-          </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-employee">
-                <Plus className="h-4 w-4 mr-2" />
-                Nuevo Empleado
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Agregar Nuevo Empleado</DialogTitle>
-              </DialogHeader>
-              <EmployeeForm
-                onSuccess={() => {
-                  setIsDialogOpen(false);
-                }}
+      <Tabs value={activeSubTab} onValueChange={(v) => setActiveSubTab(v as SubTab)}>
+        <TabsList>
+          <TabsTrigger value="lista">
+            <Users className="h-4 w-4 mr-2" />
+            Lista de Empleados
+          </TabsTrigger>
+          <TabsTrigger value="documentos">
+            <FolderOpen className="h-4 w-4 mr-2" />
+            Documentos
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="lista" className="space-y-6 mt-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o RFC..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+                data-testid="input-search-employees"
               />
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" data-testid="button-export-csv">
+                    <Download className="h-4 w-4 mr-2" />
+                    Descargar
+                    <ChevronDown className="h-4 w-4 ml-2" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={() => handleExportCSV(false)}
+                    disabled={filteredEmployees.length === 0}
+                  >
+                    Exportar filtrados ({filteredEmployees.length} empleados)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => handleExportCSV(true)}
+                    disabled={employees.length === 0}
+                  >
+                    Exportar todos ({employees.length} empleados)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                onClick={() => setIsCSVDialogOpen(true)}
+                data-testid="button-import-csv"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Importar CSV
+              </Button>
+              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-add-employee">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nuevo Empleado
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Agregar Nuevo Empleado</DialogTitle>
+                  </DialogHeader>
+                  <EmployeeForm
+                    onSuccess={() => {
+                      setIsDialogOpen(false);
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+            </div>
+          </div>
 
-      <CSVEmployeeUploader
-        open={isCSVDialogOpen}
-        onOpenChange={setIsCSVDialogOpen}
-      />
+          <CSVEmployeeUploader
+            open={isCSVDialogOpen}
+            onOpenChange={setIsCSVDialogOpen}
+          />
 
-      {/* Filtros */}
-      <div className="flex flex-wrap gap-4">
-        <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Empresa" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas las empresas</SelectItem>
-            {empresas.map((emp) => (
-              <SelectItem key={emp.id} value={emp.id}>
-                {emp.nombreComercial || emp.razonSocial}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          {/* Filtros */}
+          <div className="flex flex-wrap gap-4">
+            <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas las empresas</SelectItem>
+                {empresas.map((emp) => (
+                  <SelectItem key={emp.id} value={emp.id}>
+                    {emp.nombreComercial || emp.razonSocial}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Select value={departamentoFilter} onValueChange={setDepartamentoFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Departamento" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los departamentos</SelectItem>
-            {uniqueDepartamentos.map((dep) => (
-              <SelectItem key={dep} value={dep!}>
-                {dep}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <Select value={departamentoFilter} onValueChange={setDepartamentoFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Departamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los departamentos</SelectItem>
+                {uniqueDepartamentos.map((dep) => (
+                  <SelectItem key={dep} value={dep!}>
+                    {dep}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-        <Select value={puestoFilter} onValueChange={setPuestoFilter}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Puesto" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los puestos</SelectItem>
-            {uniquePuestos.map((puesto) => (
-              <SelectItem key={puesto} value={puesto!}>
-                {puesto}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+            <Select value={puestoFilter} onValueChange={setPuestoFilter}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="Puesto" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los puestos</SelectItem>
+                {uniquePuestos.map((puesto) => (
+                  <SelectItem key={puesto} value={puesto!}>
+                    {puesto}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
-      <EmployeeTable
-        employees={filteredEmployees}
-        onView={handleViewEmployee}
-        onEdit={handleEditEmployee}
-        onDelete={(id) => console.log("Delete employee:", id)}
-      />
+          <EmployeeTable
+            employees={filteredEmployees}
+            onView={handleViewEmployee}
+            onEdit={handleEditEmployee}
+            onDelete={(id) => console.log("Delete employee:", id)}
+          />
 
-      {/* Vista rápida del empleado */}
-      {viewMode === "quick" && selectedEmployee && (
-        <EmployeeQuickView
-          employee={selectedEmployee}
-          onViewDetails={handleViewDetails}
-          onClose={handleCloseViews}
-        />
-      )}
+          {/* Vista rápida del empleado */}
+          {viewMode === "quick" && selectedEmployee && (
+            <EmployeeQuickView
+              employee={selectedEmployee}
+              onViewDetails={handleViewDetails}
+              onClose={handleCloseViews}
+            />
+          )}
 
-      {/* Vista detallada del empleado */}
-      {viewMode === "detail" && selectedEmployee && (
-        <EmployeeDetailView
-          employee={selectedEmployee}
-          onBack={handleBackToQuickView}
-          onEdit={handleStartEdit}
-          isEditing={isEditing}
-          onCancelEdit={handleCancelEdit}
-          onSaveSuccess={handleEditSuccess}
-        />
-      )}
+          {/* Vista detallada del empleado */}
+          {viewMode === "detail" && selectedEmployee && (
+            <EmployeeDetailView
+              employee={selectedEmployee}
+              onBack={handleBackToQuickView}
+              onEdit={handleStartEdit}
+              isEditing={isEditing}
+              onCancelEdit={handleCancelEdit}
+              onSaveSuccess={handleEditSuccess}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="documentos" className="mt-6">
+          <EmployeeDocumentsBrowser />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -3,6 +3,22 @@
 // Defines all available variables for document templates and interpolation logic
 // ============================================================================
 
+/**
+ * Calculate vacation days based on years of seniority (LFT Art. 76)
+ * This is a pure function that can be used in shared code.
+ */
+export function getDiasVacacionesPorAntiguedad(aniosAntiguedad: number): number {
+  if (aniosAntiguedad <= 0) return 0;
+  if (aniosAntiguedad === 1) return 12;
+  if (aniosAntiguedad === 2) return 14;
+  if (aniosAntiguedad === 3) return 16;
+  if (aniosAntiguedad === 4) return 18;
+  if (aniosAntiguedad <= 9) return 20;
+  // After year 10: add 2 days per 5-year block
+  const quinqueniosAdicionales = Math.floor((aniosAntiguedad - 5) / 5);
+  return 20 + (quinqueniosAdicionales * 2);
+}
+
 export interface TemplateVariable {
   label: string;
   example?: string;
@@ -635,8 +651,10 @@ export function buildEmpleadoVariables(empleado: Record<string, unknown> | null)
     banco: empleado.banco || '',
     cuenta: empleado.cuenta || '',
     clabe: empleado.clabe || '',
-    diasVacaciones: empleado.diasVacacionesAnuales || 12,
-    diasVacacionesDisponibles: empleado.diasVacacionesDisponibles || 0,
+    // Calculate vacation days from antigüedad using LFT Art. 76 (not static field)
+    diasVacaciones: getDiasVacacionesPorAntiguedad(antiguedadAnios > 0 ? antiguedadAnios : 1),
+    // Use kardex saldo for available days
+    diasVacacionesDisponibles: empleado.saldoVacacionesActual ? parseFloat(String(empleado.saldoVacacionesActual)) : 0,
     antiguedadAnios,
     antiguedadMeses: antiguedadAnios * 12 + antiguedadMeses,
     antiguedadTexto,
@@ -817,7 +835,7 @@ export function getSampleEmpleadoData(): Record<string, unknown> {
     banco: 'BBVA',
     cuenta: '1234567890',
     clabe: '012180001234567897',
-    diasVacacionesAnuales: 12,
+    saldoVacacionesActual: '8', // Kardex saldo - will be used for diasVacacionesDisponibles
     estadoCivil: 'casado',
     genero: 'M',
     fechaNacimiento: '1985-01-01',

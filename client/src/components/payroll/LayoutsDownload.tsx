@@ -2,9 +2,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Download, FileSpreadsheet, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Download, FileSpreadsheet, RefreshCw, AlertCircle, CheckCircle2, Wallet } from "lucide-react";
 import type { LayoutGenerado } from "@shared/schema";
 
 interface LayoutsDownloadProps {
@@ -87,6 +88,100 @@ export function LayoutsDownload({ nominaId, nominaStatus, onLayoutsGenerated }: 
 
   const canGenerateLayouts = nominaStatus === "approved";
 
+  // Separar layouts por tipo
+  const layoutsNomina = layouts.filter((l) => !l.tipoLayout || l.tipoLayout === "nomina");
+  const layoutsPagosAdicionales = layouts.filter((l) => l.tipoLayout === "pagos_adicionales");
+
+  const renderLayoutList = (layoutList: LayoutGenerado[], tipo: "nomina" | "pagos_adicionales") => {
+    if (layoutList.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          {tipo === "pagos_adicionales" ? (
+            <>
+              <Wallet className="h-12 w-12 text-muted-foreground mb-3" />
+              <p className="text-muted-foreground">
+                No hay pagos adicionales (SDE) para esta nómina.
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Los pagos adicionales se generan cuando hay empleados con salario diario exento configurado.
+              </p>
+            </>
+          ) : (
+            <>
+              <FileSpreadsheet className="h-12 w-12 text-muted-foreground mb-3" />
+              <p className="text-muted-foreground">
+                No hay layouts de nómina generados.
+              </p>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {layoutList.map((layout) => (
+          <div
+            key={layout.id}
+            className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
+            data-testid={`layout-item-${layout.id}`}
+          >
+            <div className="flex items-center gap-4">
+              <div className={`p-2 rounded-md ${tipo === "pagos_adicionales" ? "bg-amber-100" : "bg-primary/10"}`}>
+                {tipo === "pagos_adicionales" ? (
+                  <Wallet className="h-5 w-5 text-amber-600" />
+                ) : (
+                  <FileSpreadsheet className="h-5 w-5 text-primary" />
+                )}
+              </div>
+              <div>
+                <p className="font-medium">{layout.nombreArchivo}</p>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    {layout.totalRegistros} registros
+                  </span>
+                  <span>•</span>
+                  <span>{formatCurrency(layout.totalMonto)}</span>
+                </div>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleDownload(layout.id, layout.nombreArchivo)}
+              data-testid={`button-download-layout-${layout.id}`}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Descargar
+            </Button>
+          </div>
+        ))}
+
+        <div className="mt-4 pt-4 border-t">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Total layouts:</span>
+            <span className="font-medium">{layoutList.length}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm mt-1">
+            <span className="text-muted-foreground">Total registros:</span>
+            <span className="font-medium">
+              {layoutList.reduce((sum, l) => sum + l.totalRegistros, 0)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between text-sm mt-1">
+            <span className="text-muted-foreground">Monto total:</span>
+            <span className="font-medium">
+              {formatCurrency(
+                layoutList.reduce((sum, l) => sum + parseFloat(String(l.totalMonto)), 0)
+              )}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (isLoading) {
     return (
       <Card>
@@ -167,62 +262,36 @@ export function LayoutsDownload({ nominaId, nominaStatus, onLayoutsGenerated }: 
             )}
           </div>
         ) : (
-          <div className="space-y-3">
-            {layouts.map((layout) => (
-              <div
-                key={layout.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover-elevate"
-                data-testid={`layout-item-${layout.id}`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className="bg-primary/10 p-2 rounded-md">
-                    <FileSpreadsheet className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium">{layout.nombreArchivo}</p>
-                    <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <CheckCircle2 className="h-3 w-3" />
-                        {layout.totalRegistros} registros
-                      </span>
-                      <span>•</span>
-                      <span>{formatCurrency(layout.totalMonto)}</span>
-                    </div>
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDownload(layout.id, layout.nombreArchivo)}
-                  data-testid={`button-download-layout-${layout.id}`}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Descargar
-                </Button>
-              </div>
-            ))}
-            
-            <div className="mt-4 pt-4 border-t">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Total layouts:</span>
-                <span className="font-medium">{layouts.length}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm mt-1">
-                <span className="text-muted-foreground">Total registros:</span>
-                <span className="font-medium">
-                  {layouts.reduce((sum, l) => sum + l.totalRegistros, 0)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-sm mt-1">
-                <span className="text-muted-foreground">Monto total:</span>
-                <span className="font-medium">
-                  {formatCurrency(
-                    layouts.reduce((sum, l) => sum + parseFloat(String(l.totalMonto)), 0)
-                  )}
-                </span>
-              </div>
-            </div>
-          </div>
+          <Tabs defaultValue="nomina" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="nomina" className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4" />
+                Nómina Oficial
+                {layoutsNomina.length > 0 && (
+                  <Badge variant="secondary" className="ml-1">
+                    {layoutsNomina.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="pagos_adicionales" className="flex items-center gap-2">
+                <Wallet className="h-4 w-4" />
+                Pagos Adicionales
+                {layoutsPagosAdicionales.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-800">
+                    {layoutsPagosAdicionales.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="nomina">
+              {renderLayoutList(layoutsNomina, "nomina")}
+            </TabsContent>
+
+            <TabsContent value="pagos_adicionales">
+              {renderLayoutList(layoutsPagosAdicionales, "pagos_adicionales")}
+            </TabsContent>
+          </Tabs>
         )}
       </CardContent>
     </Card>

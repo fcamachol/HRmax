@@ -21,6 +21,7 @@ import Bajas from "@/pages/employees/Bajas";
 import Reingresos from "@/pages/employees/Reingresos";
 import Cambios from "@/pages/employees/Cambios";
 import Payroll from "@/pages/Payroll";
+import CostosNomina from "@/pages/CostosNomina";
 import GruposNomina from "@/pages/payroll/GruposNomina";
 import Attendance from "@/pages/Attendance";
 import CentrosTrabajo from "@/pages/CentrosTrabajo";
@@ -90,6 +91,7 @@ import PortalAprobaciones from "@/pages/portal/Aprobaciones";
 import PortalNotificaciones from "@/pages/portal/Notificaciones";
 import AgencyDashboard from "@/pages/AgencyDashboard";
 import Denuncias from "@/pages/Denuncias";
+import Portales from "@/pages/Portales";
 
 // Anonymous Denuncia (Public) Pages
 import DenunciaSubmit from "@/pages/denuncia/Submit";
@@ -117,6 +119,7 @@ function ClienteRouter() {
       <Route path="/:clienteId/employees/cambios" component={Cambios} />
       <Route path="/:clienteId/payroll" component={Payroll} />
       <Route path="/:clienteId/payroll/grupos" component={GruposNomina} />
+      <Route path="/:clienteId/costos" component={CostosNomina} />
       <Route path="/:clienteId/attendance" component={Attendance} />
       <Route path="/:clienteId/reloj-checador" component={RelojChecador} />
       <Route path="/:clienteId/organizacion/puestos" component={Puestos} />
@@ -140,6 +143,7 @@ function ClienteRouter() {
       <Route path="/:clienteId/reports" component={Reports} />
       <Route path="/:clienteId/legal" component={Legal} />
       <Route path="/:clienteId/denuncias" component={Denuncias} />
+      <Route path="/:clienteId/portales" component={Portales} />
       <Route path="/:clienteId/repse" component={REPSE} />
       <Route path="/:clienteId/creditos" component={Creditos} />
       <Route path="/:clienteId/configuration" component={Configuration} />
@@ -317,8 +321,8 @@ export default function App() {
               </Route>
 
               {/* Anonymous Denuncia (Public) routes - no auth required */}
-              <Route path="/denuncia/:clienteId/:empresaId/seguimiento" component={DenunciaTrack} />
-              <Route path="/denuncia/:clienteId/:empresaId" component={DenunciaSubmit} />
+              <Route path="/denuncia/:clienteId/seguimiento" component={DenunciaTrack} />
+              <Route path="/denuncia/:clienteId" component={DenunciaSubmit} />
 
             <Route path="/super-admin/users">
               {() => (

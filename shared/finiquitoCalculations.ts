@@ -8,7 +8,14 @@ export interface FiniquitoInput {
   fechaTerminacion: string; // Fecha de terminación (YYYY-MM-DD)
   bajaType: string; // Tipo de baja
   diasAguinaldoPagados?: number; // Días de aguinaldo ya pagados en el año
-  diasVacacionesTomadas?: number; // Días de vacaciones ya tomados en el año
+  diasVacacionesTomadas?: number; // Días de vacaciones ya tomados en el año (LEGACY - usar saldoVacacionesKardex)
+
+  // NUEVO: Saldo real de vacaciones desde el kardex
+  // Este es el valor correcto a usar para finiquito (incluye carryover de años anteriores)
+  saldoVacacionesKardex?: number;
+
+  // Prima vacacional personalizada (si la empresa da más del 25%)
+  primaVacacionalPct?: number;
 }
 
 export interface FiniquitoConcept {
@@ -121,21 +128,38 @@ function calcularAguinaldoProporcional(
 
 /**
  * Calcula vacaciones proporcionales no gozadas
+ * IMPORTANTE: Si se proporciona saldoKardex, se usa ese valor (incluye carryover)
+ * Si no, se calcula proporcionalmente (método legacy)
  */
 function calcularVacacionesProporcionales(
   salarioDiario: number,
   fechaInicio: string,
   fechaTerminacion: string,
-  diasTomadas: number = 0
+  diasTomadas: number = 0,
+  saldoKardex?: number
 ): FiniquitoConcept {
+  // MÉTODO PREFERIDO: Usar saldo real del kardex
+  // Esto incluye días de años anteriores que no se han disfrutado
+  if (saldoKardex !== undefined && saldoKardex >= 0) {
+    const monto = salarioDiario * saldoKardex;
+
+    return {
+      concepto: "Vacaciones Pendientes (Kardex)",
+      descripcion: `${saldoKardex.toFixed(2)} días de vacaciones pendientes según kardex`,
+      calculo: `Saldo kardex: ${saldoKardex.toFixed(2)} días × $${salarioDiario.toFixed(2)}`,
+      monto: Math.round(monto * 100) / 100,
+    };
+  }
+
+  // MÉTODO LEGACY: Cálculo proporcional (para compatibilidad)
   const años = calcularAñosTrabajados(fechaInicio, fechaTerminacion);
   const diasVacacionesAnuales = obtenerDiasVacaciones(años);
-  
+
   // Calcular días proporcionales del último año
   const fechaFin = new Date(fechaTerminacion);
   const añoActual = fechaFin.getFullYear();
   const añoAniversario = new Date(añoActual, new Date(fechaInicio).getMonth(), new Date(fechaInicio).getDate());
-  
+
   let diasTrabajadosDesdeAniversario = 0;
   if (fechaFin >= añoAniversario) {
     const diffTime = fechaFin.getTime() - añoAniversario.getTime();
@@ -145,12 +169,12 @@ function calcularVacacionesProporcionales(
     const diffTime = fechaFin.getTime() - añoAnterior.getTime();
     diasTrabajadosDesdeAniversario = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   }
-  
+
   const diasProporcionales = (diasTrabajadosDesdeAniversario / 365) * diasVacacionesAnuales;
   const diasAPagar = Math.max(0, diasProporcionales - diasTomadas);
-  
+
   const monto = salarioDiario * diasAPagar;
-  
+
   return {
     concepto: "Vacaciones Proporcionales",
     descripcion: `${diasAPagar.toFixed(2)} días de vacaciones no gozadas`,
@@ -160,21 +184,25 @@ function calcularVacacionesProporcionales(
 }
 
 /**
- * Calcula la prima vacacional (25% del salario de vacaciones)
+ * Calcula la prima vacacional (mínimo 25% del salario de vacaciones - Art. 80 LFT)
+ * Acepta porcentaje personalizado si la empresa ofrece más del mínimo legal
  */
 function calcularPrimaVacacional(
-  vacacionesProporcionales: FiniquitoConcept
+  vacacionesProporcionales: FiniquitoConcept,
+  primaVacacionalPct: number = 25
 ): FiniquitoConcept {
   // Extraer los días de la descripción de vacaciones
   const diasMatch = vacacionesProporcionales.descripcion.match(/(\d+\.?\d*)/);
   const dias = diasMatch ? parseFloat(diasMatch[1]) : 0;
-  
-  const monto = vacacionesProporcionales.monto * 0.25;
-  
+
+  // Asegurar mínimo del 25% según LFT
+  const porcentajeAplicar = Math.max(25, primaVacacionalPct);
+  const monto = vacacionesProporcionales.monto * (porcentajeAplicar / 100);
+
   return {
     concepto: "Prima Vacacional",
-    descripcion: "25% sobre vacaciones proporcionales (Art. 80 LFT)",
-    calculo: `${dias.toFixed(2)} días × 25% = ${monto.toFixed(2)}`,
+    descripcion: `${porcentajeAplicar}% sobre vacaciones (Art. 80 LFT)`,
+    calculo: `$${vacacionesProporcionales.monto.toFixed(2)} × ${porcentajeAplicar}% = $${monto.toFixed(2)}`,
     monto: Math.round(monto * 100) / 100,
   };
 }
@@ -290,16 +318,21 @@ export function calcularFiniquito(input: FiniquitoInput): FiniquitoResult {
   conceptos.push(aguinaldo);
   
   // 2. Vacaciones proporcionales
+  // PRIORIDAD: Usar saldo del kardex si está disponible (incluye carryover)
   const vacaciones = calcularVacacionesProporcionales(
     input.salarioDiario,
     input.fechaInicio,
     input.fechaTerminacion,
-    input.diasVacacionesTomadas || 0
+    input.diasVacacionesTomadas || 0,
+    input.saldoVacacionesKardex // Nuevo: saldo real del kardex
   );
   conceptos.push(vacaciones);
-  
-  // 3. Prima vacacional
-  const primaVacacional = calcularPrimaVacacional(vacaciones);
+
+  // 3. Prima vacacional (usa porcentaje personalizado si existe)
+  const primaVacacional = calcularPrimaVacacional(
+    vacaciones,
+    input.primaVacacionalPct || 25
+  );
   conceptos.push(primaVacacional);
   
   // 4. Prima de antigüedad (si aplica)

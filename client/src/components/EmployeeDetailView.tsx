@@ -6,16 +6,42 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { X, ChevronLeft, Edit, Save, Smartphone } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { X, ChevronLeft, Edit, Save, Smartphone, FileWarning, PlusCircle, Clock, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import type { Employee } from "@shared/schema";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { EmployeeDocumentManager } from "@/components/documents";
+
+// Document types that can be requested
+const documentRequestTypes = [
+  { id: "ine", nombre: "INE / IFE", descripcion: "Identificación oficial vigente" },
+  { id: "curp", nombre: "CURP", descripcion: "Clave Única de Registro de Población" },
+  { id: "comprobante_domicilio", nombre: "Comprobante de Domicilio", descripcion: "Recibo de luz, agua o teléfono" },
+  { id: "acta_nacimiento", nombre: "Acta de Nacimiento", descripcion: "Acta de nacimiento certificada" },
+  { id: "rfc", nombre: "Constancia RFC", descripcion: "Constancia de situación fiscal" },
+  { id: "nss", nombre: "NSS / IMSS", descripcion: "Número de Seguro Social" },
+  { id: "otro", nombre: "Otro documento", descripcion: "Especificar en descripción" },
+];
+
+interface SolicitudDocumentoRH {
+  id: string;
+  tipoDocumento: string;
+  nombreDocumento: string;
+  descripcion?: string | null;
+  estatus: string;
+  prioridad: string | null;
+  fechaSolicitud: string;
+  fechaLimite?: string | null;
+  fechaEntrega?: string | null;
+}
 
 interface EmployeeDetailViewProps {
   employee: Employee;
@@ -127,6 +153,41 @@ export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCanc
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Document request state
+  const [showDocRequestDialog, setShowDocRequestDialog] = useState(false);
+  const [selectedDocType, setSelectedDocType] = useState("");
+  const [docRequestDescription, setDocRequestDescription] = useState("");
+  const [docRequestPriority, setDocRequestPriority] = useState("normal");
+
+  // Fetch document solicitations for this employee
+  const { data: solicitudesEmpleado = [] } = useQuery({
+    queryKey: ["/api/solicitudes-documentos-rh", { empleadoId: employee.id }],
+    queryFn: async () => {
+      const res = await fetch(`/api/solicitudes-documentos-rh?empleadoId=${employee.id}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return [];
+      return res.json() as Promise<SolicitudDocumentoRH[]>;
+    },
+  });
+
+  // Fetch vacation data calculated from scheme + antigüedad
+  const { data: vacacionesResueltas } = useQuery({
+    queryKey: ["/api/employees", employee.id, "vacaciones-resueltas"],
+    queryFn: async () => {
+      const res = await fetch(`/api/employees/${employee.id}/vacaciones-resueltas`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        diasVacaciones: number;
+        aniosAntiguedad: number;
+        fuente: string;
+        esquema?: { id: string; nombre: string } | null;
+      }>;
+    },
+  });
+
   // Initialize form data when entering edit mode
   useEffect(() => {
     if (isEditing) {
@@ -155,12 +216,67 @@ export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCanc
     },
   });
 
+  // Mutation for requesting documents
+  const requestDocMutation = useMutation({
+    mutationFn: async (data: {
+      empleadoId: string;
+      empresaId?: string | null;
+      tipoDocumento: string;
+      nombreDocumento: string;
+      descripcion?: string;
+      prioridad: string;
+    }) => {
+      const res = await fetch("/api/solicitudes-documentos-rh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Error al solicitar documento");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Documento solicitado",
+        description: "El empleado recibirá una notificación",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/solicitudes-documentos-rh"] });
+      setShowDocRequestDialog(false);
+      setSelectedDocType("");
+      setDocRequestDescription("");
+      setDocRequestPriority("normal");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleFieldChange = (fieldName: string, value: string) => {
     setFormData(prev => ({ ...prev, [fieldName]: value }));
   };
 
   const handleSave = () => {
     mutation.mutate(formData);
+  };
+
+  const handleRequestDocument = () => {
+    if (!selectedDocType) return;
+    const docType = documentRequestTypes.find(d => d.id === selectedDocType);
+    requestDocMutation.mutate({
+      empleadoId: employee.id,
+      empresaId: employee.empresaId,
+      tipoDocumento: selectedDocType,
+      nombreDocumento: docType?.nombre || selectedDocType,
+      descripcion: docRequestDescription || undefined,
+      prioridad: docRequestPriority,
+    });
   };
 
   const getInitials = (nombre: string, apellidoPaterno: string) => {
@@ -800,17 +916,27 @@ export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCanc
               <div>
                 <h3 className="text-lg font-semibold mb-4">Vacaciones</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <FieldDisplay label="Días de Vacaciones Anuales" value={employee.diasVacacionesAnuales} />
-                  <FieldDisplay label="Días de Vacaciones Disponibles" value={employee.diasVacacionesDisponibles} />
-                  <FieldDisplay label="Días de Vacaciones Usados" value={employee.diasVacacionesUsados} />
-                  <FieldDisplay
-                    label="Días de Vacaciones Adicionales"
-                    value={getValue("diasVacacionesAdicionales")}
-                    isEditing={isEditing}
-                    fieldName="diasVacacionesAdicionales"
-                    onChange={(v) => handleFieldChange("diasVacacionesAdicionales", v)}
-                    inputType="number"
-                  />
+                  <div className="space-y-1">
+                    <span className="text-sm text-muted-foreground">Días de Vacaciones Anuales</span>
+                    <p className="text-lg font-medium">
+                      {vacacionesResueltas?.diasVacaciones ?? "..."}
+                      {vacacionesResueltas?.fuente && (
+                        <span className="text-xs text-muted-foreground ml-2">
+                          ({vacacionesResueltas.fuente === "lft" ? "LFT Art. 76" : vacacionesResueltas.fuente})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-sm text-muted-foreground">Saldo Disponible (Kardex)</span>
+                    <p className="text-lg font-medium">{parseFloat(employee.saldoVacacionesActual as string) || 0} días</p>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-sm text-muted-foreground">Antigüedad</span>
+                    <p className="text-lg font-medium">
+                      {vacacionesResueltas?.aniosAntiguedad ?? "..."} {vacacionesResueltas?.aniosAntiguedad === 1 ? "año" : "años"}
+                    </p>
+                  </div>
                 </div>
               </div>
               <Separator />
@@ -849,17 +975,13 @@ export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCanc
               </div>
             </TabsContent>
 
-            {/* Tab 6: Documentación */}
-            <TabsContent value="documentacion" className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <FieldDisplay label="Contrato Laboral" value={employee.documentoContratoId} />
-                <FieldDisplay label="Drive ID" value={employee.driveId} />
-              </div>
-              <div className="mt-6 p-4 bg-muted rounded-lg">
-                <p className="text-sm text-muted-foreground">
-                  La gestión completa de documentos estará disponible próximamente.
-                </p>
-              </div>
+            {/* Tab 6: Documentación - Google Drive-like File Manager */}
+            <TabsContent value="documentacion" className="h-[600px] -mx-6 -mb-6">
+              <EmployeeDocumentManager
+                empleadoId={employee.id}
+                empleadoNombre={`${employee.nombre} ${employee.apellidoPaterno}`}
+                readOnly={!isEditing && false}
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -877,6 +999,90 @@ export function EmployeeDetailView({ employee, onBack, onEdit, isEditing, onCanc
         </div>
         )}
       </Card>
+
+      {/* Document Request Dialog */}
+      <Dialog open={showDocRequestDialog} onOpenChange={setShowDocRequestDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar Documento</DialogTitle>
+            <DialogDescription>
+              Solicita un documento al empleado. Recibirá una notificación en su portal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Tipo de documento</Label>
+              <Select value={selectedDocType} onValueChange={setSelectedDocType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un tipo de documento" />
+                </SelectTrigger>
+                <SelectContent>
+                  {documentRequestTypes.map((docType) => (
+                    <SelectItem key={docType.id} value={docType.id}>
+                      {docType.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedDocType && (
+                <p className="text-xs text-muted-foreground">
+                  {documentRequestTypes.find(d => d.id === selectedDocType)?.descripcion}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Instrucciones adicionales (opcional)</Label>
+              <Textarea
+                placeholder="Ej: Debe estar actualizado, con fecha reciente..."
+                value={docRequestDescription}
+                onChange={(e) => setDocRequestDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Prioridad</Label>
+              <Select value={docRequestPriority} onValueChange={setDocRequestPriority}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="alta">Alta</SelectItem>
+                  <SelectItem value="urgente">Urgente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDocRequestDialog(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleRequestDocument}
+              disabled={!selectedDocType || requestDocMutation.isPending}
+            >
+              {requestDocMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Solicitando...
+                </>
+              ) : (
+                <>
+                  <FileWarning className="h-4 w-4 mr-2" />
+                  Solicitar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

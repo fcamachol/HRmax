@@ -52,12 +52,14 @@ export const employees = pgTable("employees", {
   tipoJornada: varchar("tipo_jornada").default("diurna"),
   tiempoParaAlimentos: varchar("tiempo_para_alimentos").default("30_minutos"),
   diasDescanso: varchar("dias_descanso").default("sabado_domingo"),
-  salarioBrutoMensual: numeric("salario_bruto_mensual").notNull(),
+  salarioBrutoMensual: numeric("salario_bruto_mensual"),
   esquemaPago: varchar("esquema_pago").default("tradicional"),
   tipoEsquema: varchar("tipo_esquema").default("NETO"), // 'BRUTO' | 'NETO' - Define si el dato ancla es bruto o neto
   salarioDiarioReal: numeric("salario_diario_real"),
   salarioDiarioNominal: numeric("salario_diario_nominal"),
-  salarioDiarioExento: numeric("salario_diario_exento"),
+  salarioDiarioExento: numeric("salario_diario_exento").generatedAlwaysAs(
+    sql`GREATEST(0, COALESCE(salario_diario_real, 0) - COALESCE(salario_diario_nominal, 0))`
+  ),
   medioPagoExentoId: varchar("medio_pago_exento_id"), // FK a medios_pago - Medio de pago para salario exento
   sbc: numeric("sbc"),
   sdi: numeric("sdi"),
@@ -66,14 +68,14 @@ export const employees = pgTable("employees", {
   salarioMensualNetoBp: bigint("salario_mensual_neto_bp", { mode: "bigint" }), // Salario Mensual Neto en basis points
   horasSemanales: integer("horas_semanales").default(48), // Horas semanales (para contrato laboral)
   tablaImss: varchar("tabla_imss").default("fija"),
-  diasVacacionesAnuales: integer("dias_vacaciones_anuales").default(12),
-  diasVacacionesDisponibles: integer("dias_vacaciones_disponibles").default(12),
-  diasVacacionesUsados: integer("dias_vacaciones_usados").default(0),
+
+  // Aguinaldo adicional (vacation days are calculated from scheme + antigüedad)
   diasAguinaldoAdicionales: integer("dias_aguinaldo_adicionales").default(0),
-  diasVacacionesAdicionales: integer("dias_vacaciones_adicionales").default(0),
-  
-  // NUEVO SISTEMA DE PRESTACIONES Y KARDEX
-  esquemaPrestacionesId: varchar("esquema_prestaciones_id"), // FK a cat_tablas_prestaciones (NULL = usa regla general)
+
+  // SISTEMA DE PRESTACIONES Y KARDEX
+  // Vacation days are calculated dynamically from: scheme (esquemaPrestacionesId) + antigüedad
+  // Available balance comes from kardex_vacaciones ledger
+  esquemaPrestacionesId: varchar("esquema_prestaciones_id"), // FK a esquemasPresta (NULL = usa LFT Art. 76)
   saldoVacacionesActual: numeric("saldo_vacaciones_actual", { precision: 10, scale: 2 }).default("0"), // Cache READ-ONLY del saldo (se calcula desde kardex)
   
   creditoInfonavit: varchar("credito_infonavit"),
@@ -1210,6 +1212,22 @@ export const empresas = pgTable("empresas", {
   defaultPlantillaNominaId: varchar("default_plantilla_nomina_id"), // FK a plantillas_nomina (validado en app layer por orden de declaración)
   // Esquema de prestaciones (vacaciones) - sobreescribe el del cliente si se asigna
   esquemaPrestacionesId: varchar("esquema_prestaciones_id"),
+
+  // ============================================================================
+  // CONFIGURACIÓN SDE (Salario Diario Exento / Pagos Adicionales)
+  // ============================================================================
+  // Política de SDE durante incapacidades: 'full' = pagar completo, 'reduced' = proporcional, 'none' = no pagar
+  sdeIncapacidadPolicy: varchar("sde_incapacidad_policy", { length: 20 }).default("reduced"),
+  // Si incluir SDE en el cálculo de PTU
+  sdePtuIncluded: boolean("sde_ptu_included").default(false),
+
+  // ============================================================================
+  // CONFIGURACIÓN ISN (Impuesto Sobre Nómina)
+  // ============================================================================
+  // Estado default para cálculo de ISN (si no se especifica en centro de trabajo)
+  // ISN se paga donde trabaja el empleado; este es el estado default de la empresa
+  estadoDefault: varchar("estado_default", { length: 50 }),
+
   estatus: varchar("estatus").default("activa"), // activa, suspendida, inactiva
   createdAt: timestamp("created_at").notNull().default(sql`now()`),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
@@ -1272,6 +1290,43 @@ export const updateRegistroPatronalSchema = insertRegistroPatronalSchema.partial
 
 export type RegistroPatronal = typeof registrosPatronales.$inferSelect;
 export type InsertRegistroPatronal = z.infer<typeof insertRegistroPatronalSchema>;
+
+// ============================================================================
+// ISN Tasas por Estado (State Payroll Tax Rates)
+// ============================================================================
+// ISN (Impuesto Sobre Nómina) is a state-level payroll tax in Mexico
+// Rates vary by state and can change over time (tracked with vigencia dates)
+export const isnTasasEstado = pgTable("isn_tasas_estado", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  estado: varchar("estado", { length: 50 }).notNull(),
+  tasaBp: integer("tasa_bp").notNull(), // Rate in basis points (200 = 2.00%)
+  vigenciaInicio: date("vigencia_inicio").notNull(),
+  vigenciaFin: date("vigencia_fin"), // NULL = currently active
+  notas: text("notas"),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+});
+
+export const insertIsnTasaEstadoSchema = createInsertSchema(isnTasasEstado).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type IsnTasaEstado = typeof isnTasasEstado.$inferSelect;
+export type InsertIsnTasaEstado = z.infer<typeof insertIsnTasaEstadoSchema>;
+
+// Mexican states enum for validation
+export const estadosMexicanos = [
+  "AGUASCALIENTES", "BAJA_CALIFORNIA", "BAJA_CALIFORNIA_SUR", "CAMPECHE",
+  "CHIAPAS", "CHIHUAHUA", "CIUDAD_DE_MEXICO", "COAHUILA", "COLIMA",
+  "DURANGO", "GUANAJUATO", "GUERRERO", "HIDALGO", "JALISCO",
+  "ESTADO_DE_MEXICO", "MICHOACAN", "MORELOS", "NAYARIT", "NUEVO_LEON",
+  "OAXACA", "PUEBLA", "QUERETARO", "QUINTANA_ROO", "SAN_LUIS_POTOSI",
+  "SINALOA", "SONORA", "TABASCO", "TAMAULIPAS", "TLAXCALA",
+  "VERACRUZ", "YUCATAN", "ZACATECAS"
+] as const;
+export type EstadoMexicano = typeof estadosMexicanos[number];
 
 // Credenciales de Sistemas (System Credentials)
 // Tipos de sistemas: imss_escritorio_virtual, sipare, infonavit, fonacot
@@ -3010,6 +3065,33 @@ export const nominaConceptoSchema = z.object({
   monto: z.number().nonnegative(),
 });
 
+// ============================================================================
+// PAGO ADICIONAL (SDE) - Salario Diario Exento / Pagos Adicionales
+// ============================================================================
+// Schema para el pago adicional (SDE) de cada empleado
+export const pagoAdicionalConceptoSchema = z.object({
+  concepto: z.string(), // 'sueldo_base', 'horas_extra_dobles', 'prima_vacacional', etc.
+  monto: z.number().nonnegative(),
+});
+
+export const pagoAdicionalSchema = z.object({
+  // Datos base
+  salarioDiarioExento: z.number().nonnegative(),
+  diasPagados: z.number().int().nonnegative(),
+  montoBase: z.number().nonnegative(), // salarioDiarioExento × diasPagados
+
+  // Desglose por concepto (sueldo, horas extra, primas, etc.)
+  conceptos: z.array(pagoAdicionalConceptoSchema).default([]),
+
+  // Total (suma de todos los conceptos SDE)
+  montoTotal: z.number().nonnegative(),
+
+  // Medio de pago para este pago adicional
+  medioPagoId: z.string().optional(),
+});
+
+export type PagoAdicional = z.infer<typeof pagoAdicionalSchema>;
+
 export const nominaEmpleadoDataSchema = z.object({
   empleadoId: z.string().min(1),
   numeroEmpleado: z.string().min(1),
@@ -3017,12 +3099,15 @@ export const nominaEmpleadoDataSchema = z.object({
   apellidoPaterno: z.string().min(1),
   apellidoMaterno: z.string().nullable().optional(),
   cuentaBancaria: z.string().optional(), // Opcional: puede no tener cuenta bancaria configurada
+  cuentaBancariaExenta: z.string().optional(), // Cuenta para pagos adicionales (SDE)
   medioPagoId: z.string().optional(), // ID del medio de pago asignado al empleado para dispersión
   diasTrabajados: z.number().int().nonnegative().optional(), // Opcional: aguinaldo/prima vacacional no dependen de días
   salarioBase: z.number().nonnegative().optional(), // Opcional: algunos conceptos son fijos
   percepciones: z.array(nominaConceptoSchema).default([]),
   deducciones: z.array(nominaConceptoSchema).default([]),
   netoAPagar: z.number().nonnegative(),
+  // Pago adicional (SDE) - separado del neto oficial
+  pagoAdicional: pagoAdicionalSchema.optional(),
 });
 
 export const empleadosDataSchema = z.array(nominaEmpleadoDataSchema).nonempty();
@@ -3118,7 +3203,10 @@ export const layoutsGenerados = pgTable("layouts_generados", {
   nominaId: varchar("nomina_id").notNull().references(() => nominas.id, { onDelete: "cascade" }),
   medioPagoId: varchar("medio_pago_id").notNull().references(() => mediosPago.id, { onDelete: "cascade" }),
   bancoLayoutId: varchar("banco_layout_id").references(() => bancosLayouts.id),
-  
+
+  // Tipo de layout: 'nomina' = nómina oficial, 'pagos_adicionales' = SDE
+  tipoLayout: varchar("tipo_layout", { length: 30 }).notNull().default("nomina"),
+
   // Información del archivo
   nombreArchivo: varchar("nombre_archivo").notNull(),
   contenido: text("contenido").notNull(), // Contenido del archivo CSV/TXT
@@ -3176,6 +3264,7 @@ export const insertLayoutGeneradoSchema = createInsertSchema(layoutsGenerados).o
 }).extend({
   empleadosLayout: z.array(empleadoLayoutSchema),
   totalMonto: z.union([z.string(), z.number()]),
+  tipoLayout: z.enum(["nomina", "pagos_adicionales"]).default("nomina"),
 });
 
 export type InsertLayoutGenerado = z.infer<typeof insertLayoutGeneradoSchema>;
@@ -5021,6 +5110,7 @@ export const documentosEmpleado = pgTable("documentos_empleado", {
   nombre: varchar("nombre", { length: 200 }).notNull(),
   descripcion: text("descripcion"),
   categoria: varchar("categoria").notNull(), // contrato, recibo_nomina, constancia, identificacion, comprobante_domicilio, otro
+  tipoDocumento: varchar("tipo_documento", { length: 50 }), // ine, curp, comprobante_domicilio, rfc, nss, acta_nacimiento, etc.
 
   // Almacenamiento
   archivoUrl: text("archivo_url").notNull(),
@@ -5032,6 +5122,9 @@ export const documentosEmpleado = pgTable("documentos_empleado", {
   visibleParaEmpleado: boolean("visible_para_empleado").default(true),
   subidoPorEmpleado: boolean("subido_por_empleado").default(false),
 
+  // Carpeta (folder organization - Google Drive-like)
+  carpetaId: varchar("carpeta_id"), // Reference to carpetas_empleado
+
   // Auditoría
   subidoPor: varchar("subido_por"),
   fechaVencimiento: date("fecha_vencimiento"),
@@ -5042,6 +5135,7 @@ export const documentosEmpleado = pgTable("documentos_empleado", {
 }, (table) => ({
   empleadoIdx: index("documentos_empleado_empleado_idx").on(table.empleadoId),
   categoriaIdx: index("documentos_empleado_categoria_idx").on(table.categoria),
+  carpetaIdx: index("documentos_empleado_carpeta_idx").on(table.carpetaId),
 }));
 
 export type DocumentoEmpleado = typeof documentosEmpleado.$inferSelect;
@@ -5051,6 +5145,56 @@ export const insertDocumentoEmpleadoSchema = createInsertSchema(documentosEmplea
   updatedAt: true,
 });
 export type InsertDocumentoEmpleado = z.infer<typeof insertDocumentoEmpleadoSchema>;
+
+// Carpetas de Empleado (Employee Folders - Google Drive-like structure)
+export const carpetasEmpleado = pgTable("carpetas_empleado", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  nombre: varchar("nombre", { length: 200 }).notNull(),
+  parentId: varchar("parent_id"), // Self-referential - handled in migration
+  tipo: varchar("tipo").default("custom").notNull(), // 'system' | 'custom'
+  icono: varchar("icono", { length: 50 }),
+  color: varchar("color", { length: 20 }),
+  visibleParaEmpleado: boolean("visible_para_empleado").default(false).notNull(),
+  orden: integer("orden").default(0),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").default(sql`now()`),
+  updatedAt: timestamp("updated_at").default(sql`now()`),
+}, (table) => ({
+  empleadoIdx: index("carpetas_empleado_empleado_idx").on(table.empleadoId),
+  parentIdx: index("carpetas_empleado_parent_idx").on(table.parentId),
+  clienteIdx: index("carpetas_empleado_cliente_idx").on(table.clienteId),
+}));
+
+export type CarpetaEmpleado = typeof carpetasEmpleado.$inferSelect;
+export const insertCarpetaEmpleadoSchema = createInsertSchema(carpetasEmpleado).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertCarpetaEmpleado = z.infer<typeof insertCarpetaEmpleadoSchema>;
+
+// Default folder structure for new employees
+export const defaultEmployeeFolders = [
+  { nombre: "Expediente Laboral", icono: "briefcase", visibleParaEmpleado: false, orden: 0 },
+  { nombre: "Documentos Personales", icono: "user", visibleParaEmpleado: true, orden: 1 },
+  { nombre: "Contratos", icono: "file-text", visibleParaEmpleado: true, orden: 2 },
+  { nombre: "Nomina", icono: "receipt", visibleParaEmpleado: true, orden: 3 },
+  { nombre: "Capacitacion", icono: "graduation-cap", visibleParaEmpleado: true, orden: 4 },
+  { nombre: "Evaluaciones", icono: "clipboard-check", visibleParaEmpleado: false, orden: 5 },
+  { nombre: "Actas Administrativas", icono: "alert-triangle", visibleParaEmpleado: false, orden: 6 },
+  { nombre: "Otros", icono: "folder", visibleParaEmpleado: false, orden: 7 },
+] as const;
+
+// Legacy category to folder mapping for backwards compatibility
+export const legacyCategoryToFolderMap: Record<string, string> = {
+  contrato: "Contratos",
+  recibo_nomina: "Nomina",
+  identificacion: "Documentos Personales",
+  comprobante_domicilio: "Documentos Personales",
+  constancia: "Expediente Laboral",
+};
 
 // Configuración de Workflows (Workflow Configuration)
 export const workflowConfigurations = pgTable("workflow_configurations", {
@@ -5660,7 +5804,7 @@ export const denunciaMensajes = pgTable("denuncia_mensajes", {
   contenido: text("contenido").notNull(),
 
   // Who sent the message
-  tipoRemitente: varchar("tipo_remitente", { length: 20 }).notNull(), // 'reporter' | 'investigator'
+  tipoRemitente: varchar("tipo_remitente", { length: 20 }).notNull(), // 'reporter' | 'investigator' | 'internal_note'
   investigadorId: varchar("investigador_id").references(() => users.id, { onDelete: "set null" }), // Only set for investigator messages
 
   // Read tracking for reporter
@@ -6081,3 +6225,99 @@ export const insertSolicitudDocumentoSchema = createInsertSchema(solicitudesDocu
   fechaSolicitud: true,
 });
 export type InsertSolicitudDocumento = z.infer<typeof insertSolicitudDocumentoSchema>;
+
+// HR-initiated Document Requests (Admin requesting documents from employees)
+export const solicitudesDocumentosRH = pgTable("solicitudes_documentos_rh", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+
+  // Document request details
+  tipoDocumento: varchar("tipo_documento", { length: 50 }).notNull(), // ine, curp, comprobante_domicilio, rfc, nss, acta_nacimiento, otro
+  nombreDocumento: varchar("nombre_documento", { length: 200 }).notNull(), // Display name
+  descripcion: text("descripcion"), // Additional instructions
+
+  // Status tracking: pendiente, entregado, aprobado, rechazado, vencido
+  estatus: varchar("estatus", { length: 20 }).notNull().default("pendiente"),
+
+  // Dates
+  fechaSolicitud: timestamp("fecha_solicitud").notNull().default(sql`now()`),
+  fechaLimite: date("fecha_limite"), // Optional deadline
+  fechaEntrega: timestamp("fecha_entrega"), // When employee uploaded
+  fechaRevision: timestamp("fecha_revision"), // When HR reviewed
+
+  // Response document (links to documentosEmpleado when employee uploads)
+  documentoEntregadoId: varchar("documento_entregado_id").references(() => documentosEmpleado.id),
+
+  // Admin/HR tracking
+  solicitadoPor: varchar("solicitado_por").notNull().references(() => users.id),
+  revisadoPor: varchar("revisado_por").references(() => users.id),
+  notasRechazo: text("notas_rechazo"), // If rejected, why
+
+  // Priority: normal, alta, urgente
+  prioridad: varchar("prioridad", { length: 10 }).default("normal"),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+  updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteIdx: index("solicitudes_docs_rh_cliente_idx").on(table.clienteId),
+  empleadoIdx: index("solicitudes_docs_rh_empleado_idx").on(table.empleadoId),
+  estatusIdx: index("solicitudes_docs_rh_estatus_idx").on(table.estatus),
+  solicitadoPorIdx: index("solicitudes_docs_rh_solicitado_por_idx").on(table.solicitadoPor),
+}));
+
+export type SolicitudDocumentoRH = typeof solicitudesDocumentosRH.$inferSelect;
+export const insertSolicitudDocumentoRHSchema = createInsertSchema(solicitudesDocumentosRH).omit({
+  id: true,
+  fechaSolicitud: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertSolicitudDocumentoRH = z.infer<typeof insertSolicitudDocumentoRHSchema>;
+
+// ============================================================================
+// HISTORIAL DE PAGOS ADICIONALES (SDE) - Tracking de pagos SDE por período
+// ============================================================================
+
+export const sdePaymentHistory = pgTable("sde_payment_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clienteId: varchar("cliente_id").notNull().references(() => clientes.id, { onDelete: "cascade" }),
+  empresaId: varchar("empresa_id").notNull().references(() => empresas.id, { onDelete: "cascade" }),
+  empleadoId: varchar("empleado_id").notNull().references(() => employees.id, { onDelete: "cascade" }),
+  nominaId: varchar("nomina_id").notNull().references(() => nominas.id, { onDelete: "cascade" }),
+  periodoId: varchar("periodo_id").references(() => periodosNomina.id),
+
+  // Información del período
+  fechaInicio: date("fecha_inicio").notNull(),
+  fechaFin: date("fecha_fin").notNull(),
+
+  // Datos SDE
+  salarioDiarioExento: numeric("salario_diario_exento", { precision: 12, scale: 4 }).notNull(),
+  diasPagados: integer("dias_pagados").notNull(),
+  montoTotal: numeric("monto_total", { precision: 14, scale: 2 }).notNull(),
+  conceptosDesglose: jsonb("conceptos_desglose").notNull(), // Array of {concepto, monto}
+
+  // Información de pago
+  medioPagoId: varchar("medio_pago_id").references(() => mediosPago.id),
+  layoutGeneradoId: varchar("layout_generado_id").references(() => layoutsGenerados.id),
+
+  createdAt: timestamp("created_at").notNull().default(sql`now()`),
+}, (table) => ({
+  clienteEmpresaIdx: index("sde_payment_history_cliente_empresa_idx").on(table.clienteId, table.empresaId),
+  empleadoIdx: index("sde_payment_history_empleado_idx").on(table.empleadoId),
+  nominaIdx: index("sde_payment_history_nomina_idx").on(table.nominaId),
+  periodoIdx: index("sde_payment_history_periodo_idx").on(table.periodoId),
+  fechaIdx: index("sde_payment_history_fecha_idx").on(table.fechaInicio, table.fechaFin),
+}));
+
+export type SDEPaymentHistory = typeof sdePaymentHistory.$inferSelect;
+export const insertSDEPaymentHistorySchema = createInsertSchema(sdePaymentHistory).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  salarioDiarioExento: z.union([z.string(), z.number()]),
+  montoTotal: z.union([z.string(), z.number()]),
+  conceptosDesglose: z.array(pagoAdicionalConceptoSchema),
+});
+export type InsertSDEPaymentHistory = z.infer<typeof insertSDEPaymentHistorySchema>;

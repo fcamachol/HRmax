@@ -10,24 +10,24 @@
  */
 
 import { db } from "../db";
-import { employees, empresas, centrosTrabajo, gruposNomina } from "@shared/schema";
+import { employees, empresas, centrosTrabajo, gruposNomina, type PagoAdicional } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { 
-  pesosToBp, 
-  bpToPesos, 
+import {
+  pesosToBp,
+  bpToPesos,
   multiplicarBpPorTasa,
   sumarBp,
   restarBp,
 } from "@shared/basisPoints";
-import { 
-  calcularISR, 
+import {
+  calcularISR,
   calcularSubsidio2025,
   CONFIG_FISCAL_2025,
-  type TipoPeriodo 
+  type TipoPeriodo
 } from "@shared/payrollEngine";
 import { calcularCuotasIMSS, type ConfiguracionIMSS, type EmpleadoIMSS } from "./imssCalculator";
-import { 
-  calcularDiasTrabajados, 
+import {
+  calcularDiasTrabajados,
   calcularDiasSinIncidencias,
   type PeriodoNomina,
   type ResumenDiasTrabajados,
@@ -128,7 +128,18 @@ export interface DesgloseNominaCompleto {
     permisos: number;
     vacaciones: number;
     diasFestivos: number;
+    diasDomingo: number;
     horasExtra: number;
+    horasExtraDobles: number;
+    horasExtraTriples: number;
+    retardos: number;
+    // Monetary values for premium payments
+    primaDominical: number;
+    pagoFestivos: number;
+    horasDoblesPago: number;
+    horasTriplesPago: number;
+    vacacionesPago: number;
+    primaVacacional: number;
   };
 
   // Salarios base
@@ -164,6 +175,13 @@ export interface DesgloseNominaCompleto {
   // Totales
   netoAPagar: number;
   costoTotalEmpresa: number;
+
+  // Total real que recibe el empleado (neto CFDI + SDE)
+  // Separado para compliance: netoAPagar es oficial (CFDI), netoAPagarTotal incluye pago por fuera
+  netoAPagarTotal: number;
+
+  // Pago adicional (SDE) - NO aparece en CFDI
+  pagoAdicional?: PagoAdicional;
 }
 
 // ============================================================================
@@ -178,6 +196,74 @@ function mapFrecuenciaToPeriodo(frecuencia: string): TipoPeriodo {
     case 'mensual': return 'mensual';
     default: return 'quincenal';
   }
+}
+
+/**
+ * Calcula un concepto de nómina dividiendo el monto entre parte nominal y SDE.
+ * El SDE (Salario Diario Exento) es la parte del salario que NO aparece en CFDI.
+ *
+ * @param concepto - Nombre del concepto
+ * @param salarioDiarioNominal - Salario diario nominal (aparece en CFDI)
+ * @param salarioDiarioExento - Salario diario exento (pago adicional, no en CFDI)
+ * @param factor - Multiplicador (ej: 2 para horas dobles, 1 para días normales)
+ * @param cantidad - Cantidad de unidades (días, horas, etc.)
+ * @returns Objeto con el concepto y montos separados para nominal y SDE
+ */
+function calcularConceptoConSDE(
+  concepto: string,
+  salarioDiarioNominal: number,
+  salarioDiarioExento: number,
+  factor: number,
+  cantidad: number,
+): { concepto: string; montoNominal: number; montoSDE: number } {
+  const salarioDiarioReal = salarioDiarioNominal + salarioDiarioExento;
+  const montoTotal = salarioDiarioReal * factor * cantidad;
+
+  // Si no hay SDE, todo va a nominal
+  if (salarioDiarioExento <= 0 || salarioDiarioReal <= 0) {
+    return { concepto, montoNominal: montoTotal, montoSDE: 0 };
+  }
+
+  const proporcionNominal = salarioDiarioNominal / salarioDiarioReal;
+  return {
+    concepto,
+    montoNominal: montoTotal * proporcionNominal,
+    montoSDE: montoTotal * (1 - proporcionNominal),
+  };
+}
+
+/**
+ * Calcula un concepto usando tarifa por hora con división nominal/SDE.
+ *
+ * @param concepto - Nombre del concepto
+ * @param salarioDiarioNominal - Salario diario nominal
+ * @param salarioDiarioExento - Salario diario exento
+ * @param horas - Número de horas
+ * @param multiplicador - Multiplicador de tarifa (2 para doble, 3 para triple)
+ * @returns Objeto con el concepto y montos separados
+ */
+function calcularConceptoPorHoraConSDE(
+  concepto: string,
+  salarioDiarioNominal: number,
+  salarioDiarioExento: number,
+  horas: number,
+  multiplicador: number,
+): { concepto: string; montoNominal: number; montoSDE: number } {
+  const salarioDiarioReal = salarioDiarioNominal + salarioDiarioExento;
+  const tarifaHoraReal = salarioDiarioReal / 8;
+  const montoTotal = tarifaHoraReal * horas * multiplicador;
+
+  // Si no hay SDE, todo va a nominal
+  if (salarioDiarioExento <= 0 || salarioDiarioReal <= 0) {
+    return { concepto, montoNominal: montoTotal, montoSDE: 0 };
+  }
+
+  const proporcionNominal = salarioDiarioNominal / salarioDiarioReal;
+  return {
+    concepto,
+    montoNominal: montoTotal * proporcionNominal,
+    montoSDE: montoTotal * (1 - proporcionNominal),
+  };
 }
 
 // ============================================================================
@@ -234,8 +320,9 @@ export async function generarDesgloseNomina(
   const salarioDiarioReal = parseFloat(emp.salarioDiarioReal || '0');
   const salarioDiarioNominal = parseFloat(emp.salarioDiarioNominal || '0');
   const salarioDiarioExento = salarioDiarioReal - salarioDiarioNominal;
-  const sbc = parseFloat(emp.sbc || emp.salarioDiarioReal || '0');
-  const sdi = parseFloat(emp.sdi || emp.sbc || emp.salarioDiarioReal || '0');
+  // IMPORTANTE: SBC y SDI siempre usan salario NOMINAL - SDE nunca integra a seguro social
+  const sbc = parseFloat(emp.sbc || emp.salarioDiarioNominal || '0');
+  const sdi = parseFloat(emp.sdi || emp.sbc || emp.salarioDiarioNominal || '0');
 
   // 4. Calcular percepciones usando la plantilla predeterminada
   interface PercepcionInterna extends ConceptoPercepcion {
@@ -252,8 +339,9 @@ export async function generarDesgloseNomina(
     diasTrabajados: diasPagados,
     diasPeriodo,
     diasPagados,
-    horasExtraDobles: resumenDias?.horasExtra || 0,
-    horasExtraTriples: 0,
+    // MEJORADO: Usar el desglose de horas extra del calculador de días
+    horasExtraDobles: resumenDias?.horasExtraDetalle?.horasDobles || resumenDias?.horasExtra || 0,
+    horasExtraTriples: resumenDias?.horasExtraDetalle?.horasTriples || 0,
     diasVacaciones: resumenDias?.vacaciones || 0,
     antiguedadAnos: 1,
     diasFestivosTrabajados: resumenDias?.diasFestivos || 0,
@@ -278,7 +366,18 @@ export async function generarDesgloseNomina(
   // Variables para deducciones adicionales de plantilla
   const deduccionesPlantilla: ConceptoDeduccion[] = [];
 
+  // Acumulador de conceptos SDE para el pago adicional (ambas ramas lo usan)
+  const conceptosSDE: { concepto: string; monto: number }[] = [];
+
   if (usandoPlantilla && conceptosPlantilla.length > 0) {
+    // Para plantillas, agregamos SDE del sueldo base si existe
+    // (la plantilla solo maneja la parte nominal, el SDE es adicional)
+    if (salarioDiarioExento > 0) {
+      conceptosSDE.push({
+        concepto: 'Sueldo Base',
+        monto: salarioDiarioExento * diasPagados,
+      });
+    }
     // Usar conceptos de la plantilla predeterminada
     for (const concepto of conceptosPlantilla) {
       if (concepto.tipo === 'percepcion' && concepto.importe > 0) {
@@ -344,11 +443,12 @@ export async function generarDesgloseNomina(
   } else {
     // Fallback: usar percepciones hardcodeadas si no hay plantilla
 
-    // Sueldo base nominal (gravado)
+    // Sueldo base nominal (gravado) - SOLO la parte nominal va al CFDI
+    // La parte SDE se acumula por separado en pagoAdicional
     const sueldoNominalBp = pesosToBp(salarioDiarioNominal * diasPagados);
     percepcionesInternas.push({
       clave: 'P001',
-      nombre: 'Sueldo Base (Nominal)',
+      nombre: 'Sueldo Base',
       tipo: 'gravado',
       base: salarioDiarioNominal,
       tasa: diasPagados,
@@ -357,68 +457,158 @@ export async function generarDesgloseNomina(
       fundamentoLegal: 'LFT Art. 82-89',
     });
 
-    // Percepción adicional exenta
+    // SDE del sueldo base (si aplica) - usa el conceptosSDE declarado arriba
     if (salarioDiarioExento > 0) {
-      const percepcionExentaBp = pesosToBp(salarioDiarioExento * diasPagados);
-      percepcionesInternas.push({
-        clave: 'P002',
-        nombre: 'Percepción Adicional Diaria (Exento)',
-        tipo: 'exento',
-        base: salarioDiarioExento,
-        tasa: diasPagados,
-        importe: bpToPesos(percepcionExentaBp),
-        importeBp: percepcionExentaBp,
-        fundamentoLegal: 'LISR Art. 93',
+      conceptosSDE.push({
+        concepto: 'Sueldo Base',
+        monto: salarioDiarioExento * diasPagados,
       });
     }
 
-    // Horas extra (si hay)
-    if (resumenDias && resumenDias.horasExtra > 0) {
-      const horasExtraImporte = (salarioDiarioReal / 8) * resumenDias.horasExtra * 2;
-      const horasExtraBp = pesosToBp(horasExtraImporte);
+    // Horas extra DOBLES (si hay) - LFT Art. 67: Primeras 9 horas semanales al 200%
+    const horasDobles = resumenDias?.horasExtraDetalle?.horasDobles || 0;
+    if (horasDobles > 0) {
+      const resultHorasDobles = calcularConceptoPorHoraConSDE(
+        'Horas Extra Dobles (200%)',
+        salarioDiarioNominal,
+        salarioDiarioExento,
+        horasDobles,
+        2, // 200%
+      );
+
+      // Parte nominal va al CFDI
+      const horasExtraDoblesBp = pesosToBp(resultHorasDobles.montoNominal);
       percepcionesInternas.push({
         clave: 'P019',
-        nombre: 'Horas Extra Dobles',
-        tipo: 'exento',
-        base: salarioDiarioReal / 8,
-        tasa: resumenDias.horasExtra * 2,
-        importe: bpToPesos(horasExtraBp),
-        importeBp: horasExtraBp,
-        fundamentoLegal: 'LFT Art. 67-68, LISR Art. 93 Fracc. I',
+        nombre: 'Horas Extra Dobles (200%)',
+        tipo: 'exento', // Exentas hasta 50% del salario según LISR Art. 93 Fracc. I
+        base: salarioDiarioNominal / 8,
+        tasa: horasDobles * 2,
+        importe: bpToPesos(horasExtraDoblesBp),
+        importeBp: horasExtraDoblesBp,
+        fundamentoLegal: 'LFT Art. 67, LISR Art. 93 Fracc. I',
       });
+
+      // Parte SDE va al pago adicional
+      if (resultHorasDobles.montoSDE > 0) {
+        conceptosSDE.push({
+          concepto: 'Horas Extra Dobles (200%)',
+          monto: resultHorasDobles.montoSDE,
+        });
+      }
     }
 
-    // Días festivos trabajados (pago doble adicional)
+    // Horas extra TRIPLES (si hay) - LFT Art. 68: Excedente de 9 horas semanales al 300%
+    const horasTriples = resumenDias?.horasExtraDetalle?.horasTriples || 0;
+    if (horasTriples > 0) {
+      const resultHorasTriples = calcularConceptoPorHoraConSDE(
+        'Horas Extra Triples (300%)',
+        salarioDiarioNominal,
+        salarioDiarioExento,
+        horasTriples,
+        3, // 300%
+      );
+
+      // Parte nominal va al CFDI
+      const horasExtraTriplesBp = pesosToBp(resultHorasTriples.montoNominal);
+      percepcionesInternas.push({
+        clave: 'P019',
+        nombre: 'Horas Extra Triples (300%)',
+        tipo: 'gravado', // Las horas triples son gravables
+        base: salarioDiarioNominal / 8,
+        tasa: horasTriples * 3,
+        importe: bpToPesos(horasExtraTriplesBp),
+        importeBp: horasExtraTriplesBp,
+        fundamentoLegal: 'LFT Art. 68',
+      });
+
+      // Parte SDE va al pago adicional
+      if (resultHorasTriples.montoSDE > 0) {
+        conceptosSDE.push({
+          concepto: 'Horas Extra Triples (300%)',
+          monto: resultHorasTriples.montoSDE,
+        });
+      }
+    }
+
+    // Días festivos trabajados (pago doble adicional) - LFT Art. 74-75
+    // El día festivo ya se paga como parte del sueldo base, aquí se agrega el EXTRA (1x más)
     if (resumenDias && resumenDias.diasFestivos > 0) {
-      const festivoImporte = salarioDiarioReal * resumenDias.diasFestivos;
-      const festivoBp = pesosToBp(festivoImporte);
+      const resultFestivo = calcularConceptoConSDE(
+        'Días Festivos Trabajados (Extra)',
+        salarioDiarioNominal,
+        salarioDiarioExento,
+        1, // 1x adicional (el día ya está pagado en sueldo base)
+        resumenDias.diasFestivos,
+      );
+
+      // Parte nominal va al CFDI
+      const festivoBp = pesosToBp(resultFestivo.montoNominal);
       percepcionesInternas.push({
         clave: 'P028',
         nombre: 'Días Festivos Trabajados (Extra)',
         tipo: 'gravado',
-        base: salarioDiarioReal,
+        base: salarioDiarioNominal,
         tasa: resumenDias.diasFestivos,
         importe: bpToPesos(festivoBp),
         importeBp: festivoBp,
         fundamentoLegal: 'LFT Art. 74-75',
       });
+
+      // Parte SDE va al pago adicional
+      if (resultFestivo.montoSDE > 0) {
+        conceptosSDE.push({
+          concepto: 'Días Festivos Trabajados (Extra)',
+          monto: resultFestivo.montoSDE,
+        });
+      }
     }
 
-    // Prima dominical (25%)
+    // Prima dominical (25%) - LFT Art. 71
     if (resumenDias && resumenDias.diasDomingo > 0) {
-      const primaDomImporte = salarioDiarioReal * resumenDias.diasDomingo * 0.25;
-      const primaDomBp = pesosToBp(primaDomImporte);
+      const resultPrimaDom = calcularConceptoConSDE(
+        'Prima Dominical (25%)',
+        salarioDiarioNominal,
+        salarioDiarioExento,
+        0.25, // 25%
+        resumenDias.diasDomingo,
+      );
+
+      // Parte nominal va al CFDI
+      const primaDomBp = pesosToBp(resultPrimaDom.montoNominal);
       percepcionesInternas.push({
         clave: 'P020',
         nombre: 'Prima Dominical (25%)',
         tipo: 'exento',
-        base: salarioDiarioReal * 0.25,
+        base: salarioDiarioNominal * 0.25,
         tasa: resumenDias.diasDomingo,
         importe: bpToPesos(primaDomBp),
         importeBp: primaDomBp,
         fundamentoLegal: 'LFT Art. 71, LISR Art. 93 Fracc. I',
       });
+
+      // Parte SDE va al pago adicional
+      if (resultPrimaDom.montoSDE > 0) {
+        conceptosSDE.push({
+          concepto: 'Prima Dominical (25%)',
+          monto: resultPrimaDom.montoSDE,
+        });
+      }
     }
+  }
+
+  // Construir objeto pagoAdicional si hay SDE (aplica tanto para plantilla como fallback)
+  let pagoAdicional: PagoAdicional | undefined;
+  if (salarioDiarioExento > 0 && conceptosSDE.length > 0) {
+    const montoTotalSDE = conceptosSDE.reduce((sum, c) => sum + c.monto, 0);
+    pagoAdicional = {
+      salarioDiarioExento,
+      diasPagados,
+      montoBase: salarioDiarioExento * diasPagados,
+      conceptos: conceptosSDE,
+      montoTotal: montoTotalSDE,
+      medioPagoId: emp.medioPagoExentoId || undefined,
+    };
   }
 
   // Totales de percepciones (usando BigInt internamente)
@@ -557,14 +747,35 @@ export async function generarDesgloseNomina(
       diasPagados,
       diasCotizadosIMSS,
     },
-    incidencias: resumenDias ? {
-      faltas: resumenDias.faltas,
-      incapacidades: resumenDias.incapacidades,
-      permisos: resumenDias.permisosSinGoce + resumenDias.permisosConGoce,
-      vacaciones: resumenDias.vacaciones,
-      diasFestivos: resumenDias.diasFestivos,
-      horasExtra: resumenDias.horasExtra,
-    } : undefined,
+    incidencias: resumenDias ? (() => {
+      // Extract monetary values from percepciones for incidencias summary
+      const horasDoblesPago = percepciones.find(p => p.nombre.includes('Horas Extra Dobles'))?.importe || 0;
+      const horasTriplesPago = percepciones.find(p => p.nombre.includes('Horas Extra Triples'))?.importe || 0;
+      const primaDominical = percepciones.find(p => p.nombre.includes('Prima Dominical'))?.importe || 0;
+      const pagoFestivos = percepciones.find(p => p.nombre.includes('Días Festivos'))?.importe || 0;
+      const vacacionesPago = percepciones.find(p => p.clave === 'P001' && p.nombre.includes('Vacaciones'))?.importe || 0;
+      const primaVacacional = percepciones.find(p => p.nombre.includes('Prima Vacacional'))?.importe || 0;
+
+      return {
+        faltas: resumenDias.faltas,
+        incapacidades: resumenDias.incapacidades,
+        permisos: resumenDias.permisosSinGoce + resumenDias.permisosConGoce,
+        vacaciones: resumenDias.vacaciones,
+        diasFestivos: resumenDias.diasFestivos,
+        diasDomingo: resumenDias.diasDomingo || 0,
+        horasExtra: resumenDias.horasExtra,
+        horasExtraDobles: resumenDias.horasExtraDetalle?.horasDobles || 0,
+        horasExtraTriples: resumenDias.horasExtraDetalle?.horasTriples || 0,
+        retardos: resumenDias.retardos || 0,
+        // Monetary values
+        primaDominical,
+        pagoFestivos,
+        horasDoblesPago,
+        horasTriplesPago,
+        vacacionesPago,
+        primaVacacional,
+      };
+    })() : undefined,
     salarios: {
       salarioDiarioReal,
       salarioDiarioNominal,
@@ -602,5 +813,9 @@ export async function generarDesgloseNomina(
     },
     netoAPagar: netoFinal,
     costoTotalEmpresa,
+    // Total real que recibe el empleado: neto oficial + SDE (pago por fuera)
+    netoAPagarTotal: netoFinal + (pagoAdicional?.montoTotal || 0),
+    // Pago adicional (SDE) - solo si hay salario exento configurado
+    pagoAdicional,
   };
 }
